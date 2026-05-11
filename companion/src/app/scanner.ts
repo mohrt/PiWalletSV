@@ -14,7 +14,9 @@ import jsQR from "jsqr";
 import {
   type Envelope,
   KIND_PROPOSAL,
+  KIND_SIGNED,
   KIND_XPUB,
+  type SignedTxT,
   type XpubExportT,
   bytesToHex,
   decodeEnvelope,
@@ -26,6 +28,7 @@ import {
   addWallet,
   findByFingerprintAndPath,
 } from "../lib/wallets.js";
+import { WocClient, WocError } from "../lib/woc.js";
 
 const SCAN_INTERVAL_MS = 80; // ~12.5 fps; plenty for animated QR
 const TEXT_DISPLAY_CAP = 64 * 1024; // truncate displayed body for huge payloads
@@ -71,6 +74,20 @@ export function mountScannerPage(root: HTMLElement): () => void {
         </div>
       </section>
 
+      <section id="broadcastCard" class="card broadcast-card" hidden>
+        <h2>Broadcast signed transaction</h2>
+        <p id="broadcastTxid" class="broadcast-txid"></p>
+        <p id="broadcastMeta" class="muted-line"></p>
+        <div class="actions">
+          <button id="broadcastBtn" class="primary" type="button">
+            Broadcast to BSV mainnet
+          </button>
+          <a id="broadcastExplorer" target="_blank" rel="noopener noreferrer"
+            class="primary-link" hidden>View on WhatsOnChain</a>
+        </div>
+        <p id="broadcastStatus" class="muted-line"></p>
+      </section>
+
       <section id="resultCard" class="card" hidden>
         <pre id="envelopeView" class="envelope-summary" hidden></pre>
         <div class="row" style="margin-bottom: 0.6rem;">
@@ -112,6 +129,14 @@ export function mountScannerPage(root: HTMLElement): () => void {
   const $pairFp = root.querySelector<HTMLElement>("#pairFp")!;
   const $pairSave = root.querySelector<HTMLButtonElement>("#pairSave")!;
   const $pairOpenList = root.querySelector<HTMLAnchorElement>("#pairOpenList")!;
+  const $broadcastCard = root.querySelector<HTMLElement>("#broadcastCard")!;
+  const $broadcastTxid = root.querySelector<HTMLElement>("#broadcastTxid")!;
+  const $broadcastMeta = root.querySelector<HTMLElement>("#broadcastMeta")!;
+  const $broadcastBtn = root.querySelector<HTMLButtonElement>("#broadcastBtn")!;
+  const $broadcastExplorer = root.querySelector<HTMLAnchorElement>(
+    "#broadcastExplorer",
+  )!;
+  const $broadcastStatus = root.querySelector<HTMLElement>("#broadcastStatus")!;
 
   const offscreen = document.createElement("canvas");
   const offscreenCtx = offscreen.getContext("2d", { willReadFrequently: true });
@@ -129,6 +154,9 @@ export function mountScannerPage(root: HTMLElement): () => void {
   let envelope: Envelope | null = null;
   let lastDownloadUrl: string | null = null;
   let pairXpub: XpubExportT | null = null;
+  let signedTx: SignedTxT | null = null;
+  let woc: WocClient | null = null;
+  let broadcasting = false;
 
   $stop.disabled = true;
   $reset.disabled = true;
@@ -329,6 +357,66 @@ export function mountScannerPage(root: HTMLElement): () => void {
     }
   }
 
+  function hideBroadcastCard(): void {
+    signedTx = null;
+    broadcasting = false;
+    $broadcastCard.hidden = true;
+    $broadcastTxid.textContent = "";
+    $broadcastMeta.textContent = "";
+    $broadcastStatus.classList.remove("error");
+    $broadcastStatus.textContent = "";
+    $broadcastBtn.disabled = false;
+    $broadcastBtn.textContent = "Broadcast to BSV mainnet";
+    $broadcastExplorer.hidden = true;
+    $broadcastExplorer.removeAttribute("href");
+  }
+
+  function showBroadcastCard(env: SignedTxT): void {
+    signedTx = env;
+    broadcasting = false;
+    $broadcastCard.hidden = false;
+    $broadcastTxid.textContent = `txid: ${env.txid}`;
+    $broadcastMeta.textContent =
+      `wallet ${bytesToHex(env.walletFp)} · raw tx ${env.rawHex.length / 2} bytes`;
+    $broadcastStatus.classList.remove("error");
+    $broadcastStatus.textContent = "";
+    $broadcastBtn.disabled = false;
+    $broadcastBtn.textContent = "Broadcast to BSV mainnet";
+    $broadcastExplorer.hidden = true;
+    $broadcastExplorer.removeAttribute("href");
+  }
+
+  async function onBroadcast(): Promise<void> {
+    if (!signedTx || broadcasting) return;
+    broadcasting = true;
+    $broadcastBtn.disabled = true;
+    $broadcastBtn.textContent = "Broadcasting…";
+    $broadcastStatus.classList.remove("error");
+    $broadcastStatus.textContent = "Submitting to WhatsOnChain…";
+    if (!woc) woc = new WocClient();
+    try {
+      const txid = await woc.broadcastRaw(signedTx.rawHex);
+      $broadcastStatus.textContent = `accepted by WoC mempool · txid ${txid}`;
+      // Pi-side txid must match what WoC echoes back.
+      if (txid.toLowerCase() !== signedTx.txid.toLowerCase()) {
+        $broadcastStatus.classList.add("error");
+        $broadcastStatus.textContent =
+          `WARNING: WoC returned txid ${txid} but the Pi signed ${signedTx.txid}.`;
+      }
+      $broadcastExplorer.href = `https://whatsonchain.com/tx/${txid}`;
+      $broadcastExplorer.hidden = false;
+      $broadcastBtn.textContent = "Broadcasted";
+    } catch (e) {
+      $broadcastStatus.classList.add("error");
+      const msg = e instanceof WocError ? e.message : (e as Error).message;
+      $broadcastStatus.textContent = `broadcast failed: ${msg}`;
+      $broadcastBtn.disabled = false;
+      $broadcastBtn.textContent = "Retry broadcast";
+    } finally {
+      broadcasting = false;
+    }
+  }
+
   async function tryDecodeEnvelope(bytes: Uint8Array): Promise<void> {
     try {
       envelope = await decodeEnvelope(bytes);
@@ -353,6 +441,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
       await showPairCard(envelope);
     } else {
       hidePairCard();
+    }
+
+    if (envelope?.kind === KIND_SIGNED) {
+      showBroadcastCard(envelope);
+    } else {
+      hideBroadcastCard();
     }
 
     const defaultView: ViewMode = looksLikeText(bytes) ? "text" : "hex";
@@ -500,6 +594,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $missing.textContent = "";
     $reset.disabled = true;
     hidePairCard();
+    hideBroadcastCard();
     if (lastDownloadUrl) {
       URL.revokeObjectURL(lastDownloadUrl);
       lastDownloadUrl = null;
@@ -573,6 +668,9 @@ export function mountScannerPage(root: HTMLElement): () => void {
   }
   $pairSave.addEventListener("click", () => {
     void onPairSave();
+  });
+  $broadcastBtn.addEventListener("click", () => {
+    void onBroadcast();
   });
 
   return () => {

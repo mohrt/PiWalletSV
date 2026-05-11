@@ -629,6 +629,14 @@ button:hover:not(:disabled) {
   height: auto;
 }
 
+.broadcast-card .broadcast-txid {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.85rem;
+  word-break: break-all;
+  color: var(--accent);
+  margin: 0.25rem 0;
+}
+
 @media (max-width: 600px) {
   .qr-card canvas {
     width: 100%;

@@ -29,7 +29,9 @@ npm run build        # tsc --noEmit + vite build to companion/dist
 ```
 
 - **`/#/encode`** — paste any text / hex / base64(url) and watch it animate as `PW1|…` QR frames the Pi camera path can already ingest.
-- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream and shows it as text / hex / base64url, with `.bin` download. When the bytes are a real PiWalletSV envelope (`xpub_export`, `unsigned_proposal`, or `signed_tx`), the parsed structure is rendered inline. When an `xpub_export` is detected, a "Save as paired wallet" card appears that writes `{label, xpub, fingerprint, path, addedAt}` to IndexedDB.
+- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream and shows it as text / hex / base64url, with `.bin` download. When the bytes are a real PiWalletSV envelope (`xpub_export`, `unsigned_proposal`, or `signed_tx`), the parsed structure is rendered inline.
+  - **xpub_export** → a "Save as paired wallet" card writes `{label, xpub, fingerprint, path, addedAt}` to IndexedDB.
+  - **signed_tx** → a "Broadcast signed transaction" card POSTs the Pi's raw hex to WhatsOnChain `/tx/raw`, surfaces the returned txid + a `whatsonchain.com/tx/<txid>` link, and warns if the broadcaster echoes a different txid than the Pi signed.
 - **`/#/wallets`** — paired-wallet list backed by IndexedDB. Rename, copy xpub, or remove an entry. The Pi side is unaffected by removals.
 - **`/#/wallets/<id>`** — wallet detail with four sections:
   - **Balance**: gap-limit (20) UTXO scan via [WhatsOnChain](https://api.whatsonchain.com/v1/bsv/main) across `m/0/i` and `m/1/i`. Shows total sats / BSV, UTXO count, scrollable UTXO table tagged with derivation. Snapshot is cached on the wallet record so re-opening the page is instant; the **Refresh balance** button re-scans.
