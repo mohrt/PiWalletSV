@@ -58,6 +58,20 @@ describe("encodeMultipartLines", () => {
     expect(Array.from(done!)).toEqual(Array.from(data));
   });
 
+  it("exposes received indices for progress display", () => {
+    const data = new Uint8Array(200);
+    for (let i = 0; i < data.length; i++) data[i] = i & 0xff;
+    const lines = encodeMultipartLines(data, 64);
+    const asm = new MultipartAssembler();
+    expect(asm.receivedIndices).toEqual([]);
+    expect(asm.expectedTotal).toBeNull();
+    asm.feed(lines[2]);
+    asm.feed(lines[0]);
+    expect(asm.receivedIndices).toEqual([0, 2]);
+    expect(asm.expectedTotal).toBe(lines.length);
+    expect(asm.partsReceived).toBe(2);
+  });
+
   it("ignores non-PW1 lines and is idempotent on duplicates", () => {
     const data = new Uint8Array(200);
     for (let i = 0; i < data.length; i++) data[i] = i & 0xff;

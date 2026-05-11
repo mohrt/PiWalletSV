@@ -231,6 +231,49 @@ button:hover:not(:disabled) {
   color: var(--danger);
 }
 
+.muted-line {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  margin: 0 0 0.75rem 0;
+  word-break: break-word;
+}
+
+.scan-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.scan-card video {
+  background: #000;
+  border-radius: 8px;
+  width: 360px;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.scan-status {
+  flex: 1 1 220px;
+  min-width: 220px;
+}
+
+.scan-status p {
+  margin: 0 0 0.6rem 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+.card h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem 0;
+  color: var(--muted);
+  font-weight: 500;
+}
+
 @media (max-width: 600px) {
   .qr-card canvas {
     width: 100%;

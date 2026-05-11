@@ -84,6 +84,12 @@ export class MultipartAssembler {
     return this.parts.size;
   }
 
+  /** Sorted list of fragment indices already received. Useful for UI progress
+   *  ("missing: 2, 5, 7"). Empty until at least one PW1 line has been fed. */
+  get receivedIndices(): number[] {
+    return [...this.parts.keys()].sort((a, b) => a - b);
+  }
+
   reset(): void {
     this.total = null;
     this.parts.clear();

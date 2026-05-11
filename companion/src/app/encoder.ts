@@ -20,7 +20,7 @@ const SAMPLE =
   "Hello PiWallet — this is a multipart QR demo payload. " +
   "Type or paste anything (text, hex, base64) and watch it animate as PW1 frames.";
 
-export function mountEncoderPage(root: HTMLElement): void {
+export function mountEncoderPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
       <header class="page-header">
@@ -232,4 +232,8 @@ export function mountEncoderPage(root: HTMLElement): void {
 
   $payload.value = SAMPLE;
   rebuild();
+
+  return () => {
+    stop();
+  };
 }
