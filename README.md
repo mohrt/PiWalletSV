@@ -33,16 +33,24 @@ npm run build        # tsc --noEmit + vite build to companion/dist
 - **`/#/wallets`** — paired-wallet list backed by IndexedDB. Rename, copy xpub, or remove an entry. The Pi side is unaffected by removals.
 - **`/#/loop`** — runs an in-memory round-trip of every envelope kind (build → CBOR + gzip → PW1 split → reassemble → gunzip + CBOR decode) on page load and shows pass/fail. One-page sanity check that the wire stack agrees with itself.
 
-### Pi-side pairing
+### Pi-side pairing demo
 
-To produce an `xpub_export` envelope on the Pi for pairing:
+Until the bonnet display (Phase 2) drives QR rendering directly, you can pipe the envelope through `qrencode` and scan the terminal from the phone:
 
 ```bash
-piwallet xpub-export --wallet-id <id> -o /tmp/xpub.bin   # writes CBOR + gzip blob
-piwallet decode /tmp/xpub.bin                            # human-readable preview
+sudo apt install qrencode
+piwallet xpub-export --wallet-id <id> -o /tmp/xpub.bin
+piwallet qr split --chunk-chars 200 /tmp/xpub.bin |
+    while IFS= read -r line; do
+        clear
+        qrencode -t UTF8 -- "$line"
+        sleep 0.4
+    done
 ```
 
-For now you can render the blob to animated QR on a laptop (Encode page, base64url mode) and scan from the phone; once Phase 2 lands, the Pi bonnet itself will drive the PW1 stream.
+Then on the phone, open `https://<pi-or-laptop-lan-ip>:5173/#/scan`, hit **Start camera**, and point it at the Pi terminal. When the assembler completes, the **Save as paired wallet** card appears; the wallet shows up under `/#/wallets`. The reverse direction (laptop/phone PW1 → Pi camera) already works via `piwallet qr scan-camera`.
+
+`piwallet decode /tmp/xpub.bin` prints the same human-readable summary the PWA shows for sanity checks.
 
 ### iPhone / phone scanning
 

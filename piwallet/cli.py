@@ -33,7 +33,11 @@ from piwallet.core.vault import (
     VaultWipedError,
     WrongPinError,
 )
-from piwallet.qr.multipart import MultipartAssembler, MultipartQrError
+from piwallet.qr.multipart import (
+    MultipartAssembler,
+    MultipartQrError,
+    split_envelope_to_lines,
+)
 
 
 @click.group(help="PiWalletSV offline signing CLI.")
@@ -284,6 +288,61 @@ def qr_join(output: Path | None) -> None:
 
     click.echo("incomplete: never received a full PW1 set", err=True)
     sys.exit(1)
+
+
+@qr.command(
+    "split",
+    help="Split a binary blob into PW1 lines on stdout (mirror of `qr join`).",
+)
+@click.argument(
+    "input_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=False,
+)
+@click.option(
+    "-c",
+    "--chunk-chars",
+    type=click.IntRange(min=64),
+    default=720,
+    show_default=True,
+    help="Max encoded chunk characters per QR frame (>=64).",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write PW1 lines here (default: stdout).",
+)
+def qr_split(input_path: Path | None, chunk_chars: int, output: Path | None) -> None:
+    """Read raw envelope bytes and emit one ``PW1|<total>|<index>|...`` line per QR frame.
+
+    Pipes well with ``qrencode`` for a quick terminal pairing demo:
+
+    \b
+        piwallet xpub-export --wallet-id <id> | piwallet qr split | \\
+            while read line; do clear; qrencode -t UTF8 "$line"; sleep 0.4; done
+    """
+
+    if input_path is None:
+        data = sys.stdin.buffer.read()
+    else:
+        data = input_path.read_bytes()
+
+    try:
+        lines = split_envelope_to_lines(data, max_encoded_chunk_chars=chunk_chars)
+    except ValueError as exc:
+        click.echo(f"split error: {exc}", err=True)
+        sys.exit(1)
+
+    body = "\n".join(lines) + "\n"
+    if output is None:
+        click.echo(body, nl=False)
+    else:
+        output.write_text(body)
+        click.echo(
+            f"wrote {len(lines)} PW1 line(s) ({len(data)} bytes) to {output}",
+            err=True,
+        )
 
 
 @qr.command("scan-camera", help="Capture QR frames until a full PW1 payload is assembled (Pi).")

@@ -13,7 +13,7 @@ from click.testing import CliRunner
 
 from piwallet.cli import main
 from piwallet.core import envelope as env
-from piwallet.qr.multipart import split_envelope_to_lines
+from piwallet.qr.multipart import join_multipart_lines, split_envelope_to_lines
 from tests.fixtures.generate_fixtures import (
     CANONICAL_MNEMONIC,
     PROPOSAL_PATH,
@@ -265,3 +265,61 @@ def test_qr_join_incomplete() -> None:
     res = runner.invoke(main, ["qr", "join"], input=stdin)
     assert res.exit_code == 1
     assert "incomplete" in res.output
+
+
+def test_qr_split_roundtrips_with_join(tmp_path: Path) -> None:
+    """`qr split` is the inverse of `qr join` byte-for-byte."""
+    runner = CliRunner()
+
+    blob, _meta = build_proposal_01()
+    input_path = tmp_path / "proposal.bin"
+    input_path.write_bytes(blob)
+
+    res = runner.invoke(
+        main,
+        ["qr", "split", "--chunk-chars", "120", str(input_path)],
+    )
+    assert res.exit_code == 0, res.output
+    lines = [line for line in res.output.splitlines() if line.startswith("PW1|")]
+    assert len(lines) >= 2
+    assert join_multipart_lines(lines) == blob
+
+
+def test_qr_split_reads_stdin() -> None:
+    runner = CliRunner()
+    blob, _meta = build_proposal_01()
+    res = runner.invoke(
+        main,
+        ["qr", "split", "--chunk-chars", "200"],
+        input=blob.decode("latin-1"),  # CliRunner stdin is a text stream
+    )
+    # CliRunner's text-mode stdin won't preserve high bytes losslessly, so the
+    # round-trip won't be byte-perfect; we just confirm we got PW1 lines.
+    assert res.exit_code == 0, res.output
+    lines = [line for line in res.output.splitlines() if line.startswith("PW1|")]
+    assert len(lines) >= 1
+
+
+def test_qr_split_output_file(tmp_path: Path) -> None:
+    runner = CliRunner()
+    blob, _meta = build_proposal_01()
+    in_path = tmp_path / "in.bin"
+    in_path.write_bytes(blob)
+    out_path = tmp_path / "lines.txt"
+
+    res = runner.invoke(
+        main,
+        ["qr", "split", "--chunk-chars", "120", "-o", str(out_path), str(in_path)],
+    )
+    assert res.exit_code == 0, res.output
+    lines = [
+        line for line in out_path.read_text().splitlines() if line.startswith("PW1|")
+    ]
+    assert join_multipart_lines(lines) == blob
+
+
+def test_qr_split_rejects_tiny_chunks() -> None:
+    runner = CliRunner()
+    res = runner.invoke(main, ["qr", "split", "--chunk-chars", "32"], input="ignored")
+    assert res.exit_code != 0
+    assert "32" in res.output or "64" in res.output
