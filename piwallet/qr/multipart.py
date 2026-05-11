@@ -37,7 +37,7 @@ MAGIC = "PW1"
 SEP = "|"
 _PREFIX_RE = re.compile(
     rf"^{re.escape(MAGIC)}{re.escape(SEP)}"
-    rf"(?P<t>\d+){re.escape(SEP)}(?P<i>\d+){re.escape(SEP)}(?P<rest>.+)$"
+    rf"(?P<t>\d+){re.escape(SEP)}(?P<i>\d+){re.escape(SEP)}(?P<rest>.*)$"
 )
 
 

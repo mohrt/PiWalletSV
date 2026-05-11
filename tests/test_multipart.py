@@ -14,6 +14,11 @@ from piwallet.qr.multipart import (
 from tests.fixtures.generate_fixtures import build_proposal_01
 
 
+def test_empty_payload_roundtrip() -> None:
+    asm = MultipartAssembler()
+    assert asm.feed("PW1|1|0|") == b""
+
+
 def test_split_join_roundtrip_fixture() -> None:
     blob, _meta = build_proposal_01()
     lines = split_envelope_to_lines(blob, max_encoded_chunk_chars=80)
