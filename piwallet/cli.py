@@ -571,5 +571,155 @@ def _summarize_signed(s: env.SignedTx) -> str:
     )
 
 
+# ---- first-boot disclaimer ---------------------------------------------
+
+
+@main.group(help="First-boot disclaimer acceptance.")
+def firstboot() -> None:
+    pass
+
+
+@firstboot.command("status", help="Print the saved disclaimer acceptance state.")
+@click.option(
+    "--state-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to the terms state file. Defaults to ~/.piwallet-dev/terms.json.",
+)
+def firstboot_status(state_path: Path | None) -> None:
+    from piwallet.firstboot.terms import (
+        CURRENT_TERMS_VERSION,
+        load_state,
+        requires_acceptance,
+    )
+
+    state = load_state(state_path)
+    if state is None:
+        click.echo(
+            f"no acceptance on file; current version is v{CURRENT_TERMS_VERSION}",
+        )
+        sys.exit(1)
+    click.echo(f"accepted version : v{state.terms_version}")
+    click.echo(f"current version  : v{CURRENT_TERMS_VERSION}")
+    click.echo(f"accepted at      : {state.accepted_at}")
+    click.echo(f"device id        : {state.device_id}")
+    if requires_acceptance(state_path):
+        click.echo("STALE: this device must re-accept the current disclaimer.")
+        sys.exit(1)
+
+
+@firstboot.command("run", help="Run the disclaimer flow on the bonnet (or headless).")
+@click.option(
+    "--state-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Path to the terms state file. Defaults to ~/.piwallet-dev/terms.json.",
+)
+@click.option(
+    "--display",
+    type=click.Choice(["auto", "st7789", "headless"]),
+    default="auto",
+    show_default=True,
+)
+@click.option(
+    "--input",
+    "input_backend",
+    type=click.Choice(["auto", "bonnet", "fake"]),
+    default="auto",
+    show_default=True,
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Run even if the current version is already accepted.",
+)
+def firstboot_run(
+    state_path: Path | None,
+    display: str,
+    input_backend: str,
+    force: bool,
+) -> None:
+    from piwallet.firstboot.disclaimer import DisclaimerScreen
+    from piwallet.firstboot.terms import mark_accepted, requires_acceptance
+    from piwallet.ui.app import make_input_manager, run_screen
+    from piwallet.ui.display import open_display
+    from piwallet.ui.input import open_input
+
+    if not force and not requires_acceptance(state_path):
+        click.echo("disclaimer already accepted; use --force to re-run.")
+        return
+
+    disp = open_display(display)
+    inp = open_input(input_backend)
+    mgr = make_input_manager(inp)
+    screen = DisclaimerScreen()
+    result = run_screen(disp, mgr, screen)
+    if result is True:
+        state = mark_accepted(state_path)
+        click.echo(f"accepted v{state.terms_version} at {state.accepted_at}")
+    else:
+        click.echo("disclaimer NOT accepted; aborting.", err=True)
+        sys.exit(1)
+
+
+@main.command("bonnet", help="Run the full bonnet boot loop on the device.")
+@click.option(
+    "--vault-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=Path.home() / ".piwallet-dev" / "vault.bin",
+    show_default=True,
+)
+@click.option(
+    "--terms-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Override the disclaimer state file. Defaults to ~/.piwallet-dev/terms.json.",
+)
+@click.option(
+    "--display",
+    type=click.Choice(["auto", "st7789", "headless"]),
+    default="auto",
+    show_default=True,
+)
+@click.option(
+    "--input",
+    "input_backend",
+    type=click.Choice(["auto", "bonnet", "fake"]),
+    default="auto",
+    show_default=True,
+)
+@click.option(
+    "--fps",
+    type=click.IntRange(5, 120),
+    default=30,
+    show_default=True,
+    help="Target frame rate for the bonnet main loop.",
+)
+def bonnet_cmd(
+    vault_path: Path,
+    terms_path: Path | None,
+    display: str,
+    input_backend: str,
+    fps: int,
+) -> None:
+    """Boot the bonnet UI: disclaimer -> PIN unlock -> wallet list -> detail."""
+    from piwallet.bonnet.app import run_bonnet
+    from piwallet.ui.app import make_input_manager
+    from piwallet.ui.display import open_display
+    from piwallet.ui.input import open_input
+
+    disp = open_display(display)
+    inp = open_input(input_backend)
+    mgr = make_input_manager(inp)
+    code = run_bonnet(
+        vault_path=vault_path,
+        display=disp,
+        input_mgr=mgr,
+        terms_path=terms_path,
+        target_fps=fps,
+    )
+    sys.exit(code)
+
+
 if __name__ == "__main__":
     main()
