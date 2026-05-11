@@ -1,0 +1,16 @@
+{
+  "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+  "account_xpub": "xpub6CdMDgU2hzWyeZ852LWqp5AfDz3ty2cRfi4jEw9BT8aNYugMQvVykQsKLARZdbqKKp7yTviJdL1N9saYLmJNKD1rwVAwLTmU8r8qKeoyG4R",
+  "wallet_fingerprint_hex": "cf987d8c",
+  "funding_txid": "ec7d233ebe54b0499e958a016cbe8254d1679925b81b7fbeaef1f27d80616fdc",
+  "funding_amount_sats": 50000,
+  "pay_address": "155Vurs4bMMu5BemtZ6cVPhryGWef4VxZu",
+  "pay_amount_sats": 30000,
+  "change_address": "125GFsvYsDtyzGkExfsX8DoHuXu2UsMUEZ",
+  "change_amount_sats": 19500,
+  "fee_sats": 500,
+  "block_height": 812345,
+  "merkle_root_hex": "82594796714b432cc288b09dc94ff9d434b5808d49ab327107150fe7c56071ea",
+  "envelope_path": "fixtures/proposal_01.cbor",
+  "envelope_size_bytes": 511
+}
