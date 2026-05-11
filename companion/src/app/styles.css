@@ -580,6 +580,55 @@ button:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+.send-card .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.6rem 0;
+}
+
+.send-card .field > span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.send-card input[type="text"],
+.send-card input[type="number"] {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.95rem;
+}
+
+.send-card input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.send-card details.advanced {
+  margin: 0.4rem 0;
+}
+
+.send-card details.advanced summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+  user-select: none;
+}
+
+#proposalQr {
+  background: white;
+  display: block;
+  margin: 0.5rem 0;
+  border-radius: 4px;
+  max-width: 100%;
+  height: auto;
+}
+
 @media (max-width: 600px) {
   .qr-card canvas {
     width: 100%;

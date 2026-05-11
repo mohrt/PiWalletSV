@@ -13,10 +13,19 @@
 import QRCode from "qrcode";
 
 import {
+  CHANGE_BRANCH,
   RECEIVE_BRANCH,
   deriveAddress,
   deriveAddressBatch,
 } from "../lib/derive.js";
+import { encodeEnvelope } from "../lib/envelope.js";
+import { CoinSelectError, selectUtxosGreedy } from "../lib/coin-select.js";
+import { encodeMultipartLines } from "../pw1.js";
+import { ProofFetchError, fetchInputProof } from "../lib/proof-fetcher.js";
+import {
+  ProposalBuilderError,
+  buildUnsignedProposal,
+} from "../lib/proposal.js";
 import { scanWalletUtxos } from "../lib/utxo.js";
 import { WocClient, WocError } from "../lib/woc.js";
 import {
@@ -74,6 +83,11 @@ export function mountWalletDetailPage(
   let wallet: (WalletRecord & { nextReceiveIndex: number }) | null = null;
   let scanRunning = false;
   let woc: WocClient | null = null;
+  let sendBusy = false;
+  let proposalFrames: string[] | null = null;
+  let proposalFrameIdx = 0;
+  let proposalLastFrameAt = 0;
+  let proposalRaf: number | null = null;
 
   root.innerHTML = `
     <main class="page">
@@ -166,6 +180,50 @@ export function mountWalletDetailPage(
           </details>
         </section>
 
+        <section class="card send-card">
+          <h2>Send</h2>
+          <div id="sendForm">
+            <label class="field">
+              <span>Recipient address</span>
+              <input id="sendAddress" type="text" autocomplete="off"
+                placeholder="1..." />
+            </label>
+            <label class="field">
+              <span>Amount (sats)</span>
+              <input id="sendSats" type="number" min="1" step="1"
+                placeholder="10000" />
+            </label>
+            <details class="advanced">
+              <summary>Advanced</summary>
+              <label class="field">
+                <span>Fee rate (sats/kB)</span>
+                <input id="sendFeeRate" type="number" min="0" step="1" value="500" />
+              </label>
+            </details>
+            <div class="actions">
+              <button id="buildProposal" type="button" class="primary">
+                Build proposal
+              </button>
+            </div>
+            <p class="muted-line" id="sendStatus"></p>
+          </div>
+          <div id="sendResult" hidden>
+            <p class="muted-line">
+              Animated PW1 proposal — point the Pi camera at this canvas.
+            </p>
+            <canvas id="proposalQr" width="320" height="320"></canvas>
+            <p class="muted-line">
+              Frame <span id="proposalFrameIdx">0</span> /
+              <span id="proposalFrameCount">0</span> ·
+              <span id="proposalByteCount">0</span> bytes total
+            </p>
+            <div class="actions">
+              <button id="proposalToggle" type="button" class="primary">Pause</button>
+              <button id="proposalDone" type="button">New send</button>
+            </div>
+          </div>
+        </section>
+
         <section class="card receive-card">
           <h2>Current receive address</h2>
           <p class="muted-line" id="receivePath"></p>
@@ -203,6 +261,13 @@ export function mountWalletDetailPage(
 
     const $refresh = root.querySelector<HTMLButtonElement>("#refreshBalance")!;
     $refresh.addEventListener("click", () => void onRefreshBalance());
+
+    const $build = root.querySelector<HTMLButtonElement>("#buildProposal")!;
+    $build.addEventListener("click", () => void onBuildProposal());
+    const $toggle = root.querySelector<HTMLButtonElement>("#proposalToggle")!;
+    $toggle.addEventListener("click", toggleAnimation);
+    const $done = root.querySelector<HTMLButtonElement>("#proposalDone")!;
+    $done.addEventListener("click", resetSendCard);
 
     renderBalance();
   }
@@ -310,6 +375,186 @@ export function mountWalletDetailPage(
         $refresh.disabled = false;
         $refresh.textContent = "Refresh balance";
       }
+    }
+  }
+
+  async function onBuildProposal(): Promise<void> {
+    if (!wallet || sendBusy) return;
+    const $addr = root.querySelector<HTMLInputElement>("#sendAddress")!;
+    const $sats = root.querySelector<HTMLInputElement>("#sendSats")!;
+    const $feeRate = root.querySelector<HTMLInputElement>("#sendFeeRate")!;
+    const $btn = root.querySelector<HTMLButtonElement>("#buildProposal")!;
+    const $status = root.querySelector<HTMLElement>("#sendStatus")!;
+    $status.classList.remove("error");
+
+    const recipient = $addr.value.trim();
+    const sats = parseInt($sats.value, 10);
+    const feeRate = parseInt($feeRate.value, 10);
+
+    if (!recipient) {
+      $status.classList.add("error");
+      $status.textContent = "enter a recipient address";
+      return;
+    }
+    if (!Number.isInteger(sats) || sats <= 0) {
+      $status.classList.add("error");
+      $status.textContent = "amount must be a positive integer (sats)";
+      return;
+    }
+    if (!wallet.lastScan || wallet.lastScan.utxos.length === 0) {
+      $status.classList.add("error");
+      $status.textContent =
+        "no UTXOs known. Click Refresh balance first.";
+      return;
+    }
+
+    sendBusy = true;
+    $btn.disabled = true;
+    $btn.textContent = "Building…";
+    $status.textContent = "Selecting UTXOs…";
+
+    try {
+      const selection = selectUtxosGreedy(
+        wallet.lastScan.utxos,
+        sats,
+        feeRate,
+      );
+      $status.textContent =
+        `Selected ${selection.inputs.length} UTXO(s) ` +
+        `(${selection.totalInputSats.toLocaleString()} sats). ` +
+        `Fetching SPV proofs…`;
+
+      if (!woc) woc = new WocClient();
+      const proofs = [];
+      for (let i = 0; i < selection.inputs.length; i++) {
+        const u = selection.inputs[i];
+        $status.textContent =
+          `Fetching proof ${i + 1}/${selection.inputs.length} for ${u.txid.slice(0, 8)}…`;
+        const proof = await fetchInputProof(woc, u.txid);
+        proofs.push({ utxo: u, proof });
+      }
+
+      let changeAddress: string | undefined;
+      let changeDerivation: [number, number] | undefined;
+      let changeSats: number | undefined;
+      if (selection.hasChange) {
+        const nextChangeIdx = (wallet.lastScan.lastChangeUsed ?? -1) + 1;
+        const changeDerived = deriveAddress(
+          wallet.xpub,
+          CHANGE_BRANCH,
+          nextChangeIdx,
+        );
+        changeAddress = changeDerived.address;
+        changeDerivation = [CHANGE_BRANCH, nextChangeIdx];
+        changeSats = selection.changeSats;
+      }
+
+      const envelope = buildUnsignedProposal({
+        walletFingerprintHex: wallet.fingerprint,
+        inputs: proofs.map(({ utxo, proof }) => ({
+          txid: utxo.txid,
+          vout: utxo.vout,
+          sats: utxo.sats,
+          derivation: utxo.derivation,
+          proof,
+        })),
+        recipientAddress: recipient,
+        recipientSats: sats,
+        changeAddress,
+        changeSats,
+        changeDerivation,
+        feeRateSatskb: feeRate,
+        locktime: 0,
+      });
+
+      const blob = await encodeEnvelope(envelope);
+      const frames = encodeMultipartLines(blob, 720);
+
+      proposalFrames = frames;
+      proposalFrameIdx = 0;
+      proposalLastFrameAt = 0;
+      const $count = root.querySelector<HTMLElement>("#proposalFrameCount")!;
+      const $bytes = root.querySelector<HTMLElement>("#proposalByteCount")!;
+      $count.textContent = String(frames.length);
+      $bytes.textContent = String(blob.length);
+
+      const $form = root.querySelector<HTMLElement>("#sendForm")!;
+      const $result = root.querySelector<HTMLElement>("#sendResult")!;
+      $form.hidden = true;
+      $result.hidden = false;
+      startProposalAnimation();
+    } catch (e) {
+      $status.classList.add("error");
+      const msg =
+        e instanceof CoinSelectError ||
+        e instanceof ProofFetchError ||
+        e instanceof ProposalBuilderError ||
+        e instanceof WocError
+          ? e.message
+          : (e as Error).message;
+      $status.textContent = `build failed: ${msg}`;
+    } finally {
+      sendBusy = false;
+      $btn.disabled = false;
+      $btn.textContent = "Build proposal";
+    }
+  }
+
+  function startProposalAnimation(): void {
+    stopProposalAnimation();
+    if (!proposalFrames || proposalFrames.length === 0) return;
+    const $toggle = root.querySelector<HTMLButtonElement>("#proposalToggle");
+    if ($toggle) $toggle.textContent = "Pause";
+    proposalRaf = requestAnimationFrame(tickProposal);
+  }
+
+  function stopProposalAnimation(): void {
+    if (proposalRaf !== null) cancelAnimationFrame(proposalRaf);
+    proposalRaf = null;
+    const $toggle = root.querySelector<HTMLButtonElement>("#proposalToggle");
+    if ($toggle) $toggle.textContent = "Resume";
+  }
+
+  function toggleAnimation(): void {
+    if (proposalRaf !== null) stopProposalAnimation();
+    else startProposalAnimation();
+  }
+
+  function tickProposal(now: number): void {
+    if (!proposalFrames || cancelled) {
+      proposalRaf = null;
+      return;
+    }
+    const interval = 1000 / 6; // 6 fps — same default as the encoder page.
+    if (now - proposalLastFrameAt >= interval) {
+      proposalLastFrameAt = now;
+      const $canvas = root.querySelector<HTMLCanvasElement>("#proposalQr");
+      const $idx = root.querySelector<HTMLElement>("#proposalFrameIdx");
+      if ($canvas && $idx) {
+        $idx.textContent = String(proposalFrameIdx + 1);
+        void QRCode.toCanvas($canvas, proposalFrames[proposalFrameIdx], {
+          width: 320,
+          margin: 1,
+          errorCorrectionLevel: "M",
+        });
+      }
+      proposalFrameIdx = (proposalFrameIdx + 1) % proposalFrames.length;
+    }
+    proposalRaf = requestAnimationFrame(tickProposal);
+  }
+
+  function resetSendCard(): void {
+    stopProposalAnimation();
+    proposalFrames = null;
+    proposalFrameIdx = 0;
+    const $form = root.querySelector<HTMLElement>("#sendForm");
+    const $result = root.querySelector<HTMLElement>("#sendResult");
+    const $status = root.querySelector<HTMLElement>("#sendStatus");
+    if ($form) $form.hidden = false;
+    if ($result) $result.hidden = true;
+    if ($status) {
+      $status.classList.remove("error");
+      $status.textContent = "";
     }
   }
 
@@ -428,5 +673,6 @@ export function mountWalletDetailPage(
 
   return () => {
     cancelled = true;
+    stopProposalAnimation();
   };
 }

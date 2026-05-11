@@ -40,14 +40,17 @@ export interface WocUnspentEntry {
 }
 
 export interface WocTxProof {
-  /** Block hash that includes the tx. */
+  /** Position of the tx within the block's transaction tree. */
+  txIndex: number;
+  /** Block hash that includes the tx (default `targetType=blockHash`). */
   blockHash: string;
-  /** Merkle branches needed to anchor `txid` -> `merkleRoot` (hex, big-endian). */
-  branches: { hash: string; pos: "L" | "R" }[];
-  /** The block's merkle root (hex). */
-  merkleRoot: string;
-  /** Optional: position of `txid` within the block's tx tree. */
-  txIndex?: number;
+  /**
+   * Sibling hashes one per Merkle level (level 0 first). A `"*"` entry is
+   * a TSC "duplicate" marker meaning the missing sibling at that level
+   * equals the entry directly to its left (BSV/Bitcoin's right-leaning
+   * tree fill-up rule). Big-endian hex like WoC emits.
+   */
+  nodes: string[];
 }
 
 export interface WocBlockHeader {
@@ -186,22 +189,27 @@ export class WocClient {
     return raw.trim();
   }
 
-  /** `GET /tx/{txid}/proof` — TSC-format Merkle proof. */
+  /**
+   * `GET /tx/{txid}/proof/tsc` — TSC (BRC-10) Merkle proof.
+   *
+   * Returns `null` when the tx is unconfirmed (WoC 404). The returned
+   * shape is normalized; callers should hand it to
+   * `proof-fetcher.tscProofToMerklePath` which converts it to a
+   * `@bsv/sdk` MerklePath.
+   */
   async getTxProof(txid: string): Promise<WocTxProof | null> {
     interface RawProof {
-      blockHash?: string;
-      branches?: { hash: string; pos: string }[];
-      merkleRoot?: string;
-      txOrId?: string;
       index?: number;
-      // Some shapes return an error-like object.
-      error?: string;
+      txOrId?: string;
+      target?: string;
+      targetType?: string;
+      nodes?: string[];
     }
     let payload: RawProof | RawProof[];
     try {
       payload = await this.request<RawProof | RawProof[]>(
         "GET",
-        `/tx/${encodeURIComponent(txid)}/proof`,
+        `/tx/${encodeURIComponent(txid)}/proof/tsc`,
       );
     } catch (e) {
       // WoC returns 404 when the tx is still in the mempool / unconfirmed.
@@ -209,21 +217,38 @@ export class WocClient {
       throw e;
     }
     const raw = Array.isArray(payload) ? payload[0] : payload;
-    if (!raw || !raw.blockHash || !raw.branches || !raw.merkleRoot) {
+    if (
+      !raw ||
+      typeof raw.index !== "number" ||
+      typeof raw.target !== "string" ||
+      !Array.isArray(raw.nodes)
+    ) {
       return null;
     }
+    // `targetType` defaults to "blockHash" when omitted (TSC spec). We only
+    // support blockHash here — caller resolves the merkleroot via getHeader.
+    if (raw.targetType !== undefined && raw.targetType !== "blockHash") {
+      throw new WocError(
+        `/tx/${txid}/proof/tsc`,
+        200,
+        `unsupported targetType: ${raw.targetType} (only blockHash)`,
+      );
+    }
     return {
-      blockHash: raw.blockHash,
-      branches: raw.branches.map((b) => ({
-        hash: b.hash,
-        pos: b.pos === "L" ? "L" : "R",
-      })),
-      merkleRoot: raw.merkleRoot,
-      txIndex: typeof raw.index === "number" ? raw.index : undefined,
+      txIndex: raw.index,
+      blockHash: raw.target,
+      nodes: raw.nodes,
     };
   }
 
-  /** `GET /block/hash/{hash}/header`. */
+  /**
+   * `GET /block/{hashOrHeight}/header` — block header by hash or height.
+   *
+   * Returns only the 80-byte header fields parsed as JSON (no tx list).
+   * The endpoint accepts both a 64-char block hash *or* a decimal height
+   * string. We use it with hashes throughout the SPV pipeline because
+   * TSC proofs carry `target: blockHash`.
+   */
   async getHeaderByHash(hash: string): Promise<WocBlockHeader> {
     interface Raw {
       hash: string;
@@ -234,7 +259,7 @@ export class WocClient {
     }
     const raw = await this.request<Raw>(
       "GET",
-      `/block/hash/${encodeURIComponent(hash)}/header`,
+      `/block/${encodeURIComponent(hash)}/header`,
     );
     return {
       hash: raw.hash,

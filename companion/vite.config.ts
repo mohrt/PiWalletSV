@@ -22,5 +22,14 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        // @bsv/sdk is large and rarely changes — give it its own chunk
+        // so browser cache survives app-code redeploys.
+        manualChunks: {
+          bsv: ["@bsv/sdk"],
+        },
+      },
+    },
   },
 });

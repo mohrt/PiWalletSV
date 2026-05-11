@@ -88,32 +88,42 @@ describe("WocClient", () => {
     await expect(w.getTxHex("ee".repeat(32))).rejects.toBeInstanceOf(WocError);
   });
 
-  it("getTxProof normalizes branches and returns structured proof", async () => {
+  it("getTxProof returns normalized TSC shape from /proof/tsc", async () => {
+    const { fetch, calls } = stubFetch((url) => {
+      expect(url).toContain("/proof/tsc");
+      return jsonResponse([
+        {
+          index: 42,
+          txOrId: "aa".repeat(32),
+          target: "00".repeat(32),
+          targetType: "blockHash",
+          nodes: ["11".repeat(32), "*", "22".repeat(32)],
+        },
+      ]);
+    });
+    const w = new WocClient({ fetch });
+    const proof = await w.getTxProof("aa".repeat(32));
+    expect(proof).not.toBeNull();
+    expect(proof!.txIndex).toBe(42);
+    expect(proof!.blockHash).toBe("00".repeat(32));
+    expect(proof!.nodes).toEqual(["11".repeat(32), "*", "22".repeat(32)]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("getTxProof rejects unsupported targetType", async () => {
     const { fetch } = stubFetch(() =>
       jsonResponse([
         {
-          blockHash: "00".repeat(32),
-          merkleRoot: "11".repeat(32),
-          branches: [
-            { hash: "22".repeat(32), pos: "L" },
-            { hash: "33".repeat(32), pos: "R" },
-            { hash: "44".repeat(32), pos: "bogus" },
-          ],
-          index: 42,
+          index: 0,
+          txOrId: "aa".repeat(32),
+          target: "11".repeat(32),
+          targetType: "merkleRoot",
+          nodes: [],
         },
       ]),
     );
     const w = new WocClient({ fetch });
-    const proof = await w.getTxProof("aa".repeat(32));
-    expect(proof).not.toBeNull();
-    expect(proof!.blockHash).toBe("00".repeat(32));
-    expect(proof!.merkleRoot).toBe("11".repeat(32));
-    expect(proof!.branches).toEqual([
-      { hash: "22".repeat(32), pos: "L" },
-      { hash: "33".repeat(32), pos: "R" },
-      { hash: "44".repeat(32), pos: "R" }, // unknown pos -> default R
-    ]);
-    expect(proof!.txIndex).toBe(42);
+    await expect(w.getTxProof("aa".repeat(32))).rejects.toBeInstanceOf(WocError);
   });
 
   it("getTxProof returns null on 404 (unconfirmed tx)", async () => {
@@ -123,21 +133,25 @@ describe("WocClient", () => {
     expect(proof).toBeNull();
   });
 
-  it("getHeaderByHash returns the parsed header", async () => {
-    const { fetch } = stubFetch(() =>
-      jsonResponse({
+  it("getHeaderByHash returns the parsed header from /block/<hash>/header", async () => {
+    const { fetch, calls } = stubFetch((url) => {
+      expect(url).toContain("/block/");
+      expect(url).toContain("/header");
+      expect(url).not.toContain("/block/hash/"); // legacy path
+      return jsonResponse({
         hash: "aa".repeat(32),
         height: 812345,
         merkleroot: "11".repeat(32),
         time: 1700000000,
         previousblockhash: "bb".repeat(32),
-      }),
-    );
+      });
+    });
     const w = new WocClient({ fetch });
     const h = await w.getHeaderByHash("aa".repeat(32));
     expect(h.height).toBe(812345);
     expect(h.merkleroot).toBe("11".repeat(32));
     expect(h.previousblockhash).toBe("bb".repeat(32));
+    expect(calls).toHaveLength(1);
   });
 
   it("broadcastRaw posts JSON {txhex} and returns the de-quoted txid", async () => {

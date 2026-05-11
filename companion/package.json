@@ -24,6 +24,7 @@
     "vitest": "~3.2.0"
   },
   "dependencies": {
+    "@bsv/sdk": "^2.1.0",
     "@noble/hashes": "^2.2.0",
     "@scure/base": "^2.2.0",
     "@scure/bip32": "^2.2.0",
