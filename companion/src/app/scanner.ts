@@ -14,7 +14,9 @@ import jsQR from "jsqr";
 import { MultipartAssembler, MultipartQrError } from "../pw1.js";
 
 const SCAN_INTERVAL_MS = 80; // ~12.5 fps; plenty for animated QR
-const HEX_PREVIEW_BYTES = 64;
+const TEXT_DISPLAY_CAP = 64 * 1024; // truncate displayed body for huge payloads
+
+type ViewMode = "text" | "hex" | "base64url";
 
 export function mountScannerPage(root: HTMLElement): () => void {
   root.innerHTML = `
@@ -41,12 +43,20 @@ export function mountScannerPage(root: HTMLElement): () => void {
       </section>
 
       <section id="resultCard" class="card" hidden>
-        <label for="resultHex">Reassembled payload</label>
-        <textarea id="resultHex" rows="6" readonly
+        <div class="row" style="margin-bottom: 0.6rem;">
+          <fieldset>
+            <legend>View as</legend>
+            <label><input type="radio" name="view" value="text" /> text</label>
+            <label><input type="radio" name="view" value="hex" /> hex</label>
+            <label><input type="radio" name="view" value="base64url" /> base64url</label>
+          </fieldset>
+        </div>
+        <textarea id="resultBody" rows="8" readonly
           spellcheck="false" autocorrect="off"></textarea>
         <p id="resultMeta" class="muted-line"></p>
         <div class="actions">
           <button id="download" class="primary" type="button">Download .bin</button>
+          <button id="copyView" type="button">Copy current view</button>
           <button id="copyB64" type="button">Copy base64url</button>
         </div>
       </section>
@@ -60,9 +70,10 @@ export function mountScannerPage(root: HTMLElement): () => void {
   const $stop = root.querySelector<HTMLButtonElement>("#stop")!;
   const $reset = root.querySelector<HTMLButtonElement>("#reset")!;
   const $resultCard = root.querySelector<HTMLElement>("#resultCard")!;
-  const $resultHex = root.querySelector<HTMLTextAreaElement>("#resultHex")!;
+  const $resultBody = root.querySelector<HTMLTextAreaElement>("#resultBody")!;
   const $resultMeta = root.querySelector<HTMLElement>("#resultMeta")!;
   const $download = root.querySelector<HTMLButtonElement>("#download")!;
+  const $copyView = root.querySelector<HTMLButtonElement>("#copyView")!;
   const $copyB64 = root.querySelector<HTMLButtonElement>("#copyB64")!;
 
   const offscreen = document.createElement("canvas");
@@ -110,11 +121,26 @@ export function mountScannerPage(root: HTMLElement): () => void {
     }
   }
 
-  function bytesToHexPreview(bytes: Uint8Array): string {
-    const slice = bytes.subarray(0, HEX_PREVIEW_BYTES);
+  function looksLikeText(bytes: Uint8Array): boolean {
+    if (bytes.length === 0) return true;
+    let decoded: string;
+    try {
+      decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      return false;
+    }
+    for (const ch of decoded) {
+      const c = ch.codePointAt(0)!;
+      if (c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d) return false;
+      if (c === 0x7f) return false;
+    }
+    return true;
+  }
+
+  function bytesToHex(bytes: Uint8Array): string {
     let hex = "";
-    for (const b of slice) hex += b.toString(16).padStart(2, "0");
-    return bytes.length > HEX_PREVIEW_BYTES ? `${hex}…` : hex;
+    for (const b of bytes) hex += b.toString(16).padStart(2, "0");
+    return hex;
   }
 
   function bytesToBase64Url(bytes: Uint8Array): string {
@@ -126,10 +152,45 @@ export function mountScannerPage(root: HTMLElement): () => void {
     return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
   }
 
+  function bytesAsView(bytes: Uint8Array, mode: ViewMode): string {
+    if (mode === "text") {
+      return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    }
+    if (mode === "hex") return bytesToHex(bytes);
+    return bytesToBase64Url(bytes);
+  }
+
+  function currentViewMode(): ViewMode {
+    const checked = root.querySelector<HTMLInputElement>(
+      'input[name="view"]:checked',
+    );
+    return (checked?.value as ViewMode) ?? "text";
+  }
+
+  function renderResultView(): void {
+    if (!result) return;
+    const mode = currentViewMode();
+    let body = bytesAsView(result, mode);
+    let truncated = false;
+    if (body.length > TEXT_DISPLAY_CAP) {
+      body = `${body.slice(0, TEXT_DISPLAY_CAP)}\n…[display truncated]`;
+      truncated = true;
+    }
+    $resultBody.value = body;
+    const textLabel = looksLikeText(result) ? "valid UTF-8" : "binary";
+    $resultMeta.textContent = `${result.length} bytes · ${textLabel}` +
+      (truncated ? " · display truncated" : "");
+  }
+
   function showResult(bytes: Uint8Array): void {
     result = bytes;
-    $resultHex.value = bytesToHexPreview(bytes);
-    $resultMeta.textContent = `${bytes.length} bytes · sha-like preview shown above`;
+    const defaultView: ViewMode = looksLikeText(bytes) ? "text" : "hex";
+    for (const r of root.querySelectorAll<HTMLInputElement>(
+      'input[name="view"]',
+    )) {
+      r.checked = r.value === defaultView;
+    }
+    renderResultView();
     $resultCard.hidden = false;
     $reset.disabled = false;
     setStatus(`complete — reassembled ${bytes.length} bytes`);
@@ -257,7 +318,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
     asm = new MultipartAssembler();
     result = null;
     $resultCard.hidden = true;
-    $resultHex.value = "";
+    $resultBody.value = "";
     $resultMeta.textContent = "";
     $missing.textContent = "";
     $reset.disabled = true;
@@ -291,14 +352,16 @@ export function mountScannerPage(root: HTMLElement): () => void {
     a.remove();
   }
 
-  async function copyBase64(): Promise<void> {
-    if (!result) return;
-    const b64 = bytesToBase64Url(result);
+  async function copyToClipboard(
+    text: string,
+    btn: HTMLButtonElement,
+    restoreLabel: string,
+  ): Promise<void> {
     try {
-      await navigator.clipboard.writeText(b64);
-      $copyB64.textContent = "copied!";
+      await navigator.clipboard.writeText(text);
+      btn.textContent = "copied!";
       setTimeout(() => {
-        $copyB64.textContent = "Copy base64url";
+        btn.textContent = restoreLabel;
       }, 1200);
     } catch (e) {
       setStatus(`clipboard error: ${(e as Error).message}`, true);
@@ -312,8 +375,24 @@ export function mountScannerPage(root: HTMLElement): () => void {
   $reset.addEventListener("click", resetAll);
   $download.addEventListener("click", downloadResult);
   $copyB64.addEventListener("click", () => {
-    void copyBase64();
+    if (!result) return;
+    void copyToClipboard(
+      bytesToBase64Url(result),
+      $copyB64,
+      "Copy base64url",
+    );
   });
+  $copyView.addEventListener("click", () => {
+    if (!result) return;
+    void copyToClipboard(
+      bytesAsView(result, currentViewMode()),
+      $copyView,
+      "Copy current view",
+    );
+  });
+  for (const r of root.querySelectorAll<HTMLInputElement>('input[name="view"]')) {
+    r.addEventListener("change", renderResultView);
+  }
 
   return () => {
     releaseCamera();
