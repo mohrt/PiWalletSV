@@ -23,6 +23,7 @@
     "vitest": "~3.2.0"
   },
   "dependencies": {
+    "cbor-x": "^1.6.4",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4"
   }
