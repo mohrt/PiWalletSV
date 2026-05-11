@@ -1,5 +1,9 @@
 # PiWalletSV
 
+> **Alpha software — read [`DISCLAIMER.md`](DISCLAIMER.md) before use.**
+> No warranty. Non-custodial: lose your seed and your funds are gone.
+> Report security issues per [`SECURITY.md`](SECURITY.md).
+
 Air-gapped **Bitcoin SV** wallet targeting **Raspberry Pi Zero 2 WH** + **Adafruit 1.3" TFT bonnet** (joystick + buttons) + **Pi Camera Module 3**. Signing is performed entirely offline; a companion PWA on your phone or laptop handles all on-chain work.
 
 ## Offline core (dev / air-gapped signer)

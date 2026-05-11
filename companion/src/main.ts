@@ -2,6 +2,7 @@ import "./app/styles.css";
 import { mountEncoderPage } from "./app/encoder.js";
 import { mountLoopPage } from "./app/loop.js";
 import { mountScannerPage } from "./app/scanner.js";
+import { ensureTermsAccepted } from "./app/terms-modal.js";
 import { mountWalletDetailPage } from "./app/wallet-detail.js";
 import { mountWalletsPage } from "./app/wallets-page.js";
 
@@ -63,4 +64,5 @@ window.addEventListener("hashchange", render);
 window.addEventListener("beforeunload", () => {
   if (pageTeardown) pageTeardown();
 });
-render();
+
+void ensureTermsAccepted().then(render);

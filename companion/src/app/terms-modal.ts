@@ -1,0 +1,98 @@
+/**
+ * First-load disclaimer modal.
+ *
+ * `ensureTermsAccepted(parent)` renders a blocking overlay (parented to
+ * `document.body`) when the user hasn't yet accepted the current
+ * `termsVersion`. The promise resolves once they tick "I have read and
+ * accept" and click Continue. The overlay removes itself; the rest of
+ * the app then mounts as normal.
+ *
+ * When acceptance is already on record (matching version), the function
+ * resolves immediately without rendering anything.
+ */
+import {
+  CURRENT_TERMS_VERSION,
+  isTermsAccepted,
+  recordAcceptance,
+} from "../lib/terms.js";
+
+const MODAL_ID = "piwallet-terms-modal";
+
+export async function ensureTermsAccepted(): Promise<void> {
+  if (isTermsAccepted()) return;
+  return new Promise<void>((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.id = MODAL_ID;
+    overlay.className = "terms-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "termsTitle");
+    overlay.innerHTML = `
+      <div class="terms-modal">
+        <h1 id="termsTitle">PiWalletSV — please read before continuing</h1>
+        <p class="terms-version">
+          Disclaimer version <code>${CURRENT_TERMS_VERSION}</code>.
+          Full text:
+          <a href="https://github.com/" target="_blank" rel="noopener noreferrer">
+            DISCLAIMER.md
+          </a>
+          in the repository.
+        </p>
+        <ul class="terms-bullets">
+          <li>
+            <strong>Alpha software.</strong> Pre-release, unaudited,
+            personal project. Bugs and regressions can lose funds.
+            Don't store amounts you can't afford to lose.
+          </li>
+          <li>
+            <strong>Non-custodial.</strong> You — and only you — are
+            responsible for your seed phrase, your PIN, and your
+            physical signer. The author cannot recover lost funds.
+          </li>
+          <li>
+            <strong>No warranty.</strong> The Software is provided
+            "AS IS". No liability for losses, taxes, regulatory issues,
+            or third-party (WhatsOnChain) outages.
+          </li>
+          <li>
+            <strong>Air-gap discipline.</strong> Never enter your seed
+            phrase into anything online — including this companion app,
+            cloud editors, password managers, or AI assistants.
+          </li>
+          <li>
+            <strong>Not financial / legal / tax advice.</strong>
+            Consult qualified professionals before relying on this
+            wallet for material amounts.
+          </li>
+        </ul>
+        <label class="terms-accept">
+          <input type="checkbox" id="termsAccept" />
+          <span>
+            I have read and accept the full
+            <code>DISCLAIMER.md</code> on my own responsibility.
+          </span>
+        </label>
+        <div class="actions">
+          <button id="termsContinue" class="primary" type="button" disabled>
+            Continue
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.body.classList.add("terms-locked");
+
+    const $check = overlay.querySelector<HTMLInputElement>("#termsAccept")!;
+    const $btn = overlay.querySelector<HTMLButtonElement>("#termsContinue")!;
+    $check.addEventListener("change", () => {
+      $btn.disabled = !$check.checked;
+    });
+    $btn.addEventListener("click", () => {
+      if (!$check.checked) return;
+      recordAcceptance();
+      overlay.remove();
+      document.body.classList.remove("terms-locked");
+      resolve();
+    });
+  });
+}
