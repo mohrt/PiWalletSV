@@ -10,6 +10,8 @@
  * which lets the loader migrate or refuse rows from a newer client.
  */
 
+import type { WalletUtxo } from "./utxo.js";
+
 const DB_NAME = "piwallet-companion";
 const DB_VERSION = 1;
 const STORE = "wallets";
@@ -37,10 +39,33 @@ export interface WalletRecord {
    * records (v1) lack this field; readers default to 0.
    */
   nextReceiveIndex?: number;
+  /**
+   * Cached UTXO snapshot from the last `scanWalletUtxos` run. Optional;
+   * the wallet works without it (the UI just shows "not scanned yet").
+   */
+  lastScan?: WalletScanSnapshot;
+}
+
+/** Cached output of the gap-limit UTXO scan, persisted per wallet. */
+export interface WalletScanSnapshot {
+  /** ISO 8601 timestamp the scan completed. */
+  at: string;
+  /** Sum of `sats` across `utxos`. */
+  totalSats: number;
+  /** Snapshot of every unspent output discovered by the scan. */
+  utxos: WalletUtxo[];
+  /** Highest receive index that produced a UTXO (-1 if none). */
+  lastReceiveUsed: number;
+  /** Highest change index that produced a UTXO (-1 if none). */
+  lastChangeUsed: number;
+  /** Total addresses probed across both branches. */
+  addressesScanned: number;
 }
 
 /** Helper that fills in defaults for fields added after schema v1. */
-export function withDefaults(rec: WalletRecord): Required<WalletRecord> {
+export function withDefaults(rec: WalletRecord): WalletRecord & {
+  nextReceiveIndex: number;
+} {
   return {
     ...rec,
     nextReceiveIndex: rec.nextReceiveIndex ?? 0,
@@ -211,6 +236,33 @@ export async function updateLabel(id: string, label: string): Promise<void> {
     );
     if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
     cur.label = label;
+    await txPromise(store.put(cur), "put");
+  });
+}
+
+export async function setLastScan(
+  id: string,
+  snapshot: WalletScanSnapshot,
+): Promise<void> {
+  await withStore("readwrite", async (store) => {
+    const cur = await txPromise<WalletRecord | undefined>(
+      store.get(id) as IDBRequest<WalletRecord | undefined>,
+      "get",
+    );
+    if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
+    cur.lastScan = snapshot;
+    await txPromise(store.put(cur), "put");
+  });
+}
+
+export async function clearLastScan(id: string): Promise<void> {
+  await withStore("readwrite", async (store) => {
+    const cur = await txPromise<WalletRecord | undefined>(
+      store.get(id) as IDBRequest<WalletRecord | undefined>,
+      "get",
+    );
+    if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
+    delete cur.lastScan;
     await txPromise(store.put(cur), "put");
   });
 }

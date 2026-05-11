@@ -17,14 +17,18 @@ import {
   deriveAddress,
   deriveAddressBatch,
 } from "../lib/derive.js";
+import { scanWalletUtxos } from "../lib/utxo.js";
+import { WocClient, WocError } from "../lib/woc.js";
 import {
   type WalletRecord,
   getWallet,
+  setLastScan,
   setNextReceiveIndex,
   withDefaults,
 } from "../lib/wallets.js";
 
 const RECENT_WINDOW = 8;
+const SATS_PER_BSV = 100_000_000;
 
 function escapeHtml(s: string): string {
   return s
@@ -34,12 +38,42 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function formatSats(n: number): string {
+  return `${n.toLocaleString("en-US")} sats`;
+}
+
+function formatBsv(n: number): string {
+  return `${(n / SATS_PER_BSV).toFixed(8)} BSV`;
+}
+
+function relativeTimeFrom(iso: string): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  const ms = Date.now() - t;
+  if (ms < 0) return new Date(iso).toLocaleString();
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  return `${day}d ago`;
+}
+
+function shortTxid(txid: string): string {
+  if (txid.length <= 16) return txid;
+  return `${txid.slice(0, 8)}…${txid.slice(-8)}`;
+}
+
 export function mountWalletDetailPage(
   root: HTMLElement,
   walletId: string,
 ): () => void {
   let cancelled = false;
-  let wallet: Required<WalletRecord> | null = null;
+  let wallet: (WalletRecord & { nextReceiveIndex: number }) | null = null;
+  let scanRunning = false;
+  let woc: WocClient | null = null;
 
   root.innerHTML = `
     <main class="page">
@@ -111,6 +145,27 @@ export function mountWalletDetailPage(
           <p><a href="#/wallets">← Back to wallets</a></p>
         </section>
 
+        <section class="card balance-card">
+          <h2>Balance</h2>
+          <div class="balance-row">
+            <div class="balance-figures">
+              <div class="balance-sats" id="balanceSats">—</div>
+              <div class="balance-bsv muted-line" id="balanceBsv"></div>
+              <div class="muted-line" id="balanceMeta"></div>
+            </div>
+            <div class="actions">
+              <button id="refreshBalance" class="primary" type="button">
+                Refresh balance
+              </button>
+            </div>
+          </div>
+          <p class="muted-line" id="balanceStatus"></p>
+          <details id="utxoDetails" hidden>
+            <summary>Show UTXOs (<span id="utxoCount">0</span>)</summary>
+            <ul id="utxoList" class="utxo-list"></ul>
+          </details>
+        </section>
+
         <section class="card receive-card">
           <h2>Current receive address</h2>
           <p class="muted-line" id="receivePath"></p>
@@ -145,6 +200,117 @@ export function mountWalletDetailPage(
     $copy.addEventListener("click", () => void onCopy());
     $prev.addEventListener("click", () => void shiftIndex(-1));
     $next.addEventListener("click", () => void shiftIndex(1));
+
+    const $refresh = root.querySelector<HTMLButtonElement>("#refreshBalance")!;
+    $refresh.addEventListener("click", () => void onRefreshBalance());
+
+    renderBalance();
+  }
+
+  function renderBalance(): void {
+    if (!wallet) return;
+    const $sats = root.querySelector<HTMLElement>("#balanceSats");
+    const $bsv = root.querySelector<HTMLElement>("#balanceBsv");
+    const $meta = root.querySelector<HTMLElement>("#balanceMeta");
+    const $details = root.querySelector<HTMLDetailsElement>("#utxoDetails");
+    const $count = root.querySelector<HTMLElement>("#utxoCount");
+    const $list = root.querySelector<HTMLUListElement>("#utxoList");
+    if (!$sats || !$bsv || !$meta || !$details || !$count || !$list) return;
+
+    const scan = wallet.lastScan;
+    if (!scan) {
+      $sats.textContent = "—";
+      $bsv.textContent = "";
+      $meta.textContent =
+        "Not scanned yet. Click Refresh to query WhatsOnChain for UTXOs.";
+      $details.hidden = true;
+      return;
+    }
+    $sats.textContent = formatSats(scan.totalSats);
+    $bsv.textContent = formatBsv(scan.totalSats);
+    $meta.textContent =
+      `${scan.utxos.length} UTXO${scan.utxos.length === 1 ? "" : "s"} · ` +
+      `scanned ${scan.addressesScanned} addresses · ` +
+      `last refreshed ${relativeTimeFrom(scan.at)}`;
+    $details.hidden = scan.utxos.length === 0;
+    $count.textContent = String(scan.utxos.length);
+
+    $list.innerHTML = "";
+    for (const u of scan.utxos) {
+      const li = document.createElement("li");
+      li.className = "utxo-row";
+      const branchLabel = u.derivation[0] === 0 ? "recv" : "change";
+      li.innerHTML = `
+        <div class="utxo-top">
+          <code title="${escapeHtml(u.txid)}">${escapeHtml(shortTxid(u.txid))}:${u.vout}</code>
+          <span class="utxo-sats">${formatSats(u.sats)}</span>
+        </div>
+        <div class="muted-line">
+          ${branchLabel} m/${u.derivation[0]}/${u.derivation[1]} ·
+          ${escapeHtml(u.address)} ·
+          ${u.height === 0 ? "mempool" : `block ${u.height}`}
+        </div>
+      `;
+      $list.appendChild(li);
+    }
+  }
+
+  async function onRefreshBalance(): Promise<void> {
+    if (!wallet || scanRunning) return;
+    scanRunning = true;
+    const $refresh = root.querySelector<HTMLButtonElement>("#refreshBalance");
+    const $status = root.querySelector<HTMLElement>("#balanceStatus");
+    if ($refresh) {
+      $refresh.disabled = true;
+      $refresh.textContent = "Scanning…";
+    }
+    if ($status) {
+      $status.classList.remove("error");
+      $status.textContent = "Starting gap-limit scan (this can take a few seconds)…";
+    }
+    if (!woc) woc = new WocClient();
+
+    try {
+      const result = await scanWalletUtxos(wallet.xpub, woc, {
+        onProgress: ({ branch, index, address, found }) => {
+          if (cancelled || !$status) return;
+          const branchLabel = branch === RECEIVE_BRANCH ? "recv" : "change";
+          $status.textContent =
+            `Probed ${branchLabel} m/${branch}/${index} ` +
+            `(${address.slice(0, 6)}…${address.slice(-4)}) — ` +
+            `${found} UTXO${found === 1 ? "" : "s"}`;
+        },
+      });
+      if (cancelled) return;
+      const snapshot = {
+        at: new Date().toISOString(),
+        totalSats: result.totalSats,
+        utxos: result.utxos,
+        lastReceiveUsed: result.lastReceiveUsed,
+        lastChangeUsed: result.lastChangeUsed,
+        addressesScanned: result.addressesScanned,
+      };
+      await setLastScan(wallet.id, snapshot);
+      wallet.lastScan = snapshot;
+      renderBalance();
+      if ($status)
+        $status.textContent =
+          `Scan complete — ${result.utxos.length} UTXO(s), ` +
+          `${result.addressesScanned} addresses probed.`;
+    } catch (e) {
+      if (cancelled) return;
+      const msg = e instanceof WocError ? e.message : (e as Error).message;
+      if ($status) {
+        $status.classList.add("error");
+        $status.textContent = `scan failed: ${msg}`;
+      }
+    } finally {
+      scanRunning = false;
+      if ($refresh) {
+        $refresh.disabled = false;
+        $refresh.textContent = "Refresh balance";
+      }
+    }
   }
 
   async function renderReceive(): Promise<void> {

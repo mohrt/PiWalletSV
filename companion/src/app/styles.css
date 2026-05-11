@@ -504,6 +504,82 @@ button:hover:not(:disabled) {
   font-size: 0.75rem;
 }
 
+.balance-card .balance-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.balance-figures {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.balance-sats {
+  font-size: 1.6rem;
+  font-weight: 600;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--text);
+}
+
+.balance-bsv {
+  font-size: 0.95rem;
+  color: var(--accent);
+  margin: 0;
+}
+
+.balance-card details {
+  margin-top: 0.75rem;
+}
+
+.balance-card summary {
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 0.9rem;
+  user-select: none;
+  padding: 0.25rem 0;
+}
+
+.utxo-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.utxo-row {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.utxo-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.utxo-top code {
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.utxo-sats {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
 @media (max-width: 600px) {
   .qr-card canvas {
     width: 100%;

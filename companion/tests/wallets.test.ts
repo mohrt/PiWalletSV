@@ -7,14 +7,17 @@ import {
   WalletStoreError,
   _clearAllWallets,
   addWallet,
+  clearLastScan,
   findByFingerprintAndPath,
   getWallet,
   listWallets,
   removeWallet,
+  setLastScan,
   setNextReceiveIndex,
   updateLabel,
   withDefaults,
 } from "../src/lib/wallets.js";
+import type { WalletUtxo } from "../src/lib/utxo.js";
 
 const DEMO = {
   label: "demo wallet",
@@ -120,5 +123,36 @@ describe("wallets store", () => {
     await expect(setNextReceiveIndex(rec.id, 1.5)).rejects.toBeInstanceOf(
       WalletStoreError,
     );
+  });
+
+  it("setLastScan / clearLastScan round-trip", async () => {
+    const rec = await addWallet(DEMO);
+    expect(rec.lastScan).toBeUndefined();
+    const utxo: WalletUtxo = {
+      txid: "aa".repeat(32),
+      vout: 0,
+      sats: 5000,
+      height: 812345,
+      address: "1K6LZdwpKT5XkEZo2T2kW197aMXYbYMc4f",
+      derivation: [0, 1],
+    };
+    await setLastScan(rec.id, {
+      at: "2026-05-10T00:00:00.000Z",
+      totalSats: 5000,
+      utxos: [utxo],
+      lastReceiveUsed: 1,
+      lastChangeUsed: -1,
+      addressesScanned: 22,
+    });
+    const after = await getWallet(rec.id);
+    expect(after?.lastScan?.totalSats).toBe(5000);
+    expect(after?.lastScan?.utxos[0]).toMatchObject({
+      txid: "aa".repeat(32),
+      derivation: [0, 1],
+    });
+
+    await clearLastScan(rec.id);
+    const cleared = await getWallet(rec.id);
+    expect(cleared?.lastScan).toBeUndefined();
   });
 });
