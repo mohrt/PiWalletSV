@@ -1,6 +1,6 @@
-# PiWallet
+# PiWalletSV
 
-Air-gapped **Bitcoin SV** wallet work targeting **Raspberry Pi Zero WH** + **Adafruit 1.3" TFT bonnet** (joystick + buttons).
+Air-gapped **Bitcoin SV** wallet targeting **Raspberry Pi Zero 2 WH** + **Adafruit 1.3" TFT bonnet** (joystick + buttons) + **Pi Camera Module 3**. Signing is performed entirely offline; a companion PWA on your phone or laptop handles all on-chain work.
 
 ## Offline core (dev / air-gapped signer)
 
@@ -29,8 +29,20 @@ npm run build        # tsc --noEmit + vite build to companion/dist
 ```
 
 - **`/#/encode`** — paste any text / hex / base64(url) and watch it animate as `PW1|…` QR frames the Pi camera path can already ingest.
-- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream and shows it as text / hex / base64url, with `.bin` download. When the bytes are a real PiWallet envelope (`xpub_export`, `unsigned_proposal`, or `signed_tx`), the parsed structure is rendered inline.
+- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream and shows it as text / hex / base64url, with `.bin` download. When the bytes are a real PiWalletSV envelope (`xpub_export`, `unsigned_proposal`, or `signed_tx`), the parsed structure is rendered inline. When an `xpub_export` is detected, a "Save as paired wallet" card appears that writes `{label, xpub, fingerprint, path, addedAt}` to IndexedDB.
+- **`/#/wallets`** — paired-wallet list backed by IndexedDB. Rename, copy xpub, or remove an entry. The Pi side is unaffected by removals.
 - **`/#/loop`** — runs an in-memory round-trip of every envelope kind (build → CBOR + gzip → PW1 split → reassemble → gunzip + CBOR decode) on page load and shows pass/fail. One-page sanity check that the wire stack agrees with itself.
+
+### Pi-side pairing
+
+To produce an `xpub_export` envelope on the Pi for pairing:
+
+```bash
+piwallet xpub-export --wallet-id <id> -o /tmp/xpub.bin   # writes CBOR + gzip blob
+piwallet decode /tmp/xpub.bin                            # human-readable preview
+```
+
+For now you can render the blob to animated QR on a laptop (Encode page, base64url mode) and scan from the phone; once Phase 2 lands, the Pi bonnet itself will drive the PW1 stream.
 
 ### iPhone / phone scanning
 

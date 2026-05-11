@@ -1,4 +1,4 @@
-"""PiWallet CLI: dev-time interface to the offline core.
+"""PiWalletSV CLI: dev-time interface to the offline core.
 
 This is NOT the bonnet UI; that lives in `piwallet/ui/` and arrives in
 Phase 2. The CLI is for:
@@ -36,7 +36,7 @@ from piwallet.core.vault import (
 from piwallet.qr.multipart import MultipartAssembler, MultipartQrError
 
 
-@click.group(help="PiWallet offline signing CLI.")
+@click.group(help="PiWalletSV offline signing CLI.")
 @click.version_option(__version__, prog_name="piwallet")
 def main() -> None:
     pass
@@ -150,6 +150,79 @@ def vault_export_xpub(ctx: click.Context, wallet_id: str) -> None:
     except WrongPinError as exc:
         click.echo(f"WRONG PIN ({exc.attempts_remaining} left)", err=True)
         sys.exit(2)
+
+
+# ---- pairing -----------------------------------------------------------
+
+
+@main.command(
+    "xpub-export",
+    help="Build an xpub_export envelope (CBOR+gzip) for QR pairing with the PWA.",
+)
+@click.option(
+    "--vault-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=Path.home() / ".piwallet-dev" / "vault.bin",
+    show_default=True,
+)
+@click.option("--wallet-id", required=True, help="Wallet id to export.")
+@click.option(
+    "--label",
+    help="Override the stored label in the emitted envelope (defaults to the vault label).",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Where to write the envelope blob (default: stdout, raw bytes).",
+)
+def xpub_export_cmd(
+    vault_path: Path,
+    wallet_id: str,
+    label: str | None,
+    output: Path | None,
+) -> None:
+    """Wrap the wallet's account xpub in a versioned `xpub_export` envelope."""
+
+    v = Vault(vault_path)
+    if not v.is_initialized:
+        click.echo(
+            f"no vault at {vault_path}; run `piwallet vault init` first",
+            err=True,
+        )
+        sys.exit(1)
+
+    rec = next((w for w in v.list_wallets() if w.id == wallet_id), None)
+    if rec is None:
+        click.echo(f"no wallet with id={wallet_id} in vault", err=True)
+        sys.exit(1)
+
+    pin = click.prompt("PIN", hide_input=True)
+    try:
+        xpub_str = v.get_account_xpub(pin, wallet_id)
+    except WrongPinError as exc:
+        click.echo(f"WRONG PIN ({exc.attempts_remaining} left)", err=True)
+        sys.exit(2)
+    except VaultWipedError as exc:
+        click.echo(f"VAULT WIPED: {exc}", err=True)
+        sys.exit(3)
+
+    payload = env.XpubExport(
+        xpub=xpub_str,
+        path=rec.derivation_path,
+        label=label if label is not None else rec.label,
+        fingerprint=rec.fingerprint,
+    )
+    blob = env.encode(payload)
+
+    if output is None:
+        sys.stdout.buffer.write(blob)
+    else:
+        output.write_bytes(blob)
+        click.echo(
+            f"wrote {len(blob)} bytes (xpub_export, fp={rec.fingerprint.hex()}) to {output}",
+            err=True,
+        )
 
 
 # ---- envelope commands -------------------------------------------------

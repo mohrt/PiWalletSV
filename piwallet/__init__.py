@@ -1,4 +1,4 @@
-"""PiWallet: air-gapped Bitcoin SV signing device.
+"""PiWalletSV: air-gapped Bitcoin SV signing device.
 
 This is the offline-side library. It handles BIP39 mnemonics, BIP32/44
 derivation, encrypted multi-wallet storage, BEEF-based SPV verification of

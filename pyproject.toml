@@ -9,7 +9,7 @@ description = "Air-gapped Bitcoin SV signing device for Raspberry Pi Zero 2 W + 
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "PiWallet contributors" }]
+authors = [{ name = "PiWalletSV contributors" }]
 keywords = ["bitcoin-sv", "bsv", "wallet", "hardware-wallet", "air-gapped", "raspberry-pi"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",

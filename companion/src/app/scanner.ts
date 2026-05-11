@@ -15,10 +15,17 @@ import {
   type Envelope,
   KIND_PROPOSAL,
   KIND_XPUB,
+  type XpubExportT,
   bytesToHex,
   decodeEnvelope,
 } from "../lib/envelope.js";
 import { MultipartAssembler, MultipartQrError } from "../pw1.js";
+import {
+  type WalletRecord,
+  WalletStoreError,
+  addWallet,
+  findByFingerprintAndPath,
+} from "../lib/wallets.js";
 
 const SCAN_INTERVAL_MS = 80; // ~12.5 fps; plenty for animated QR
 const TEXT_DISPLAY_CAP = 64 * 1024; // truncate displayed body for huge payloads
@@ -29,11 +36,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
       <header class="page-header">
-        <h1>Scan multipart QR<span class="brand"> · PiWallet companion</span></h1>
+        <h1>Scan multipart QR<span class="brand"> · PiWalletSV companion</span></h1>
         <nav>
           <a href="#/encode">Encode</a>
           <a href="#/scan" class="active">Scan</a>
           <a href="#/loop">Loop</a>
+          <a href="#/wallets">Wallets</a>
         </nav>
       </header>
 
@@ -47,6 +55,19 @@ export function mountScannerPage(root: HTMLElement): () => void {
             <button id="stop" type="button">Stop</button>
             <button id="reset" type="button">Reset</button>
           </div>
+        </div>
+      </section>
+
+      <section id="pairCard" class="card pair-card" hidden>
+        <h2>Save as paired wallet</h2>
+        <p id="pairStatus" class="muted-line"></p>
+        <label class="field-label" for="pairLabel">Wallet label</label>
+        <input id="pairLabel" type="text" maxlength="64"
+          autocomplete="off" autocorrect="off" spellcheck="false" />
+        <p id="pairFp" class="muted-line"></p>
+        <div class="actions">
+          <button id="pairSave" class="primary" type="button">Save wallet</button>
+          <a id="pairOpenList" href="#/wallets" hidden>Open wallets list</a>
         </div>
       </section>
 
@@ -85,6 +106,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
   const $download = root.querySelector<HTMLButtonElement>("#download")!;
   const $copyView = root.querySelector<HTMLButtonElement>("#copyView")!;
   const $copyB64 = root.querySelector<HTMLButtonElement>("#copyB64")!;
+  const $pairCard = root.querySelector<HTMLElement>("#pairCard")!;
+  const $pairStatus = root.querySelector<HTMLElement>("#pairStatus")!;
+  const $pairLabel = root.querySelector<HTMLInputElement>("#pairLabel")!;
+  const $pairFp = root.querySelector<HTMLElement>("#pairFp")!;
+  const $pairSave = root.querySelector<HTMLButtonElement>("#pairSave")!;
+  const $pairOpenList = root.querySelector<HTMLAnchorElement>("#pairOpenList")!;
 
   const offscreen = document.createElement("canvas");
   const offscreenCtx = offscreen.getContext("2d", { willReadFrequently: true });
@@ -101,6 +128,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
   let result: Uint8Array | null = null;
   let envelope: Envelope | null = null;
   let lastDownloadUrl: string | null = null;
+  let pairXpub: XpubExportT | null = null;
 
   $stop.disabled = true;
   $reset.disabled = true;
@@ -231,6 +259,76 @@ export function mountScannerPage(root: HTMLElement): () => void {
     return lines.join("\n");
   }
 
+  function hidePairCard(): void {
+    pairXpub = null;
+    $pairCard.hidden = true;
+    $pairStatus.classList.remove("error");
+    $pairStatus.textContent = "";
+    $pairFp.textContent = "";
+    $pairLabel.value = "";
+    $pairSave.disabled = false;
+    $pairSave.textContent = "Save wallet";
+    $pairOpenList.hidden = true;
+  }
+
+  async function showPairCard(env: XpubExportT): Promise<void> {
+    pairXpub = env;
+    const fpHex = bytesToHex(env.fingerprint);
+    $pairCard.hidden = false;
+    $pairLabel.value = env.label;
+    $pairLabel.disabled = false;
+    $pairSave.textContent = "Save wallet";
+    $pairOpenList.hidden = true;
+    $pairFp.textContent = `fingerprint ${fpHex} · ${env.path}`;
+    $pairStatus.classList.remove("error");
+
+    let existing: WalletRecord | null = null;
+    try {
+      existing = await findByFingerprintAndPath(fpHex, env.path);
+    } catch (e) {
+      $pairStatus.classList.add("error");
+      $pairStatus.textContent = `wallet store error: ${(e as Error).message}`;
+      $pairSave.disabled = true;
+      return;
+    }
+
+    if (existing) {
+      $pairStatus.textContent =
+        `already paired as "${existing.label}" on ${new Date(existing.addedAt).toLocaleString()}.`;
+      $pairSave.disabled = true;
+      $pairOpenList.hidden = false;
+    } else {
+      $pairStatus.textContent =
+        `Pi reported label "${env.label}". You can rename it before saving.`;
+      $pairSave.disabled = false;
+    }
+  }
+
+  async function onPairSave(): Promise<void> {
+    if (!pairXpub) return;
+    const label = $pairLabel.value.trim() || pairXpub.label;
+    $pairSave.disabled = true;
+    try {
+      const rec = await addWallet({
+        label,
+        xpub: pairXpub.xpub,
+        fingerprint: bytesToHex(pairXpub.fingerprint),
+        path: pairXpub.path,
+      });
+      $pairStatus.classList.remove("error");
+      $pairStatus.textContent =
+        `saved as "${rec.label}" — ${rec.fingerprint} on ${rec.path}.`;
+      $pairOpenList.hidden = false;
+      $pairLabel.disabled = true;
+    } catch (e) {
+      $pairStatus.classList.add("error");
+      const msg = e instanceof WalletStoreError ? e.message : (e as Error).message;
+      $pairStatus.textContent = `save failed: ${msg}`;
+      // If it's the duplicate-pair case, surface the wallets list link.
+      if (msg.includes("duplicate-pair")) $pairOpenList.hidden = false;
+    }
+  }
+
   async function tryDecodeEnvelope(bytes: Uint8Array): Promise<void> {
     try {
       envelope = await decodeEnvelope(bytes);
@@ -249,6 +347,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
     } else {
       $envelopeView.textContent = "";
       $envelopeView.hidden = true;
+    }
+
+    if (envelope?.kind === KIND_XPUB) {
+      await showPairCard(envelope);
+    } else {
+      hidePairCard();
     }
 
     const defaultView: ViewMode = looksLikeText(bytes) ? "text" : "hex";
@@ -395,6 +499,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $resultMeta.textContent = "";
     $missing.textContent = "";
     $reset.disabled = true;
+    hidePairCard();
     if (lastDownloadUrl) {
       URL.revokeObjectURL(lastDownloadUrl);
       lastDownloadUrl = null;
@@ -466,6 +571,9 @@ export function mountScannerPage(root: HTMLElement): () => void {
   for (const r of root.querySelectorAll<HTMLInputElement>('input[name="view"]')) {
     r.addEventListener("change", renderResultView);
   }
+  $pairSave.addEventListener("click", () => {
+    void onPairSave();
+  });
 
   return () => {
     releaseCamera();

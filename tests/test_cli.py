@@ -118,6 +118,95 @@ def test_sign_rejects_wrong_wallet_for_proposal(tmp_path: Path) -> None:
     assert "FINGERPRINT MISMATCH" in res.output
 
 
+def test_xpub_export_emits_decodable_envelope(tmp_path: Path) -> None:
+    runner = CliRunner()
+    vault_path = tmp_path / "vault.bin"
+
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "init"],
+        input=f"{PIN}\n{PIN}\n",
+    )
+    assert res.exit_code == 0, res.output
+
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "add", "--label", "demo"],
+        input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
+    )
+    assert res.exit_code == 0, res.output
+
+    res = runner.invoke(main, ["vault", "--vault-path", str(vault_path), "list"])
+    assert res.exit_code == 0
+    wallet_id = res.output.split()[0]
+
+    out_path = tmp_path / "xpub_export.bin"
+    res = runner.invoke(
+        main,
+        [
+            "xpub-export",
+            "--vault-path",
+            str(vault_path),
+            "--wallet-id",
+            wallet_id,
+            "-o",
+            str(out_path),
+        ],
+        input=f"{PIN}\n",
+    )
+    assert res.exit_code == 0, res.output
+    assert out_path.exists()
+
+    decoded = env.decode(out_path.read_bytes())
+    assert isinstance(decoded, env.XpubExport)
+    assert decoded.label == "demo"
+    assert decoded.path == "m/44'/236'/0'"
+    assert decoded.fingerprint.hex() == "cf987d8c"
+    assert decoded.xpub.startswith("xpub")
+
+
+def test_xpub_export_label_override(tmp_path: Path) -> None:
+    runner = CliRunner()
+    vault_path = tmp_path / "vault.bin"
+
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "init"],
+        input=f"{PIN}\n{PIN}\n",
+    )
+    assert res.exit_code == 0, res.output
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "add", "--label", "stored-label"],
+        input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
+    )
+    assert res.exit_code == 0, res.output
+    res = runner.invoke(main, ["vault", "--vault-path", str(vault_path), "list"])
+    wallet_id = res.output.split()[0]
+
+    out_path = tmp_path / "xpub_export.bin"
+    res = runner.invoke(
+        main,
+        [
+            "xpub-export",
+            "--vault-path",
+            str(vault_path),
+            "--wallet-id",
+            wallet_id,
+            "--label",
+            "wire-label",
+            "-o",
+            str(out_path),
+        ],
+        input=f"{PIN}\n",
+    )
+    assert res.exit_code == 0, res.output
+
+    decoded = env.decode(out_path.read_bytes())
+    assert isinstance(decoded, env.XpubExport)
+    assert decoded.label == "wire-label"
+
+
 def test_decode_unsigned_fixture() -> None:
     runner = CliRunner()
     res = runner.invoke(main, ["decode", str(PROPOSAL_PATH)])

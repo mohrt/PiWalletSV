@@ -17,18 +17,19 @@ import {
 type InputMode = "text" | "hex" | "base64" | "base64url";
 
 const SAMPLE =
-  "Hello PiWallet — this is a multipart QR demo payload. " +
+  "Hello PiWalletSV — this is a multipart QR demo payload. " +
   "Type or paste anything (text, hex, base64) and watch it animate as PW1 frames.";
 
 export function mountEncoderPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
       <header class="page-header">
-        <h1>Encode multipart QR<span class="brand"> · PiWallet companion</span></h1>
+        <h1>Encode multipart QR<span class="brand"> · PiWalletSV companion</span></h1>
         <nav>
           <a href="#/encode" class="active">Encode</a>
           <a href="#/scan">Scan</a>
           <a href="#/loop">Loop</a>
+          <a href="#/wallets">Wallets</a>
         </nav>
       </header>
 

@@ -1,7 +1,7 @@
 """BIP39 mnemonic generation, validation, and seed derivation.
 
 Thin wrapper around bsv-sdk's `hd` module. The wrapper exists so the rest of
-PiWallet imports a single, stable surface and so we can swap implementations
+PiWalletSV imports a single, stable surface and so we can swap implementations
 later without ripping changes through the codebase.
 
 Important security notes:
@@ -25,7 +25,7 @@ from bsv.hd import validate_mnemonic as _validate_mnemonic
 from bsv.hd.bip39 import WordList
 
 SUPPORTED_WORD_COUNTS: tuple[int, ...] = (12, 24)
-"""Mnemonic word counts the v1 PiWallet UI exposes."""
+"""Mnemonic word counts the v1 PiWalletSV UI exposes."""
 
 WORDS_TO_ENTROPY_BYTES: dict[int, int] = {12: 16, 24: 32}
 """Mapping from BIP39 word count to entropy size in bytes."""

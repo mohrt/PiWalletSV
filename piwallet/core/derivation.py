@@ -1,6 +1,6 @@
 """HD wallet derivation: BIP32 + BIP44, fixed at `m/44'/236'/0'` for BSV.
 
-PiWallet v1 design: each on-device wallet uses a SINGLE BIP44 account at
+PiWalletSV v1 design: each on-device wallet uses a SINGLE BIP44 account at
 `m/44'/236'/0'`. Multi-account-per-seed is deferred to v2 per the locked
 plan decisions. Coin type 236 is BSV's SLIP-44 assignment.
 

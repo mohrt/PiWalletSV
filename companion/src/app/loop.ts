@@ -164,11 +164,12 @@ export function mountLoopPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
       <header class="page-header">
-        <h1>Codec round-trip<span class="brand"> · PiWallet companion</span></h1>
+        <h1>Codec round-trip<span class="brand"> · PiWalletSV companion</span></h1>
         <nav>
           <a href="#/encode">Encode</a>
           <a href="#/scan">Scan</a>
           <a href="#/loop" class="active">Loop</a>
+          <a href="#/wallets">Wallets</a>
         </nav>
       </header>
 

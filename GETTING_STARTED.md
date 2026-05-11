@@ -179,6 +179,6 @@ This guide follows **stack A** (PIL + buttons + joystick on Lite). **Stack B** i
 
 Pipe the same ``PW1|…`` lines on a laptop with ``piwallet qr join -o proposal.bin``. Then verify/sign with ``piwallet decode …`` / ``piwallet sign …``.
 
-**PiWallet repo:** install with ``pip install -e ".[dev]"`` on Python 3.13 (see README).
+**PiWalletSV repo:** install with ``pip install -e ".[dev]"`` on Python 3.13 (see README).
 
 **More detail if something breaks:** [Adafruit 1.3" bonnet Python setup](https://learn.adafruit.com/adafruit-1-3-color-tft-bonnet-for-raspberry-pi/python-setup) · [CircuitPython on Raspberry Pi](https://learn.adafruit.com/circuitpython-on-raspberrypi-linux)
