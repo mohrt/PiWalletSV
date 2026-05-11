@@ -95,6 +95,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
           paired ${new Date(w.addedAt).toLocaleString()}
         </div>
         <div class="actions">
+          <a class="primary-link" href="#/wallets/${w.id}">Open</a>
           <button class="rename" data-id="${w.id}" type="button">Rename</button>
           <button class="copy" data-id="${w.id}" type="button">Copy xpub</button>
           <button class="remove" data-id="${w.id}" type="button">Remove</button>

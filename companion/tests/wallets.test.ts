@@ -11,7 +11,9 @@ import {
   getWallet,
   listWallets,
   removeWallet,
+  setNextReceiveIndex,
   updateLabel,
+  withDefaults,
 } from "../src/lib/wallets.js";
 
 const DEMO = {
@@ -92,5 +94,31 @@ describe("wallets store", () => {
 
   it("getWallet returns null for unknown id", async () => {
     expect(await getWallet("does-not-exist")).toBeNull();
+  });
+
+  it("freshly added wallet has no nextReceiveIndex; withDefaults fills it in as 0", async () => {
+    const rec = await addWallet(DEMO);
+    expect(rec.nextReceiveIndex).toBeUndefined();
+    expect(withDefaults(rec).nextReceiveIndex).toBe(0);
+  });
+
+  it("setNextReceiveIndex persists the value", async () => {
+    const rec = await addWallet(DEMO);
+    await setNextReceiveIndex(rec.id, 7);
+    const after = await getWallet(rec.id);
+    expect(after?.nextReceiveIndex).toBe(7);
+  });
+
+  it("setNextReceiveIndex rejects out-of-range values", async () => {
+    const rec = await addWallet(DEMO);
+    await expect(setNextReceiveIndex(rec.id, -1)).rejects.toBeInstanceOf(
+      WalletStoreError,
+    );
+    await expect(setNextReceiveIndex(rec.id, 0x80000000)).rejects.toBeInstanceOf(
+      WalletStoreError,
+    );
+    await expect(setNextReceiveIndex(rec.id, 1.5)).rejects.toBeInstanceOf(
+      WalletStoreError,
+    );
   });
 });

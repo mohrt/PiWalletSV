@@ -31,6 +31,20 @@ export interface WalletRecord {
   addedAt: string;
   /** Schema version of this record, for forward-compat migration. */
   schemaVersion: number;
+  /**
+   * Next-unused receive (m/0/i) index. Mutated when the user marks an
+   * address as "used" or when an outgoing proposal consumes one. Older
+   * records (v1) lack this field; readers default to 0.
+   */
+  nextReceiveIndex?: number;
+}
+
+/** Helper that fills in defaults for fields added after schema v1. */
+export function withDefaults(rec: WalletRecord): Required<WalletRecord> {
+  return {
+    ...rec,
+    nextReceiveIndex: rec.nextReceiveIndex ?? 0,
+  };
 }
 
 export class WalletStoreError extends Error {
@@ -197,6 +211,24 @@ export async function updateLabel(id: string, label: string): Promise<void> {
     );
     if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
     cur.label = label;
+    await txPromise(store.put(cur), "put");
+  });
+}
+
+export async function setNextReceiveIndex(
+  id: string,
+  index: number,
+): Promise<void> {
+  if (!Number.isInteger(index) || index < 0 || index >= 0x80000000) {
+    throw new WalletStoreError(`nextReceiveIndex out of range: ${index}`);
+  }
+  await withStore("readwrite", async (store) => {
+    const cur = await txPromise<WalletRecord | undefined>(
+      store.get(id) as IDBRequest<WalletRecord | undefined>,
+      "get",
+    );
+    if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
+    cur.nextReceiveIndex = index;
     await txPromise(store.put(cur), "put");
   });
 }

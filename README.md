@@ -31,6 +31,7 @@ npm run build        # tsc --noEmit + vite build to companion/dist
 - **`/#/encode`** — paste any text / hex / base64(url) and watch it animate as `PW1|…` QR frames the Pi camera path can already ingest.
 - **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream and shows it as text / hex / base64url, with `.bin` download. When the bytes are a real PiWalletSV envelope (`xpub_export`, `unsigned_proposal`, or `signed_tx`), the parsed structure is rendered inline. When an `xpub_export` is detected, a "Save as paired wallet" card appears that writes `{label, xpub, fingerprint, path, addedAt}` to IndexedDB.
 - **`/#/wallets`** — paired-wallet list backed by IndexedDB. Rename, copy xpub, or remove an entry. The Pi side is unaffected by removals.
+- **`/#/wallets/<id>`** — wallet detail with watch-only **receive** flow: derives `m/0/<index>` BIP32 children of the paired xpub, shows the current address as text + QR (P2PKH base58check, BSV mainnet prefix `0x00`), with **Next address / Previous** stepping that persists `nextReceiveIndex` on the wallet record. Pure derivation via `@scure/bip32` + `@noble/hashes`, cross-checked against `piwallet.core.derivation` byte-for-byte (see `tests/fixtures/addresses_canonical.json`).
 - **`/#/loop`** — runs an in-memory round-trip of every envelope kind (build → CBOR + gzip → PW1 split → reassemble → gunzip + CBOR decode) on page load and shows pass/fail. One-page sanity check that the wire stack agrees with itself.
 
 ### Pi-side pairing demo

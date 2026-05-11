@@ -1,0 +1,20 @@
+{
+  "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+  "path": "m/44'/236'/0'",
+  "fingerprint": "cf987d8c",
+  "xpub": "xpub6CdMDgU2hzWyeZ852LWqp5AfDz3ty2cRfi4jEw9BT8aNYugMQvVykQsKLARZdbqKKp7yTviJdL1N9saYLmJNKD1rwVAwLTmU8r8qKeoyG4R",
+  "addresses": {
+    "receive": [
+      { "index": 0, "address": "1K6LZdwpKT5XkEZo2T2kW197aMXYbYMc4f" },
+      { "index": 1, "address": "1DhquSu6ky8QQnf88b1d3tRYeUkMLASZg9" },
+      { "index": 2, "address": "155Vurs4bMMu5BemtZ6cVPhryGWef4VxZu" },
+      { "index": 3, "address": "1MgmeSFC4F5L8idUUW7fSL7QFfwbxJaW8B" },
+      { "index": 4, "address": "1D4eJS94heKPtAaU5jcfecMEk5i1vzEvAo" }
+    ],
+    "change": [
+      { "index": 0, "address": "125GFsvYsDtyzGkExfsX8DoHuXu2UsMUEZ" },
+      { "index": 1, "address": "1HB1TYZAQBu84TUfAVVkqnZDWX1JTizALU" },
+      { "index": 2, "address": "1FVCwj1goPiMWb5qCUrerT3FRkW7cfthL7" }
+    ]
+  }
+}
