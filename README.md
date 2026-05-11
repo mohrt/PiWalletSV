@@ -23,9 +23,21 @@ Vanilla TypeScript + Vite, in [`companion/`](companion/). The shared `PW1` multi
 ```bash
 cd companion
 npm install
-npm run dev          # http://localhost:5173 (encoder live; scan page is a stub)
+npm run dev          # https://localhost:5173/  +  https://<lan-ip>:5173/
 npm test             # vitest: round-trip vs tests/fixtures/proposal_01.cbor
 npm run build        # tsc --noEmit + vite build to companion/dist
 ```
 
-Use the encode page to paste any payload (text / hex / base64 / base64url) and watch it animate as `PW1|…` QR frames the Pi camera path can ingest.
+- **`/#/encode`** — paste any text / hex / base64(url) and watch it animate as `PW1|…` QR frames the Pi camera path can already ingest.
+- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream and shows it as text / hex / base64url, with `.bin` download.
+
+### iPhone / phone scanning
+
+`getUserMedia` is only exposed over a secure origin, so `npm run dev` serves HTTPS by default with a throwaway self-signed cert (via `@vitejs/plugin-basic-ssl`).
+
+1. Connect your phone to the same Wi-Fi.
+2. Open the **Network** URL Vite logs (e.g. `https://192.168.x.y:5173/`).
+3. iOS Safari → "This Connection Is Not Private" → **Show Details** → **visit this website** → **Visit Website**. After that the Scan tab can request the camera.
+4. To skip the warning entirely, generate a real-looking cert with [`mkcert`](https://github.com/FiloSottile/mkcert), install its root CA on the phone, and wire the cert files into `vite.config.ts` (`server.https = { key, cert }`).
+
+Set `PIWALLET_HTTP=1 npm run dev` to disable HTTPS for plain localhost work.
