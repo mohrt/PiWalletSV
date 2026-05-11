@@ -6,6 +6,8 @@
 
 Air-gapped **Bitcoin SV** wallet targeting **Raspberry Pi Zero 2 WH** + **Adafruit 1.3" TFT bonnet** (joystick + buttons) + **Pi Camera Module 3**. Signing is performed entirely offline; a companion PWA on your phone or laptop handles all on-chain work.
 
+The wire format, QR transport, derivation rules, and SPV requirements are documented as an open spec in [`docs/protocol/`](docs/protocol/README.md) so any project can build a compatible companion (or a compatible signer) against PiWalletSV. Canonical test vectors live in [`tests/fixtures/`](tests/fixtures/).
+
 ## Offline core (dev / air-gapped signer)
 
 Python 3.11+ (Python 3.14 is not yet supported by all transitive wheels; use 3.13 on macOS).
@@ -73,3 +75,15 @@ Then on the phone, open `https://<pi-or-laptop-lan-ip>:5173/#/scan`, hit **Start
 4. To skip the warning entirely, generate a real-looking cert with [`mkcert`](https://github.com/FiloSottile/mkcert), install its root CA on the phone, and wire the cert files into `vite.config.ts` (`server.https = { key, cert }`).
 
 Set `PIWALLET_HTTP=1 npm run dev` to disable HTTPS for plain localhost work.
+
+## Protocol spec & compatibility
+
+PiWalletSV is designed so that anyone can build a compatible companion or signer against it. The full wire-format spec is in [`docs/protocol/`](docs/protocol/README.md):
+
+- [`derivation.md`](docs/protocol/derivation.md) — BIP39/32/44 layout, P2PKH address encoding, wallet fingerprint.
+- [`envelopes.md`](docs/protocol/envelopes.md) — CBOR + gzip shapes for `xpub_export`, `unsigned_proposal`, `signed_tx`.
+- [`qr-transport.md`](docs/protocol/qr-transport.md) — the `PW1` multipart QR framing.
+- [`spv.md`](docs/protocol/spv.md) — what a v1 signer verifies before producing signatures (BEEF + Merkle path + header anchors + change re-derivation + value conservation).
+- [`conformance.md`](docs/protocol/conformance.md) — canonical test vectors in [`tests/fixtures/`](tests/fixtures/) you can diff your implementation against.
+
+The reference Python signer in `piwallet/` and the reference TypeScript companion in `companion/` both validate themselves against these fixtures on every test run, so they cannot silently drift from the spec.

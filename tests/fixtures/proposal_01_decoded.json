@@ -1,0 +1,294 @@
+{
+  "envelope_size_bytes": 511,
+  "cbor_size_bytes": 650,
+  "compression_ratio": 0.7862,
+  "body": {
+    "type": "map",
+    "length": 10,
+    "entries": [
+      {
+        "key": {
+          "type": "text",
+          "length": 1,
+          "value": "v"
+        },
+        "value": {
+          "type": "uint",
+          "value": 1
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 4,
+          "value": "kind"
+        },
+        "value": {
+          "type": "text",
+          "length": 2,
+          "value": "tx"
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 8,
+          "value": "walletFp"
+        },
+        "value": {
+          "type": "bytes",
+          "length": 4,
+          "value_hex": "cf987d8c"
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 6,
+          "value": "inputs"
+        },
+        "value": {
+          "type": "array",
+          "length": 1,
+          "items": [
+            {
+              "type": "map",
+              "length": 6,
+              "entries": [
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 4,
+                    "value": "txid"
+                  },
+                  "value": {
+                    "type": "text",
+                    "length": 64,
+                    "value": "ec7d233ebe54b0499e958a016cbe8254d1679925b81b7fbeaef1f27d80616fdc"
+                  }
+                },
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 4,
+                    "value": "vout"
+                  },
+                  "value": {
+                    "type": "uint",
+                    "value": 0
+                  }
+                },
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 4,
+                    "value": "sats"
+                  },
+                  "value": {
+                    "type": "uint",
+                    "value": 50000
+                  }
+                },
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 4,
+                    "value": "beef"
+                  },
+                  "value": {
+                    "type": "bytes",
+                    "length": 168,
+                    "head_hex": "0100beef01fe39650c0001020002dc6f61807df2f1aebe7f1bb8259967d15482",
+                    "tail_hex": "1976a914c674ac8e0534044717c9ee450d5d9f25e243645088ac000000000100"
+                  }
+                },
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 10,
+                    "value": "merklePath"
+                  },
+                  "value": {
+                    "type": "bytes",
+                    "length": 75,
+                    "value_hex": "fe39650c0001020002dc6f61807df2f1aebe7f1bb8259967d15482be6c018a959e49b054be3e237dec0100c05d1c00951a1b138c8ce19df377b913f665734cff30fc649b4b9d85fcff63b6"
+                  }
+                },
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 10,
+                    "value": "derivation"
+                  },
+                  "value": {
+                    "type": "array",
+                    "length": 2,
+                    "items": [
+                      {
+                        "type": "uint",
+                        "value": 0
+                      },
+                      {
+                        "type": "uint",
+                        "value": 0
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 7,
+          "value": "outputs"
+        },
+        "value": {
+          "type": "array",
+          "length": 2,
+          "items": [
+            {
+              "type": "map",
+              "length": 2,
+              "entries": [
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 6,
+                    "value": "script"
+                  },
+                  "value": {
+                    "type": "text",
+                    "length": 50,
+                    "value": "76a9142cba4d0d2a90f73637936c94f87ddd1063c4bc7888ac"
+                  }
+                },
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 4,
+                    "value": "sats"
+                  },
+                  "value": {
+                    "type": "uint",
+                    "value": 30000
+                  }
+                }
+              ]
+            },
+            {
+              "type": "map",
+              "length": 2,
+              "entries": [
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 6,
+                    "value": "script"
+                  },
+                  "value": {
+                    "type": "text",
+                    "length": 50,
+                    "value": "76a9140bc6866eeb46b524a5087f5158aa4312ba66e40a88ac"
+                  }
+                },
+                {
+                  "key": {
+                    "type": "text",
+                    "length": 4,
+                    "value": "sats"
+                  },
+                  "value": {
+                    "type": "uint",
+                    "value": 19500
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 11,
+          "value": "changeIndex"
+        },
+        "value": {
+          "type": "uint",
+          "value": 1
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 16,
+          "value": "changeDerivation"
+        },
+        "value": {
+          "type": "array",
+          "length": 2,
+          "items": [
+            {
+              "type": "uint",
+              "value": 1
+            },
+            {
+              "type": "uint",
+              "value": 0
+            }
+          ]
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 7,
+          "value": "feeRate"
+        },
+        "value": {
+          "type": "uint",
+          "value": 500
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 8,
+          "value": "locktime"
+        },
+        "value": {
+          "type": "uint",
+          "value": 0
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 13,
+          "value": "headerAnchors"
+        },
+        "value": {
+          "type": "map",
+          "length": 1,
+          "entries": [
+            {
+              "key": {
+                "type": "uint",
+                "value": 812345
+              },
+              "value": {
+                "type": "bytes",
+                "length": 32,
+                "value_hex": "82594796714b432cc288b09dc94ff9d434b5808d49ab327107150fe7c56071ea"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

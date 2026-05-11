@@ -1,0 +1,309 @@
+# Architecture
+
+This chapter is the engineering tour: what the two halves of
+PiWalletSV actually do, what they're allowed to know, and how the
+trust boundary between them is enforced.
+
+If you just want to use the device, skip to the
+[User manual](user-manual.md). If you want to build a compatible
+companion or signer, the [Protocol spec](protocol/README.md) is the
+normative source; this chapter explains the "why" behind it.
+
+## 1. Two hosts, one wallet
+
+PiWalletSV is a **two-host system**:
+
+```mermaid
+flowchart TB
+  subgraph air["Air-gapped signer (Pi)"]
+    direction TB
+    seed[("BIP39 seed<br/>encrypted vault")]
+    decrypt["unlock_vault<br/>(PIN → scrypt → KEK → DEK → xprv)"]
+    verify["verify_proposal()<br/>BEEF + Merkle + anchors<br/>+ derivation match<br/>+ change re-derive<br/>+ value conservation"]
+    sign["sign_transaction()"]
+    seed --> decrypt --> verify --> sign
+  end
+
+  subgraph online["Online companion (PWA)"]
+    direction TB
+    backend[("WhatsOnChain<br/>or alternative<br/>block explorer")]
+    scan["UTXO scan<br/>(gap-limit 20)"]
+    select["greedy coin selection"]
+    proof["proof fetcher<br/>(TSC + header)"]
+    build["build unsigned_proposal"]
+    bcast["broadcast"]
+    backend --> scan --> select --> proof --> build
+    bcast --> backend
+  end
+
+  build -- "PW1 multipart QR<br/>(animated)" --> verify
+  sign -- "PW1 multipart QR<br/>(animated)" --> bcast
+  seed -.->|"once, on pairing<br/>xpub_export"| backend
+```
+
+The horizontal arrows are the **only** channel between the two
+hosts. They carry:
+
+| Envelope kind        | Direction              | Volume                  |
+| -------------------- | ---------------------- | ----------------------- |
+| `xpub_export`        | Pi → companion         | ~0.2 KB, once per wallet|
+| `unsigned_proposal`  | companion → Pi         | ~1–10 KB, per send      |
+| `signed_tx`          | Pi → companion         | ~0.3–2 KB, per send     |
+
+That's it. No master keys ever cross the boundary; no companion-side
+state is replicated on the Pi; no Pi-side state is replicated on
+the companion. Each envelope is self-contained.
+
+## 2. Why this split
+
+A signing device needs three properties to be useful:
+
+1. **Confidentiality.** The private keys never leave the device.
+2. **Verifiability.** The user can see what they're signing before
+   it gets signed.
+3. **Availability.** The user can actually transact — discover
+   their UTXOs, build a transaction, get it onto the chain.
+
+A pure cold wallet has (1) and (2) but not (3); a pure hot wallet
+has (3) but is one drive-by exploit away from losing (1). The
+split-host design hands (3) to a fully-online piece (the companion)
+and lets the cold piece focus on (1) and (2).
+
+The catch is that the online piece is now **untrusted** — it might
+be compromised, it might be honest-but-broken, it might be talking
+to a tampered backend. So the cold piece can't just believe what
+the online piece tells it. It has to verify every claim against
+something the user has confirmed.
+
+That "something the user has confirmed" is, ultimately, the user
+reading a block height + Merkle-root prefix off the bonnet screen
+before signing. Every other check (BEEF parse, Merkle root
+recomputation, derivation match, change re-derivation, value
+conservation) chains off that visual confirmation. See
+[SPV requirements](protocol/spv.md) §1 for the exact rules and
+§7 for the threat model.
+
+## 3. The data flow, walked through
+
+A real send looks like this:
+
+1. **Pairing (once).**
+    - On the Pi: `piwallet xpub-export` reads the wallet's account
+      xpub at `m/44'/236'/0'`, wraps it in an `xpub_export`
+      envelope, gzips + CBORs it, frames it as `PW1` multipart QR
+      lines.
+    - In the companion: the `/#/scan` page assembles the PW1
+      frames, decodes the envelope, verifies the 4-byte
+      self-fingerprint matches a locally recomputed value, and
+      offers a "Save as paired wallet" card that writes
+      `{label, xpub, fingerprint, path, addedAt}` to IndexedDB.
+
+2. **Receive.**
+    - The companion derives `m/0/<nextReceiveIndex>` from the
+      account xpub, displays the base58 P2PKH address as text and
+      QR, and the user shares it. No Pi involvement.
+
+3. **Send.**
+    - User taps "Send" on the wallet detail page, enters a
+      recipient address and amount.
+    - Companion runs a gap-limit UTXO scan (cached in IndexedDB,
+      with a "Refresh" button to re-scan).
+    - Greedy coin selection picks UTXOs and computes the fee
+      under a P2PKH byte model.
+    - For each selected UTXO, the proof fetcher calls
+      `/tx/<txid>/proof/tsc` and `/block/<hash>/header` on the
+      backend, translates the TSC proof into a
+      `MerklePath` (`@bsv/sdk` format), and assembles a BEEF blob
+      from the prior transaction + path.
+    - The proposal builder packages `{walletFp, inputs, outputs,
+      changeIndex, changeDerivation, feeRate, locktime,
+      headerAnchors}` into an `unsigned_proposal` envelope,
+      gzips + CBORs it, frames it as PW1, and animates it on a
+      canvas.
+
+4. **Verify and sign (Pi).**
+    - User points the Pi's camera at the animated QR canvas.
+    - `piwallet qr scan-camera` collects frames until the PW1
+      assembler completes.
+    - `verify_proposal()` runs all eight rules from
+      [SPV requirements](protocol/spv.md) §1.
+    - If anything fails, the bonnet shows a one-line reason and
+      the signing path exits. No partial state is kept.
+    - If everything passes, the bonnet shows the recipient
+      address, amount, fee, and the `(height, merkle-root-prefix)`
+      anchors. The user holds A to confirm.
+    - `sign_transaction()` derives the per-input signing keys from
+      the (still-unlocked) account xprv, signs each input, builds
+      the raw tx, computes the txid, and returns a `signed_tx`
+      envelope.
+
+5. **Broadcast.**
+    - Companion's `/#/scan` page assembles the `signed_tx`,
+      verifies the `walletFp` matches the proposal it sent,
+      displays the txid + amount, and offers a "Broadcast" button.
+    - On click, the companion `POST`s the raw hex to the chosen
+      block-explorer's broadcast endpoint, surfaces the returned
+      txid, and warns if it differs from the one the Pi signed
+      (a hint at tx malleability).
+
+The user never sees a master key, never enters a password into a
+networked machine, and never authorises a payment without seeing the
+exact destination on a device that only displays what it has
+cryptographically verified.
+
+## 4. Trust boundary
+
+A useful way to summarise:
+
+| Asset                          | Pi          | Companion   |
+| ------------------------------ | ----------- | ----------- |
+| BIP39 mnemonic (cleartext)     | RAM only, signing-path-scoped | never |
+| Master xprv (cleartext)        | RAM only, signing-path-scoped | never |
+| Vault file (encrypted xprvs)   | disk (`~/.piwallet/vault.bin`) | never |
+| PIN                            | RAM only, prompt-scoped | never |
+| Account xpub                   | disk (Pi) + IndexedDB (companion) | yes |
+| Receive / change addresses     | derived on demand | derived on demand |
+| UTXO snapshot                  | derived per proposal | cached in IndexedDB |
+| Block headers / Merkle proofs  | per-proposal, in envelope | fetched from backend |
+| Signed transactions            | yes (after sign) | yes (received via QR) |
+
+The companion holds **public data only**. Its IndexedDB can be
+wiped without losing funds. The Pi's vault is the single source of
+private material; the BIP39 mnemonic on paper (or steel) outside the
+device is the recovery channel.
+
+## 5. Module layout
+
+```
+.
+├── piwallet/                     # offline core (Python, runs on Pi)
+│   ├── core/
+│   │   ├── mnemonic.py           # BIP39 generate / validate / to_seed
+│   │   ├── derivation.py         # BIP32 + BIP44 + P2PKH addresses
+│   │   ├── envelope.py           # CBOR + gzip codec (3 message kinds)
+│   │   ├── vault.py              # scrypt → KEK → DEK → AES-GCM xprv
+│   │   ├── verify.py             # BEEF + Merkle + anchor + derivation
+│   │   └── sign.py               # change re-derive + sign + raw tx
+│   ├── qr/multipart.py           # PW1 framing + assembler
+│   ├── ui/                       # bonnet display + joystick (phase 2)
+│   └── cli.py                    # piwallet entry point
+│
+├── companion/                    # online half (TypeScript + Vite + PWA)
+│   └── src/
+│       ├── lib/
+│       │   ├── envelope.ts       # CBOR + gzip codec (mirrors Python)
+│       │   ├── pw1.ts            # PW1 framing
+│       │   ├── derive.ts         # BIP32 + P2PKH (scure + noble)
+│       │   ├── woc.ts            # block-explorer client (injectable fetch)
+│       │   ├── utxo.ts           # gap-limit scanner
+│       │   ├── coin-select.ts    # greedy P2PKH coin selection + dust
+│       │   ├── proof-fetcher.ts  # TSC → MerklePath + BEEF assembly
+│       │   ├── proposal.ts       # build_unsigned_proposal
+│       │   ├── wallets.ts        # IndexedDB store
+│       │   └── terms.ts          # disclaimer acceptance state
+│       └── app/                  # UI pages: scan / wallets / detail / loop
+│
+├── tests/                        # Python tests + canonical fixtures
+│   └── fixtures/
+│       ├── addresses_canonical.json
+│       ├── proposal_01.cbor
+│       ├── proposal_01.json
+│       └── proposal_01_decoded.json
+│
+├── scripts/
+│   ├── camera_qr_test.py
+│   ├── dump_decoded_envelope.py
+│   ├── rgb_display_pillow_bonnet_buttons.py
+│   └── st7789_solid_fill_test.py
+│
+└── docs/
+    ├── index.md getting-started.md architecture.md
+    ├── user-manual.md develop.md security.md disclaimer.md
+    └── protocol/                 # interop spec (v1)
+```
+
+The Python and TypeScript halves share **only** the bytes of the
+canonical fixtures in `tests/fixtures/`. They have no shared code,
+no IDL, no schema registry. Both halves have their own tests; the
+TypeScript test suite additionally decodes the Python-produced
+`proposal_01.cbor` to catch wire-format drift.
+
+## 6. Dependency choices
+
+- **Python core**:
+    - [`bsv-sdk`](https://github.com/bsv-blockchain/python-sdk) — BSV
+      primitives: `Transaction`, `MerklePath`, BEEF, `P2PKH`.
+      Provides `bsv.hd.Xprv` for BIP32 and `bsv.hash160` for the
+      fingerprint primitive.
+    - [`cbor2`](https://github.com/agronholm/cbor2) — RFC 8949 encode/decode.
+    - [`cryptography`](https://github.com/pyca/cryptography) — AES-GCM and
+      scrypt for the vault.
+    - [`click`](https://click.palletsprojects.com/) — CLI framework.
+
+- **Companion**:
+    - [`@bsv/sdk`](https://www.npmjs.com/package/@bsv/sdk) — BSV
+      primitives in TypeScript, parallel to the Python `bsv-sdk`.
+      Chunked separately in the Vite bundle for caching.
+    - [`@scure/bip32`](https://www.npmjs.com/package/@scure/bip32) +
+      [`@noble/hashes`](https://www.npmjs.com/package/@noble/hashes) +
+      [`@scure/base`](https://www.npmjs.com/package/@scure/base) —
+      audited primitives for BIP32 derivation, SHA-256, RIPEMD-160,
+      and Base58Check.
+    - [`cbor-x`](https://www.npmjs.com/package/cbor-x) — CBOR codec
+      configured to mirror the Python output (Map-based, no tags).
+    - [`qrcode-generator`](https://www.npmjs.com/package/qrcode-generator) +
+      [`jsqr`](https://www.npmjs.com/package/jsqr) — animated QR render
+      + camera-side decode.
+    - Browser-native [`CompressionStream`](https://developer.mozilla.org/en-US/docs/Web/API/CompressionStream)
+      for gzip. No third-party gzip library in the bundle.
+
+Everything is permissively licensed (MIT / Apache-2.0).
+
+## 7. First-load disclaimer
+
+The companion blocks every page render until the user has
+acknowledged the current `DISCLAIMER.md`. The state machine lives in
+[`companion/src/lib/terms.ts`](https://github.com/example/piwallet/blob/main/companion/src/lib/terms.ts);
+the blocking modal lives in
+[`companion/src/app/terms-modal.ts`](https://github.com/example/piwallet/blob/main/companion/src/app/terms-modal.ts).
+`localStorage` persists the version + timestamp; bumping
+`CURRENT_TERMS_VERSION` re-prompts every user on next load.
+
+A first-boot disclaimer on the Pi side (3-page bonnet flow with
+hold-A confirmation, persisted to vault metadata) is part of Phase 2
+and not yet shipped.
+
+## 8. Versioning and stability
+
+- **Protocol version**: tracked in the envelope's `v` field and the
+  QR magic. v1 is the current line. v2 would land in
+  `docs/protocol/v2/` and run alongside v1 during a deprecation
+  window. See [Protocol overview](protocol/README.md) §"Stability
+  promise."
+- **Software version**: tracked in `pyproject.toml`'s `project.version`
+  and `companion/package.json`'s `version`. The two are kept in
+  lock-step for releases.
+- **Disclaimer version**: tracked in `DISCLAIMER.md`'s
+  `termsVersion: 1` line and `companion/src/lib/terms.ts`'s
+  `CURRENT_TERMS_VERSION` constant. Bumping requires every user to
+  re-acknowledge.
+
+## 9. What this architecture does not solve
+
+- **A user who confirms a transaction without reading the bonnet
+  screen.** The Pi displays the recipient, amount, fee, and anchor
+  prefixes for exactly this reason — they're only useful if the
+  human looks.
+- **A user who entered a wrong address on the companion in the
+  first place** (e.g., the companion got phished into displaying a
+  swap-replaced address during a copy-paste). The signer can only
+  verify that the bytes it sees on its screen are what's about to
+  be signed; it has no way to know what address the user *meant*.
+- **A user whose seed phrase is exposed elsewhere** (photographed,
+  uploaded to cloud notes, etc.). The signer's job ends at the
+  vault boundary; everything outside it is the operator's
+  responsibility.
+
+These are user-procedural risks, not protocol risks. The
+[User manual](user-manual.md) and [Security](security.md) chapters
+spell out the procedural mitigations.

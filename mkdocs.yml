@@ -1,0 +1,108 @@
+site_name: PiWalletSV
+site_description: >
+  Air-gapped Bitcoin SV signing device for Raspberry Pi Zero 2 WH +
+  1.3" TFT bonnet + Pi Camera Module 3, with a companion PWA for the
+  online half.
+site_url: https://example.invalid/  # set to the GitHub Pages URL once published
+repo_name: piwallet
+repo_url: https://github.com/example/piwallet  # update to the real repo URL
+edit_uri: edit/main/docs/
+copyright: >
+  Copyright &copy; PiWalletSV contributors. Licensed under MIT.
+  Alpha software — see Disclaimer.
+
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/example/piwallet
+      name: PiWalletSV on GitHub
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Architecture: architecture.md
+  - User manual: user-manual.md
+  - Develop: develop.md
+  - Security: security.md
+  - Disclaimer: disclaimer.md
+  - Protocol spec:
+      - Overview: protocol/README.md
+      - Derivation: protocol/derivation.md
+      - Envelopes: protocol/envelopes.md
+      - QR transport: protocol/qr-transport.md
+      - SPV requirements: protocol/spv.md
+      - Conformance: protocol/conformance.md
+  - Hardware tests:
+      - Checkpoint 1 (bonnet boot path): hardware/checkpoint-1.md

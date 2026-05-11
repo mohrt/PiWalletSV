@@ -47,3 +47,7 @@ scratch/
 
 companion/node_modules/
 companion/dist/
+node_modules/
+
+site/
+_site/
