@@ -33,6 +33,7 @@ from piwallet.core.vault import (
     VaultWipedError,
     WrongPinError,
 )
+from piwallet.qr.multipart import MultipartAssembler, MultipartQrError
 
 
 @click.group(help="PiWallet offline signing CLI.")
@@ -169,6 +170,130 @@ def decode_cmd(blob_path: Path) -> None:
         click.echo(_summarize_xpub_export(decoded))
     elif isinstance(decoded, env.SignedTx):
         click.echo(_summarize_signed(decoded))
+
+
+# ---- multipart QR (camera / animated codes) ----------------------------
+
+
+@main.group(help="Multipart QR ingest (animated codes from the companion PWA).")
+def qr() -> None:
+    pass
+
+
+@qr.command("join", help="Assemble PW1 lines from stdin into one binary blob.")
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write raw bytes here; default: stdout.",
+)
+def qr_join(output: Path | None) -> None:
+    """Read text lines; only lines starting with ``PW1|`` are consumed."""
+
+    asm = MultipartAssembler()
+    stdin = click.get_text_stream("stdin")
+    for line in stdin:
+        s = line.strip()
+        if not s.startswith("PW1|"):
+            continue
+        try:
+            done = asm.feed(s)
+        except MultipartQrError as exc:
+            click.echo(f"QR ASSEMBLY ERROR: {exc}", err=True)
+            sys.exit(1)
+        if done is not None:
+            if output is not None:
+                output.write_bytes(done)
+                click.echo(f"wrote {len(done)} bytes to {output}", err=True)
+            else:
+                sys.stdout.buffer.write(done)
+            sys.exit(0)
+
+    click.echo("incomplete: never received a full PW1 set", err=True)
+    sys.exit(1)
+
+
+@qr.command("scan-camera", help="Capture QR frames until a full PW1 payload is assembled (Pi).")
+@click.option("--size", default="1280x960", show_default=True, help="Capture resolution WxH.")
+@click.option(
+    "--interval",
+    type=float,
+    default=0.35,
+    show_default=True,
+    help="Sleep between frames (seconds).",
+)
+@click.option(
+    "--af",
+    "autofocus",
+    type=click.Choice(["continuous", "auto", "manual"]),
+    default="continuous",
+    show_default=True,
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write assembled raw bytes (same as `envelope.encode` output).",
+)
+@click.option(
+    "--show/--no-show",
+    default=True,
+    help="Print decoded envelope summary to stderr when done.",
+)
+def qr_scan_camera(
+    size: str,
+    interval: float,
+    autofocus: str,
+    output: Path | None,
+    show: bool,
+) -> None:
+    """Requires Pi camera stack (picamera2) and pyzbar."""
+
+    def on_progress(_have: int, msg: str) -> None:
+        click.echo(f"[scan] {msg}", err=True)
+
+    from piwallet.qr.camera_scan import scan_multipart_from_camera
+
+    try:
+        blob = scan_multipart_from_camera(
+            size=size,
+            interval_s=interval,
+            autofocus=autofocus,
+            on_progress=on_progress,
+        )
+    except MultipartQrError as exc:
+        click.echo(f"QR ASSEMBLY ERROR: {exc}", err=True)
+        sys.exit(1)
+    except RuntimeError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        click.echo("aborted", err=True)
+        sys.exit(130)
+
+    if output is not None:
+        output.write_bytes(blob)
+        click.echo(f"wrote {len(blob)} bytes to {output}", err=True)
+
+    if show:
+        try:
+            decoded = env.decode(blob)
+            if isinstance(decoded, env.UnsignedProposal):
+                click.echo(_summarize_proposal(decoded), err=True)
+            elif isinstance(decoded, env.XpubExport):
+                click.echo(_summarize_xpub_export(decoded), err=True)
+            elif isinstance(decoded, env.SignedTx):
+                click.echo(_summarize_signed(decoded), err=True)
+            else:
+                click.echo(f"unknown envelope type: {type(decoded)}", err=True)
+        except env.EnvelopeError as exc:
+            click.echo(f"DECODE FAILED: {exc}", err=True)
+            if output is None:
+                sys.stdout.buffer.write(blob)
+            sys.exit(1)
+
+    if output is None and not show:
+        sys.stdout.buffer.write(blob)
 
 
 # ---- sign command ------------------------------------------------------

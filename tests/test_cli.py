@@ -13,9 +13,11 @@ from click.testing import CliRunner
 
 from piwallet.cli import main
 from piwallet.core import envelope as env
+from piwallet.qr.multipart import split_envelope_to_lines
 from tests.fixtures.generate_fixtures import (
     CANONICAL_MNEMONIC,
     PROPOSAL_PATH,
+    build_proposal_01,
 )
 
 PIN = "654321"
@@ -145,3 +147,32 @@ def test_mnemonic_validate_bad() -> None:
     res = runner.invoke(main, ["mnemonic", "validate"], input="not a real mnemonic")
     assert res.exit_code == 1
     assert "INVALID" in res.output
+
+
+def test_qr_join_roundtrip(tmp_path: Path) -> None:
+    runner = CliRunner()
+
+    blob, _meta = build_proposal_01()
+    lines = split_envelope_to_lines(blob, max_encoded_chunk_chars=120)
+    stdin = "\n".join(lines[::-1]) + "\nnoise line\n" + "\n"
+
+    out_path = tmp_path / "joined.bin"
+    res = runner.invoke(main, ["qr", "join", "-o", str(out_path)], input=stdin)
+
+    assert res.exit_code == 0, res.output
+    assert out_path.read_bytes() == blob
+    stdin = "\n".join(lines[::-1]) + "\nnoise line\n" + "\n"
+
+    out_path = tmp_path / "joined.bin"
+    res = runner.invoke(main, ["qr", "join", "-o", str(out_path)], input=stdin)
+
+    assert res.exit_code == 0, res.output
+    assert out_path.read_bytes() == blob
+
+
+def test_qr_join_incomplete() -> None:
+    runner = CliRunner()
+    stdin = "PW1|3|0|aaa\n"
+    res = runner.invoke(main, ["qr", "join"], input=stdin)
+    assert res.exit_code == 1
+    assert "incomplete" in res.output

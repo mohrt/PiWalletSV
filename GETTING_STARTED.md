@@ -171,6 +171,14 @@ This guide follows **stack A** (PIL + buttons + joystick on Lite). **Stack B** i
 
 ## Done
 
-**Bonnet:** working. **Next when you choose:** copy `PiWallet` (or your signer tree) to the Pi for air-gapped wallet work, add `bsv-sdk`, camera/QR, etc. Optional: CSI camera + `libcamera` / `rpicam-hello` when the hardware is installed.
+**Bonnet:** working.
+
+**Camera (CSI):** confirm with `rpicam-hello` once the cable seats correctly. After `pip install pyzbar` + `sudo apt install libzbar0t64`, multipart animated codes from the phone can be assembled on-device with::
+
+    piwallet qr scan-camera -o /tmp/proposal.bin
+
+Pipe the same ``PW1|…`` lines on a laptop with ``piwallet qr join -o proposal.bin``. Then verify/sign with ``piwallet decode …`` / ``piwallet sign …``.
+
+**PiWallet repo:** install with ``pip install -e ".[dev]"`` on Python 3.13 (see README).
 
 **More detail if something breaks:** [Adafruit 1.3" bonnet Python setup](https://learn.adafruit.com/adafruit-1-3-color-tft-bonnet-for-raspberry-pi/python-setup) · [CircuitPython on Raspberry Pi](https://learn.adafruit.com/circuitpython-on-raspberrypi-linux)

@@ -9,9 +9,9 @@ can route them to the right handler before decoding the rest:
 - `signed_tx`          Pi -> phone, after successful sign. Contains the raw
                        signed tx hex and txid.
 
-On-the-wire encoding is **CBOR + gzip**. The plan calls for ~300-byte chunks
-and base45 encoding for QR; that framing layer lives in `piwallet.qr.out`
-(Phase 3) and is intentionally separate from this codec.
+On-the-wire encoding is **CBOR + gzip**. Larger blobs are split into
+``PW1|`` multipart barcode lines in :mod:`piwallet.qr`; that layer is
+intentionally separate from this codec.
 
 Schema versioning: every payload carries `v: 1`. Bump on breaking changes;
 the receiver MUST refuse unknown versions.
