@@ -274,6 +274,60 @@ button:hover:not(:disabled) {
   font-weight: 500;
 }
 
+.envelope-summary {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0 0 0.75rem 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.loop-results {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.loop-results th,
+.loop-results td {
+  padding: 0.5rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.loop-results th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.loop-results td.verdict.pass {
+  color: #58c47a;
+  font-weight: 600;
+}
+
+.loop-results td.verdict.fail {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.loop-results code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
 @media (max-width: 600px) {
   .qr-card canvas {
     width: 100%;

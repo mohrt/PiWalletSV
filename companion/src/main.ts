@@ -1,5 +1,6 @@
 import "./app/styles.css";
 import { mountEncoderPage } from "./app/encoder.js";
+import { mountLoopPage } from "./app/loop.js";
 import { mountScannerPage } from "./app/scanner.js";
 
 const app = document.getElementById("app");
@@ -31,6 +32,8 @@ function render(): void {
     mounted = mountEncoderPage(app);
   } else if (route === "#/scan") {
     mounted = mountScannerPage(app);
+  } else if (route === "#/loop") {
+    mounted = mountLoopPage(app);
   } else {
     app.innerHTML = `
       <main class="page">

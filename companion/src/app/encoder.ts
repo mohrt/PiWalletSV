@@ -28,6 +28,7 @@ export function mountEncoderPage(root: HTMLElement): () => void {
         <nav>
           <a href="#/encode" class="active">Encode</a>
           <a href="#/scan">Scan</a>
+          <a href="#/loop">Loop</a>
         </nav>
       </header>
 

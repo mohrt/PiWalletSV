@@ -11,6 +11,13 @@
  */
 import jsQR from "jsqr";
 
+import {
+  type Envelope,
+  KIND_PROPOSAL,
+  KIND_XPUB,
+  bytesToHex,
+  decodeEnvelope,
+} from "../lib/envelope.js";
 import { MultipartAssembler, MultipartQrError } from "../pw1.js";
 
 const SCAN_INTERVAL_MS = 80; // ~12.5 fps; plenty for animated QR
@@ -26,6 +33,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
         <nav>
           <a href="#/encode">Encode</a>
           <a href="#/scan" class="active">Scan</a>
+          <a href="#/loop">Loop</a>
         </nav>
       </header>
 
@@ -43,9 +51,10 @@ export function mountScannerPage(root: HTMLElement): () => void {
       </section>
 
       <section id="resultCard" class="card" hidden>
+        <pre id="envelopeView" class="envelope-summary" hidden></pre>
         <div class="row" style="margin-bottom: 0.6rem;">
           <fieldset>
-            <legend>View as</legend>
+            <legend>View raw bytes as</legend>
             <label><input type="radio" name="view" value="text" /> text</label>
             <label><input type="radio" name="view" value="hex" /> hex</label>
             <label><input type="radio" name="view" value="base64url" /> base64url</label>
@@ -70,6 +79,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
   const $stop = root.querySelector<HTMLButtonElement>("#stop")!;
   const $reset = root.querySelector<HTMLButtonElement>("#reset")!;
   const $resultCard = root.querySelector<HTMLElement>("#resultCard")!;
+  const $envelopeView = root.querySelector<HTMLElement>("#envelopeView")!;
   const $resultBody = root.querySelector<HTMLTextAreaElement>("#resultBody")!;
   const $resultMeta = root.querySelector<HTMLElement>("#resultMeta")!;
   const $download = root.querySelector<HTMLButtonElement>("#download")!;
@@ -89,6 +99,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
   let lastScanAt = 0;
   let asm = new MultipartAssembler();
   let result: Uint8Array | null = null;
+  let envelope: Envelope | null = null;
   let lastDownloadUrl: string | null = null;
 
   $stop.disabled = true;
@@ -137,12 +148,6 @@ export function mountScannerPage(root: HTMLElement): () => void {
     return true;
   }
 
-  function bytesToHex(bytes: Uint8Array): string {
-    let hex = "";
-    for (const b of bytes) hex += b.toString(16).padStart(2, "0");
-    return hex;
-  }
-
   function bytesToBase64Url(bytes: Uint8Array): string {
     let s = "";
     const block = 0x8000;
@@ -182,8 +187,70 @@ export function mountScannerPage(root: HTMLElement): () => void {
       (truncated ? " · display truncated" : "");
   }
 
-  function showResult(bytes: Uint8Array): void {
+  function formatEnvelope(env: Envelope): string {
+    const fp = env.kind === KIND_XPUB ? env.fingerprint : env.walletFp;
+    const lines: string[] = [
+      `${env.kind === KIND_XPUB ? "xpub_export" : env.kind === KIND_PROPOSAL ? "unsigned_proposal" : "signed_tx"} v1`,
+      `walletFp:    ${bytesToHex(fp)}`,
+    ];
+    if (env.kind === KIND_XPUB) {
+      lines.push(
+        `xpub:        ${env.xpub}`,
+        `path:        ${env.path}`,
+        `label:       ${env.label}`,
+      );
+    } else if (env.kind === KIND_PROPOSAL) {
+      lines.push(`feeRate:     ${env.feeRate} sats/kB`);
+      lines.push(`locktime:    ${env.locktime}`);
+      lines.push(
+        `changeIndex: ${env.changeIndex} (derivation [${env.changeDerivation.join(", ")}])`,
+      );
+      env.inputs.forEach((i, idx) => {
+        lines.push(
+          `inputs[${idx}]:`,
+          `  txid:       ${i.txid}`,
+          `  vout:       ${i.vout}`,
+          `  sats:       ${i.sats}`,
+          `  derivation: [${i.derivation.join(", ")}]`,
+          `  beef:       ${i.beef.byteLength} bytes`,
+          `  merklePath: ${i.merklePath.byteLength} bytes`,
+        );
+      });
+      env.outputs.forEach((o, idx) => {
+        lines.push(`outputs[${idx}]: ${o.sats} sats → ${o.scriptHex}`);
+      });
+      if (env.headerAnchors.size > 0) {
+        for (const [h, r] of env.headerAnchors) {
+          lines.push(`headerAnchor[${h}]: ${bytesToHex(r)}`);
+        }
+      }
+    } else {
+      lines.push(`txid:        ${env.txid}`);
+      lines.push(`rawHex:      ${env.rawHex.length / 2} bytes`);
+    }
+    return lines.join("\n");
+  }
+
+  async function tryDecodeEnvelope(bytes: Uint8Array): Promise<void> {
+    try {
+      envelope = await decodeEnvelope(bytes);
+    } catch {
+      envelope = null;
+    }
+  }
+
+  async function showResult(bytes: Uint8Array): Promise<void> {
     result = bytes;
+    await tryDecodeEnvelope(bytes);
+
+    if (envelope) {
+      $envelopeView.textContent = formatEnvelope(envelope);
+      $envelopeView.hidden = false;
+    } else {
+      $envelopeView.textContent = "";
+      $envelopeView.hidden = true;
+    }
+
     const defaultView: ViewMode = looksLikeText(bytes) ? "text" : "hex";
     for (const r of root.querySelectorAll<HTMLInputElement>(
       'input[name="view"]',
@@ -193,7 +260,10 @@ export function mountScannerPage(root: HTMLElement): () => void {
     renderResultView();
     $resultCard.hidden = false;
     $reset.disabled = false;
-    setStatus(`complete — reassembled ${bytes.length} bytes`);
+    const tag = envelope
+      ? `complete — ${envelope.kind === KIND_XPUB ? "xpub_export" : envelope.kind === KIND_PROPOSAL ? "unsigned_proposal" : "signed_tx"} (${bytes.length} bytes)`
+      : `complete — reassembled ${bytes.length} bytes`;
+    setStatus(tag);
     $missing.textContent = "";
   }
 
@@ -214,7 +284,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
     }
     if (out !== null) {
       stopScanning();
-      showResult(out);
+      void showResult(out);
     } else {
       refreshProgress();
     }
@@ -317,7 +387,10 @@ export function mountScannerPage(root: HTMLElement): () => void {
   function resetAll(): void {
     asm = new MultipartAssembler();
     result = null;
+    envelope = null;
     $resultCard.hidden = true;
+    $envelopeView.hidden = true;
+    $envelopeView.textContent = "";
     $resultBody.value = "";
     $resultMeta.textContent = "";
     $missing.textContent = "";

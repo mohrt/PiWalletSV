@@ -29,7 +29,8 @@ npm run build        # tsc --noEmit + vite build to companion/dist
 ```
 
 - **`/#/encode`** — paste any text / hex / base64(url) and watch it animate as `PW1|…` QR frames the Pi camera path can already ingest.
-- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream and shows it as text / hex / base64url, with `.bin` download.
+- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream and shows it as text / hex / base64url, with `.bin` download. When the bytes are a real PiWallet envelope (`xpub_export`, `unsigned_proposal`, or `signed_tx`), the parsed structure is rendered inline.
+- **`/#/loop`** — runs an in-memory round-trip of every envelope kind (build → CBOR + gzip → PW1 split → reassemble → gunzip + CBOR decode) on page load and shows pass/fail. One-page sanity check that the wire stack agrees with itself.
 
 ### iPhone / phone scanning
 
