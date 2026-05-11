@@ -1,0 +1,21 @@
+{
+  "name": "@piwallet/companion",
+  "version": "0.1.0-a0",
+  "private": true,
+  "description": "Shared PW1 multipart QR framing for PiWallet PWA (matches piwallet.qr.multipart)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.0",
+    "vitest": "~3.2.0"
+  }
+}

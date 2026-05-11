@@ -44,3 +44,6 @@ enclosure/
 
 local_*.cbor
 scratch/
+
+companion/node_modules/
+companion/dist/
