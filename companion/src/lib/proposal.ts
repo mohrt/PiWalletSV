@@ -9,6 +9,13 @@
  *
  * The fetch and BEEF construction happen in
  * `lib/proof-fetcher.fetchInputProof` upstream.
+ *
+ * v1 protocol mandates an explicit change output — the signer's verifier
+ * (`piwallet/core/verify.py`) unconditionally re-derives the script at
+ * `outputs[changeIndex]` from `changeDerivation` and rejects mismatches.
+ * Callers that cannot leave above-dust change should fail earlier
+ * (coin selection raises `CoinSelectError`), not by emitting an envelope
+ * the Pi will refuse.
  */
 import { P2PKH } from "@bsv/sdk";
 
@@ -43,11 +50,12 @@ export interface BuildProposalArgs {
   /** Recipient address (P2PKH) and amount. */
   recipientAddress: string;
   recipientSats: number;
-  /** Change address (already derived from `<xpub>/<change>/<index>`). */
-  changeAddress?: string;
-  changeSats?: number;
+  /** Change address (already derived from `<xpub>/<change>/<index>`). Required in v1. */
+  changeAddress: string;
+  /** Change amount in sats; must be ≥ the dust threshold. */
+  changeSats: number;
   /** BIP32 sub-derivation of the change output, e.g. `[1, 5]`. */
-  changeDerivation?: [number, number];
+  changeDerivation: [number, number];
   /** sats per 1000 bytes; persisted on the envelope. */
   feeRateSatskb: number;
   locktime?: number;
@@ -71,9 +79,8 @@ function p2pkhLockHex(address: string): string {
 /**
  * Build an UnsignedProposal envelope from selected UTXOs + their proofs.
  *
- * The output order is `[recipient, change]` (when change exists),
- * matching the canonical Python fixture; `changeIndex` is therefore
- * always `outputs.length - 1` in v1.
+ * The output order is fixed at `[recipient, change]`; `changeIndex` is
+ * therefore always `1` (= `outputs.length - 1`) in v1.
  */
 export function buildUnsignedProposal(args: BuildProposalArgs): UnsignedProposalT {
   if (!/^[0-9a-fA-F]{8}$/.test(args.walletFingerprintHex)) {
@@ -87,12 +94,27 @@ export function buildUnsignedProposal(args: BuildProposalArgs): UnsignedProposal
   if (!Number.isInteger(args.recipientSats) || args.recipientSats <= 0) {
     throw new ProposalBuilderError("recipientSats must be a positive integer");
   }
-  const hasChange =
-    args.changeAddress !== undefined &&
-    args.changeSats !== undefined &&
-    args.changeDerivation !== undefined;
-  if (hasChange && (args.changeSats! < 0 || !Number.isInteger(args.changeSats!))) {
-    throw new ProposalBuilderError("changeSats must be a non-negative integer");
+  if (!Number.isInteger(args.changeSats) || args.changeSats <= 0) {
+    throw new ProposalBuilderError(
+      "changeSats must be a positive integer; v1 proposals MUST carry an explicit change output",
+    );
+  }
+  if (
+    !Array.isArray(args.changeDerivation) ||
+    args.changeDerivation.length !== 2 ||
+    !Number.isInteger(args.changeDerivation[0]) ||
+    !Number.isInteger(args.changeDerivation[1]) ||
+    args.changeDerivation[0] < 0 ||
+    args.changeDerivation[1] < 0
+  ) {
+    throw new ProposalBuilderError(
+      `changeDerivation must be a [branch, index] pair of non-negative integers, got ${JSON.stringify(
+        args.changeDerivation,
+      )}`,
+    );
+  }
+  if (typeof args.changeAddress !== "string" || args.changeAddress.length === 0) {
+    throw new ProposalBuilderError("changeAddress is required");
   }
 
   const walletFp = hexToBytes(args.walletFingerprintHex);
@@ -108,13 +130,8 @@ export function buildUnsignedProposal(args: BuildProposalArgs): UnsignedProposal
 
   const outputs: ProposalOutputT[] = [
     { sats: args.recipientSats, scriptHex: p2pkhLockHex(args.recipientAddress) },
+    { sats: args.changeSats, scriptHex: p2pkhLockHex(args.changeAddress) },
   ];
-  if (hasChange) {
-    outputs.push({
-      sats: args.changeSats!,
-      scriptHex: p2pkhLockHex(args.changeAddress!),
-    });
-  }
 
   // headerAnchors: { height -> 32-byte big-endian merkle root }.
   // WoC returns merkleroot as big-endian hex; we store the same bytes.
@@ -146,8 +163,8 @@ export function buildUnsignedProposal(args: BuildProposalArgs): UnsignedProposal
     walletFp,
     inputs,
     outputs,
-    changeIndex: hasChange ? outputs.length - 1 : 0,
-    changeDerivation: hasChange ? args.changeDerivation! : [1, 0],
+    changeIndex: outputs.length - 1,
+    changeDerivation: args.changeDerivation,
     feeRate: args.feeRateSatskb,
     locktime: args.locktime ?? 0,
     headerAnchors: anchors,

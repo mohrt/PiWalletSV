@@ -31,12 +31,12 @@ describe("estimateTxBytes / estimateFee", () => {
 });
 
 describe("selectUtxosGreedy", () => {
-  it("uses one UTXO when it fully covers target + fee + change", () => {
+  it("uses one UTXO when it fully covers target + fee + above-dust change", () => {
     const res = selectUtxosGreedy([u("a".repeat(64), 100_000)], 30_000, 500);
     expect(res.inputs).toHaveLength(1);
     expect(res.totalInputSats).toBe(100_000);
-    expect(res.hasChange).toBe(true);
     expect(res.changeSats).toBe(100_000 - 30_000 - res.feeSats);
+    expect(res.changeSats).toBeGreaterThanOrEqual(DUST_THRESHOLD_SATS);
     expect(res.estimatedBytes).toBe(estimateTxBytes(1, 2));
   });
 
@@ -48,18 +48,27 @@ describe("selectUtxosGreedy", () => {
     );
     expect(res.inputs.map((i) => i.sats)).toEqual([20_000, 15_000, 10_000]);
     expect(res.totalInputSats).toBe(45_000);
-    expect(res.changeSats).toBeGreaterThanOrEqual(0);
+    expect(res.changeSats).toBeGreaterThanOrEqual(DUST_THRESHOLD_SATS);
   });
 
-  it("drops the change output when remainder is dust", () => {
-    // Pick numbers so change after fee is below dust threshold.
-    const target = 9_700;
-    const utxo = u("a".repeat(64), 10_000);
-    const res = selectUtxosGreedy([utxo], target, 500, DUST_THRESHOLD_SATS);
-    expect(res.hasChange).toBe(false);
-    expect(res.changeSats).toBe(0);
-    expect(res.estimatedBytes).toBe(estimateTxBytes(1, 1));
-    expect(res.feeSats).toBe(10_000 - target); // fold dust into fee
+  it("keeps adding UTXOs when the running change would be dust", () => {
+    // First UTXO alone would leave change below dust; selector must pull
+    // in a second UTXO to push the residue above the threshold.
+    const utxos = [
+      u("a".repeat(64), 10_000),
+      u("b".repeat(64), 5_000),
+    ];
+    const res = selectUtxosGreedy(utxos, 9_700, 500);
+    expect(res.inputs).toHaveLength(2);
+    expect(res.changeSats).toBeGreaterThanOrEqual(DUST_THRESHOLD_SATS);
+  });
+
+  it("rejects selections that cannot leave above-dust change", () => {
+    // Single UTXO whose residue after fee falls below dust; no other
+    // UTXOs available to top it up.
+    expect(() =>
+      selectUtxosGreedy([u("a".repeat(64), 10_000)], 9_700, 500, DUST_THRESHOLD_SATS),
+    ).toThrow(/insufficient funds.*above-dust change/);
   });
 
   it("throws if no combination covers target + fee", () => {

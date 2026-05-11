@@ -90,24 +90,51 @@ describe("buildUnsignedProposal", () => {
     expect(decoded.feeRate).toBe(500);
   });
 
-  it("supports 1-input no-change (dust folded into fee)", () => {
+  it("refuses to build a no-change proposal (v1 spec mandates change)", () => {
+    expect(() =>
+      buildUnsignedProposal({
+        walletFingerprintHex: FIXTURE.fingerprint,
+        inputs: [
+          {
+            txid: "aa".repeat(32),
+            vout: 0,
+            sats: 10_000,
+            derivation: [0, 0],
+            proof: fakeProof(1, 812345),
+          },
+        ],
+        recipientAddress: RECIPIENT,
+        recipientSats: 9_700,
+        feeRateSatskb: 500,
+        // changeAddress / changeSats / changeDerivation deliberately omitted
+        // to assert the type / runtime guards reject the call.
+      } as unknown as Parameters<typeof buildUnsignedProposal>[0]),
+    ).toThrow(ProposalBuilderError);
+  });
+
+  it("every built proposal carries an explicit P2PKH change output at changeIndex", () => {
     const env = buildUnsignedProposal({
       walletFingerprintHex: FIXTURE.fingerprint,
       inputs: [
         {
           txid: "aa".repeat(32),
           vout: 0,
-          sats: 10_000,
+          sats: 60_000,
           derivation: [0, 0],
           proof: fakeProof(1, 812345),
         },
       ],
       recipientAddress: RECIPIENT,
-      recipientSats: 9_700,
+      recipientSats: 50_000,
+      changeAddress: CHANGE,
+      changeSats: 9_500,
+      changeDerivation: [1, 0],
       feeRateSatskb: 500,
     });
-    expect(env.outputs).toHaveLength(1);
-    expect(env.changeIndex).toBe(0); // sentinel value
+    expect(env.outputs.length).toBeGreaterThanOrEqual(2);
+    expect(env.changeIndex).toBe(env.outputs.length - 1);
+    expect(env.outputs[env.changeIndex].scriptHex).toMatch(/^76a914[0-9a-f]{40}88ac$/);
+    expect(env.changeDerivation).toEqual([1, 0]);
   });
 
   it("aggregates header anchors per-height across multiple inputs", () => {
@@ -163,6 +190,9 @@ describe("buildUnsignedProposal", () => {
         ],
         recipientAddress: RECIPIENT,
         recipientSats: 55_000,
+        changeAddress: CHANGE,
+        changeSats: 4_700,
+        changeDerivation: [1, 0],
         feeRateSatskb: 500,
       }),
     ).toThrow(/conflicting header anchors/);
@@ -183,6 +213,9 @@ describe("buildUnsignedProposal", () => {
         ],
         recipientAddress: RECIPIENT,
         recipientSats: 1_000,
+        changeAddress: CHANGE,
+        changeSats: 48_700,
+        changeDerivation: [1, 0],
         feeRateSatskb: 500,
       }),
     ).toThrow(/walletFingerprintHex/);
@@ -195,6 +228,9 @@ describe("buildUnsignedProposal", () => {
         inputs: [],
         recipientAddress: RECIPIENT,
         recipientSats: 1_000,
+        changeAddress: CHANGE,
+        changeSats: 100,
+        changeDerivation: [1, 0],
         feeRateSatskb: 500,
       }),
     ).toThrow(ProposalBuilderError);

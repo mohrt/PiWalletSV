@@ -434,20 +434,18 @@ export function mountWalletDetailPage(
         proofs.push({ utxo: u, proof });
       }
 
-      let changeAddress: string | undefined;
-      let changeDerivation: [number, number] | undefined;
-      let changeSats: number | undefined;
-      if (selection.hasChange) {
-        const nextChangeIdx = (wallet.lastScan.lastChangeUsed ?? -1) + 1;
-        const changeDerived = deriveAddress(
-          wallet.xpub,
-          CHANGE_BRANCH,
-          nextChangeIdx,
-        );
-        changeAddress = changeDerived.address;
-        changeDerivation = [CHANGE_BRANCH, nextChangeIdx];
-        changeSats = selection.changeSats;
-      }
+      // v1 proposals always carry an explicit above-dust change output.
+      // selectUtxosGreedy throws if it cannot satisfy that, so by this
+      // point selection.changeSats is guaranteed >= dust.
+      const nextChangeIdx = (wallet.lastScan.lastChangeUsed ?? -1) + 1;
+      const changeDerived = deriveAddress(
+        wallet.xpub,
+        CHANGE_BRANCH,
+        nextChangeIdx,
+      );
+      const changeAddress = changeDerived.address;
+      const changeDerivation: [number, number] = [CHANGE_BRANCH, nextChangeIdx];
+      const changeSats = selection.changeSats;
 
       const envelope = buildUnsignedProposal({
         walletFingerprintHex: wallet.fingerprint,
