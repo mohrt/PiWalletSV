@@ -27,8 +27,10 @@ import {
   WalletStoreError,
   addWallet,
   findByFingerprintAndPath,
+  listWallets,
 } from "../lib/wallets.js";
-import { WocClient, WocError } from "../lib/woc.js";
+import type { NetworkT } from "../lib/envelope.js";
+import { WocClient, WocError, wocBaseForNetwork } from "../lib/woc.js";
 
 const SCAN_INTERVAL_MS = 80; // ~12.5 fps; plenty for animated QR
 const TEXT_DISPLAY_CAP = 64 * 1024; // truncate displayed body for huge payloads
@@ -155,6 +157,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
   let lastDownloadUrl: string | null = null;
   let pairXpub: XpubExportT | null = null;
   let signedTx: SignedTxT | null = null;
+  let signedTxNetwork: NetworkT = "main";
   let woc: WocClient | null = null;
   let broadcasting = false;
 
@@ -307,7 +310,8 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $pairLabel.disabled = false;
     $pairSave.textContent = "Save wallet";
     $pairOpenList.hidden = true;
-    $pairFp.textContent = `fingerprint ${fpHex} · ${env.path}`;
+    const netLabel = env.network === "test" ? " · TESTNET" : "";
+    $pairFp.textContent = `fingerprint ${fpHex} · ${env.path}${netLabel}`;
     $pairStatus.classList.remove("error");
 
     let existing: WalletRecord | null = null;
@@ -320,11 +324,25 @@ export function mountScannerPage(root: HTMLElement): () => void {
       return;
     }
 
-    if (existing) {
+    // A duplicate pair is only blocking if it's on the same network.
+    // The same seed can drive a mainnet and a testnet wallet in
+    // parallel; the companion treats those as distinct entries.
+    const sameNetworkDup =
+      existing && (existing.network ?? "main") === (env.network ?? "main");
+
+    if (existing && sameNetworkDup) {
       $pairStatus.textContent =
         `already paired as "${existing.label}" on ${new Date(existing.addedAt).toLocaleString()}.`;
       $pairSave.disabled = true;
       $pairOpenList.hidden = false;
+    } else if (existing) {
+      // Cross-network re-pair: same fingerprint+path, different network.
+      const otherNet = (existing.network ?? "main") === "test" ? "TESTNET" : "mainnet";
+      const thisNet = env.network === "test" ? "TESTNET" : "mainnet";
+      $pairStatus.textContent =
+        `note: this seed is already paired as "${existing.label}" on ${otherNet}; ` +
+        `saving will create a new ${thisNet} entry alongside it.`;
+      $pairSave.disabled = false;
     } else {
       $pairStatus.textContent =
         `Pi reported label "${env.label}". You can rename it before saving.`;
@@ -342,10 +360,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
         xpub: pairXpub.xpub,
         fingerprint: bytesToHex(pairXpub.fingerprint),
         path: pairXpub.path,
+        network: pairXpub.network,
       });
       $pairStatus.classList.remove("error");
+      const netSuffix = rec.network === "test" ? " (TESTNET)" : "";
       $pairStatus.textContent =
-        `saved as "${rec.label}" — ${rec.fingerprint} on ${rec.path}.`;
+        `saved as "${rec.label}" — ${rec.fingerprint} on ${rec.path}${netSuffix}.`;
       $pairOpenList.hidden = false;
       $pairLabel.disabled = true;
     } catch (e) {
@@ -359,6 +379,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
 
   function hideBroadcastCard(): void {
     signedTx = null;
+    signedTxNetwork = "main";
     broadcasting = false;
     $broadcastCard.hidden = true;
     $broadcastTxid.textContent = "";
@@ -371,17 +392,36 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $broadcastExplorer.removeAttribute("href");
   }
 
-  function showBroadcastCard(env: SignedTxT): void {
+  async function showBroadcastCard(env: SignedTxT): Promise<void> {
     signedTx = env;
     broadcasting = false;
+    // Resolve the wallet's network so we route the broadcast (and the
+    // explorer link) to the correct WoC base. The signed_tx envelope
+    // carries only `walletFp`, so we look it up against the paired
+    // wallet store; if the wallet isn't paired here we default to
+    // mainnet and surface a notice. Mismatches surface clearly when
+    // the broadcast eventually fails on the wrong network.
+    const fpHex = bytesToHex(env.walletFp).toLowerCase();
+    let net: NetworkT = "main";
+    try {
+      const all = await listWallets();
+      const match = all.find((w) => w.fingerprint === fpHex);
+      if (match) net = match.network ?? "main";
+    } catch {
+      // Treat IndexedDB errors as "no match"; fall through to mainnet.
+    }
+    signedTxNetwork = net;
+
     $broadcastCard.hidden = false;
     $broadcastTxid.textContent = `txid: ${env.txid}`;
+    const netLabel = net === "test" ? "TESTNET" : "mainnet";
     $broadcastMeta.textContent =
-      `wallet ${bytesToHex(env.walletFp)} · raw tx ${env.rawHex.length / 2} bytes`;
+      `wallet ${fpHex} · raw tx ${env.rawHex.length / 2} bytes · ${netLabel}`;
     $broadcastStatus.classList.remove("error");
     $broadcastStatus.textContent = "";
     $broadcastBtn.disabled = false;
-    $broadcastBtn.textContent = "Broadcast to BSV mainnet";
+    $broadcastBtn.textContent =
+      net === "test" ? "Broadcast to BSV testnet" : "Broadcast to BSV mainnet";
     $broadcastExplorer.hidden = true;
     $broadcastExplorer.removeAttribute("href");
   }
@@ -393,7 +433,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $broadcastBtn.textContent = "Broadcasting…";
     $broadcastStatus.classList.remove("error");
     $broadcastStatus.textContent = "Submitting to WhatsOnChain…";
-    if (!woc) woc = new WocClient();
+    // Build (or rebuild, if the network changed) a WocClient pointing
+    // at the right BSV main/test base for this signed_tx.
+    const baseUrl = wocBaseForNetwork(signedTxNetwork);
+    if (!woc || woc.baseUrl !== baseUrl.replace(/\/+$/, "")) {
+      woc = new WocClient({ baseUrl });
+    }
     try {
       const txid = await woc.broadcastRaw(signedTx.rawHex);
       $broadcastStatus.textContent = `accepted by WoC mempool · txid ${txid}`;
@@ -403,7 +448,11 @@ export function mountScannerPage(root: HTMLElement): () => void {
         $broadcastStatus.textContent =
           `WARNING: WoC returned txid ${txid} but the Pi signed ${signedTx.txid}.`;
       }
-      $broadcastExplorer.href = `https://whatsonchain.com/tx/${txid}`;
+      const explorerBase =
+        signedTxNetwork === "test"
+          ? "https://test.whatsonchain.com/tx/"
+          : "https://whatsonchain.com/tx/";
+      $broadcastExplorer.href = `${explorerBase}${txid}`;
       $broadcastExplorer.hidden = false;
       $broadcastBtn.textContent = "Broadcasted";
     } catch (e) {
@@ -444,7 +493,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
     }
 
     if (envelope?.kind === KIND_SIGNED) {
-      showBroadcastCard(envelope);
+      void showBroadcastCard(envelope);
     } else {
       hideBroadcastCard();
     }

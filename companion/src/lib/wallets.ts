@@ -10,6 +10,7 @@
  * which lets the loader migrate or refuse rows from a newer client.
  */
 
+import type { NetworkT } from "./envelope.js";
 import type { WalletUtxo } from "./utxo.js";
 
 const DB_NAME = "piwallet-companion";
@@ -44,6 +45,13 @@ export interface WalletRecord {
    * the wallet works without it (the UI just shows "not scanned yet").
    */
   lastScan?: WalletScanSnapshot;
+  /**
+   * Wallet's network (`"main"` / `"test"`). Pre-v1.1 records lack
+   * this field; readers default to `"main"` because that's the only
+   * network the companion supported before testnet shipped, and
+   * existing pairings would have stored mainnet addresses regardless.
+   */
+  network?: NetworkT;
 }
 
 /** Cached output of the gap-limit UTXO scan, persisted per wallet. */
@@ -65,10 +73,12 @@ export interface WalletScanSnapshot {
 /** Helper that fills in defaults for fields added after schema v1. */
 export function withDefaults(rec: WalletRecord): WalletRecord & {
   nextReceiveIndex: number;
+  network: NetworkT;
 } {
   return {
     ...rec,
     nextReceiveIndex: rec.nextReceiveIndex ?? 0,
+    network: rec.network ?? "main",
   };
 }
 
@@ -157,20 +167,26 @@ export interface AddWalletInput {
   xpub: string;
   fingerprint: string;
   path: string;
+  /** Optional; defaults to `"main"` for callers predating testnet support. */
+  network?: NetworkT;
 }
 
 /**
  * Insert a new wallet record. Rejects if a wallet with the same
- * fingerprint+path already exists, surfacing
+ * fingerprint+path already exists on the same network, surfacing
  * `WalletStoreError("duplicate-pair")` so the UI can offer to update
- * the existing label rather than silently insert a near-twin.
+ * the existing label rather than silently insert a near-twin. Two
+ * wallets that share fingerprint+path but differ in network are
+ * accepted as distinct entries (a seed can drive both mainnet and
+ * testnet wallets in parallel).
  */
 export async function addWallet(input: AddWalletInput): Promise<WalletRecord> {
   const fp = input.fingerprint.toLowerCase();
+  const network: NetworkT = input.network ?? "main";
   const dup = await findByFingerprintAndPath(fp, input.path);
-  if (dup) {
+  if (dup && (dup.network ?? "main") === network) {
     throw new WalletStoreError(
-      `duplicate-pair: a wallet with fingerprint ${fp} on ${input.path} is already paired (label: ${dup.label})`,
+      `duplicate-pair: a wallet with fingerprint ${fp} on ${input.path} (${network}) is already paired (label: ${dup.label})`,
     );
   }
   const rec: WalletRecord = {
@@ -181,6 +197,7 @@ export async function addWallet(input: AddWalletInput): Promise<WalletRecord> {
     path: input.path,
     addedAt: new Date().toISOString(),
     schemaVersion: WALLET_SCHEMA_VERSION,
+    network,
   };
   await withStore("readwrite", (store) => txPromise(store.add(rec), "add"));
   return rec;

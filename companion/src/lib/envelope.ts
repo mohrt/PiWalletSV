@@ -47,6 +47,16 @@ export class EnvelopeError extends Error {
 // Type definitions for the three decoded envelope shapes.
 // ---------------------------------------------------------------------------
 
+/**
+ * Network discriminator stamped on every xpub_export envelope from a
+ * v1.1+ Pi build. The companion uses this to pick the matching
+ * base58check P2PKH prefix and the WhatsOnChain endpoint when the
+ * paired wallet is queried. See `protocol/envelopes.md` §3.
+ */
+export type NetworkT = "main" | "test";
+
+const VALID_NETWORKS: ReadonlySet<string> = new Set(["main", "test"]);
+
 export interface XpubExportT {
   kind: typeof KIND_XPUB;
   xpub: string;
@@ -54,6 +64,12 @@ export interface XpubExportT {
   label: string;
   /** 4-byte self-fingerprint (`hash160(pubkey)[:4]`). */
   fingerprint: Uint8Array;
+  /**
+   * Wallet's network. Pre-v1.1 envelopes lack this field; the
+   * decoder forward-migrates absent values to `"main"` to preserve
+   * existing pairings.
+   */
+  network: NetworkT;
 }
 
 export interface ProposalInputT {
@@ -151,6 +167,7 @@ function envelopeToCborBody(env: Envelope): Map<string, unknown> {
     m.set("path", env.path);
     m.set("label", env.label);
     m.set("fp", env.fingerprint);
+    m.set("net", env.network);
     return m;
   }
   if (env.kind === KIND_PROPOSAL) {
@@ -303,12 +320,27 @@ function parseOutput(raw: unknown, idx: number): ProposalOutputT {
 
 function parseXpub(body: CborMap): XpubExportT {
   requireKeys(body, ["xpub", "path", "label", "fp"], "xpub_export");
+  // `net` is OPTIONAL on the wire: pre-v1.1 envelopes lack the
+  // field, and we treat its absence as "main" so existing pairings
+  // keep working when the operator upgrades the Pi but not the PWA
+  // (or vice versa).
+  let network: NetworkT = "main";
+  if (body.has("net")) {
+    const raw = body.get("net");
+    if (typeof raw !== "string" || !VALID_NETWORKS.has(raw)) {
+      throw new EnvelopeError(
+        `xpub_export: 'net' must be "main" or "test", got ${JSON.stringify(raw)}`,
+      );
+    }
+    network = raw as NetworkT;
+  }
   return {
     kind: KIND_XPUB,
     xpub: requireString(body, "xpub", "xpub_export"),
     path: requireString(body, "path", "xpub_export"),
     label: requireString(body, "label", "xpub_export"),
     fingerprint: requireBytes(body, "fp", "xpub_export", 4),
+    network,
   };
 }
 

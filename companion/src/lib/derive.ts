@@ -21,13 +21,23 @@ import { base58check } from "@scure/base";
 import { ripemd160 } from "@noble/hashes/legacy.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
+import type { NetworkT } from "./envelope.js";
+
 export const RECEIVE_BRANCH = 0;
 export const CHANGE_BRANCH = 1;
-export const BSV_P2PKH_PREFIX = 0x00; // mainnet legacy address byte
+/** BSV mainnet legacy P2PKH version byte (same as Bitcoin mainnet). */
+export const BSV_P2PKH_PREFIX = 0x00;
+/** BSV testnet legacy P2PKH version byte (same as Bitcoin testnet). */
+export const BSV_TESTNET_P2PKH_PREFIX = 0x6f;
 
 const BIP32_HARDENED_THRESHOLD = 0x80000000;
 
 const b58 = base58check(sha256);
+
+/** Map a network discriminator to its base58check P2PKH prefix byte. */
+export function prefixForNetwork(network: NetworkT): number {
+  return network === "test" ? BSV_TESTNET_P2PKH_PREFIX : BSV_P2PKH_PREFIX;
+}
 
 export class DerivationError extends Error {
   constructor(message: string) {
@@ -47,7 +57,7 @@ export interface DerivedAddress {
   publicKey: Uint8Array;
   /** HASH160(publicKey) — 20 bytes. */
   hash160: Uint8Array;
-  /** Base58Check-encoded P2PKH address (mainnet prefix). */
+  /** Base58Check-encoded P2PKH address rendered for the wallet's network. */
   address: string;
 }
 
@@ -83,11 +93,16 @@ function assertNonHardened(branch: number, index: number): void {
 /**
  * Derive a single P2PKH address from the account xpub at
  * `<xpub>/change/index`.
+ *
+ * `network` selects the address-encoding network (default `"main"`
+ * preserves pre-testnet behaviour). The derived public key + HASH160
+ * are network-invariant; only the base58check version byte changes.
  */
 export function deriveAddress(
   accountXpub: string,
   change: number,
   index: number,
+  network: NetworkT = "main",
 ): DerivedAddress {
   assertNonHardened(change, index);
   let parent: HDKey;
@@ -108,7 +123,7 @@ export function deriveAddress(
     subPath: `${change}/${index}`,
     publicKey: pub,
     hash160: h160,
-    address: encodeP2pkhAddress(h160),
+    address: encodeP2pkhAddress(h160, prefixForNetwork(network)),
   };
 }
 
@@ -121,13 +136,14 @@ export function deriveAddressBatch(
   change: number,
   startIndex: number,
   count: number,
+  network: NetworkT = "main",
 ): DerivedAddress[] {
   if (!Number.isInteger(count) || count < 0 || count > 1000) {
     throw new DerivationError(`count out of range [0, 1000]: ${count}`);
   }
   const out: DerivedAddress[] = [];
   for (let i = 0; i < count; i++) {
-    out.push(deriveAddress(accountXpub, change, startIndex + i));
+    out.push(deriveAddress(accountXpub, change, startIndex + i, network));
   }
   return out;
 }

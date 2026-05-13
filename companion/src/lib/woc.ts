@@ -14,9 +14,14 @@
  *
  * - `broadcastRaw(hex)`     — POST raw signed tx hex; returns the txid.
  *
- * Network endpoint is configurable but defaults to public BSV mainnet
- * (`https://api.whatsonchain.com/v1/bsv/main`). The unauthenticated rate
- * limit is ~3 req/s; callers should batch / pace.
+ * Network endpoint is configurable. Built-in bases:
+ *   - mainnet (default): `https://api.whatsonchain.com/v1/bsv/main`
+ *   - testnet:           `https://api.whatsonchain.com/v1/bsv/test`
+ *
+ * Callers receive the wallet's network from the `xpub_export` envelope
+ * and pass `baseUrl: wocBaseForNetwork(network)` so a paired testnet
+ * wallet hits TBSV endpoints. The unauthenticated rate limit is
+ * ~3 req/s on either base; callers should batch / pace.
  *
  * Design notes:
  *
@@ -28,7 +33,27 @@
  *   path; the caller decides whether to retry.
  */
 
-export const WOC_DEFAULT_BASE = "https://api.whatsonchain.com/v1/bsv/main";
+import type { NetworkT } from "./envelope.js";
+
+/** WhatsOnChain BSV mainnet v1 root. */
+export const WOC_MAINNET_BASE = "https://api.whatsonchain.com/v1/bsv/main";
+/** WhatsOnChain BSV testnet v1 root. */
+export const WOC_TESTNET_BASE = "https://api.whatsonchain.com/v1/bsv/test";
+/**
+ * Backwards-compatible alias for {@link WOC_MAINNET_BASE}. Existing
+ * callers that didn't specify a base URL kept hitting mainnet via
+ * this constant; that behaviour is preserved.
+ */
+export const WOC_DEFAULT_BASE = WOC_MAINNET_BASE;
+
+/**
+ * Resolve the WoC base URL for a given network. Companion code paths
+ * that take a paired wallet should call this with `wallet.network`
+ * rather than referencing a constant directly.
+ */
+export function wocBaseForNetwork(network: NetworkT): string {
+  return network === "test" ? WOC_TESTNET_BASE : WOC_MAINNET_BASE;
+}
 
 export interface WocUnspentEntry {
   txid: string;

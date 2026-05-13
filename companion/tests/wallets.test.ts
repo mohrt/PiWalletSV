@@ -155,4 +155,48 @@ describe("wallets store", () => {
     const cleared = await getWallet(rec.id);
     expect(cleared?.lastScan).toBeUndefined();
   });
+
+  it("addWallet defaults to network='main' when omitted", async () => {
+    const rec = await addWallet(DEMO);
+    expect(rec.network).toBe("main");
+    const fetched = await getWallet(rec.id);
+    expect(fetched?.network).toBe("main");
+  });
+
+  it("addWallet persists network='test' when provided", async () => {
+    const rec = await addWallet({ ...DEMO, network: "test" });
+    expect(rec.network).toBe("test");
+    const fetched = await getWallet(rec.id);
+    expect(fetched?.network).toBe("test");
+  });
+
+  it("allows a mainnet + testnet wallet for the same seed (different networks)", async () => {
+    await addWallet({ ...DEMO, network: "main", label: "main" });
+    const second = await addWallet({ ...DEMO, network: "test", label: "test" });
+    expect(second.network).toBe("test");
+    const all = await listWallets();
+    expect(all).toHaveLength(2);
+  });
+
+  it("rejects duplicate fingerprint+path+network", async () => {
+    await addWallet({ ...DEMO, network: "test" });
+    await expect(
+      addWallet({ ...DEMO, network: "test", label: "again" }),
+    ).rejects.toBeInstanceOf(WalletStoreError);
+  });
+
+  it("withDefaults backfills network='main' for legacy records", () => {
+    const legacy = {
+      id: "x",
+      label: "legacy",
+      xpub: "xpub-stub",
+      fingerprint: "ffffffff",
+      path: "m/44'/236'/0'",
+      addedAt: "2025-01-01T00:00:00.000Z",
+      schemaVersion: WALLET_SCHEMA_VERSION,
+    };
+    const filled = withDefaults(legacy);
+    expect(filled.network).toBe("main");
+    expect(filled.nextReceiveIndex).toBe(0);
+  });
 });

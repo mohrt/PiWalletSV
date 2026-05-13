@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { type FetchFn, WOC_DEFAULT_BASE, WocClient, WocError } from "../src/lib/woc.js";
+import {
+  type FetchFn,
+  WOC_DEFAULT_BASE,
+  WOC_MAINNET_BASE,
+  WOC_TESTNET_BASE,
+  WocClient,
+  WocError,
+  wocBaseForNetwork,
+} from "../src/lib/woc.js";
 
 interface StubCall {
   url: string;
@@ -202,5 +210,28 @@ describe("WocClient", () => {
       expect((e as WocError).status).toBe(0);
       expect((e as WocError).message).toMatch(/offline/);
     }
+  });
+
+  it("WOC_DEFAULT_BASE remains an alias for WOC_MAINNET_BASE", () => {
+    expect(WOC_DEFAULT_BASE).toBe(WOC_MAINNET_BASE);
+  });
+
+  it("WOC_TESTNET_BASE points at the v1/bsv/test endpoint", () => {
+    expect(WOC_TESTNET_BASE).toBe("https://api.whatsonchain.com/v1/bsv/test");
+  });
+
+  it("wocBaseForNetwork picks the right base per network", () => {
+    expect(wocBaseForNetwork("main")).toBe(WOC_MAINNET_BASE);
+    expect(wocBaseForNetwork("test")).toBe(WOC_TESTNET_BASE);
+  });
+
+  it("a testnet WocClient routes /chain/info to the testnet base", async () => {
+    const { fetch, calls } = stubFetch((url) => {
+      expect(url).toBe(`${WOC_TESTNET_BASE}/chain/info`);
+      return jsonResponse({ blocks: 1, bestblockhash: "ff" });
+    });
+    const w = new WocClient({ fetch, baseUrl: wocBaseForNetwork("test") });
+    await w.getChainInfo();
+    expect(calls).toHaveLength(1);
   });
 });

@@ -20,6 +20,7 @@ import {
   RECEIVE_BRANCH,
   deriveAddress,
 } from "./derive.js";
+import type { NetworkT } from "./envelope.js";
 import type { WocClient, WocUnspentEntry } from "./woc.js";
 
 export const DEFAULT_GAP_LIMIT = 20;
@@ -57,6 +58,14 @@ export interface ScanOptions {
   /** Skip addresses below this index (resume hint). */
   startReceive?: number;
   startChange?: number;
+  /**
+   * Wallet's network — selects the base58check P2PKH prefix the
+   * scanner asks WoC about. Defaults to `"main"` for backwards
+   * compatibility with callers that haven't been updated to pass it
+   * explicitly. The matching `WocClient` base URL must be picked by
+   * the caller; this option only affects address rendering.
+   */
+  network?: NetworkT;
   /** Progress callback (called once per address probed). */
   onProgress?: (info: {
     branch: number;
@@ -75,6 +84,7 @@ export async function scanWalletUtxos(
 ): Promise<ScanResult> {
   const gap = opts.gapLimit ?? DEFAULT_GAP_LIMIT;
   const batch = opts.batch ?? DEFAULT_BATCH;
+  const network: NetworkT = opts.network ?? "main";
   const fetchUnspent =
     opts.fetchUnspent ?? ((addr: string) => woc.getUnspent(addr));
 
@@ -95,7 +105,7 @@ export async function scanWalletUtxos(
       const probeEnd = Math.min(index + batch, index + (gap - consecutiveEmpty));
       const probes: { index: number; address: string }[] = [];
       for (let i = probeStart; i < probeEnd; i++) {
-        const d = deriveAddress(accountXpub, branch, i);
+        const d = deriveAddress(accountXpub, branch, i, network);
         probes.push({ index: i, address: d.address });
       }
       const results = await Promise.all(

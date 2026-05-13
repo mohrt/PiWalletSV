@@ -5,12 +5,15 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  BSV_P2PKH_PREFIX,
+  BSV_TESTNET_P2PKH_PREFIX,
   CHANGE_BRANCH,
   DerivationError,
   RECEIVE_BRANCH,
   deriveAddress,
   deriveAddressBatch,
   encodeP2pkhAddress,
+  prefixForNetwork,
 } from "../src/lib/derive.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -86,5 +89,62 @@ describe("address derivation guards", () => {
   it("deriveAddressBatch rejects out-of-range count", () => {
     expect(() => deriveAddressBatch(fixture.xpub, 0, 0, -1)).toThrow(/count/);
     expect(() => deriveAddressBatch(fixture.xpub, 0, 0, 1001)).toThrow(/count/);
+  });
+});
+
+describe("network-aware address rendering", () => {
+  // Same canonical mnemonic as the Python tests; the testnet vectors
+  // were captured directly from piwallet.core.derivation.derive_address
+  // with network='test' to lock TS↔Python parity for both networks.
+  const TESTNET_RECEIVE = [
+    "mycHrh2o8UWnXM3Qk218KvMSSM8FWgNxFH",
+    "mtDoCVz5ZzZfBu8jr9yzsodsWUM4Fc7Q14",
+    "mjbTCux3QNo9rJ8Pc84zKJvBqG7MYWcUDa",
+  ];
+  const TESTNET_CHANGE = [
+    "mgbDYw1XgFLEmPDrgEqtx91cmXVjPGg6un",
+    "mwgxkbe9DDLNqZxGt4U8fhmYNWc1P4Wxvq",
+    "mv1AEn6fcR9cHhZSv3q2gNFaHk6pZEDcyu",
+  ];
+
+  it("prefixForNetwork maps to the BSV version bytes", () => {
+    expect(prefixForNetwork("main")).toBe(BSV_P2PKH_PREFIX);
+    expect(prefixForNetwork("test")).toBe(BSV_TESTNET_P2PKH_PREFIX);
+    expect(BSV_P2PKH_PREFIX).toBe(0x00);
+    expect(BSV_TESTNET_P2PKH_PREFIX).toBe(0x6f);
+  });
+
+  it("default kwarg keeps mainnet rendering byte-for-byte", () => {
+    const got = deriveAddress(fixture.xpub, RECEIVE_BRANCH, 0);
+    expect(got.address).toBe(fixture.addresses.receive[0].address);
+  });
+
+  it("renders testnet receive addresses for the canonical xpub", () => {
+    for (let i = 0; i < TESTNET_RECEIVE.length; i++) {
+      const got = deriveAddress(fixture.xpub, RECEIVE_BRANCH, i, "test");
+      expect(got.address).toBe(TESTNET_RECEIVE[i]);
+    }
+  });
+
+  it("renders testnet change addresses for the canonical xpub", () => {
+    for (let i = 0; i < TESTNET_CHANGE.length; i++) {
+      const got = deriveAddress(fixture.xpub, CHANGE_BRANCH, i, "test");
+      expect(got.address).toBe(TESTNET_CHANGE[i]);
+    }
+  });
+
+  it("HASH160 + publicKey are network-invariant", () => {
+    const m = deriveAddress(fixture.xpub, RECEIVE_BRANCH, 0, "main");
+    const t = deriveAddress(fixture.xpub, RECEIVE_BRANCH, 0, "test");
+    expect(Array.from(t.hash160)).toEqual(Array.from(m.hash160));
+    expect(Array.from(t.publicKey)).toEqual(Array.from(m.publicKey));
+    expect(m.address).not.toBe(t.address);
+  });
+
+  it("deriveAddressBatch threads the network through", () => {
+    const batch = deriveAddressBatch(fixture.xpub, RECEIVE_BRANCH, 0, 3, "test");
+    for (let i = 0; i < 3; i++) {
+      expect(batch[i].address).toBe(TESTNET_RECEIVE[i]);
+    }
   });
 });

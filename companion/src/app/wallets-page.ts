@@ -83,9 +83,13 @@ export function mountWalletsPage(root: HTMLElement): () => void {
     for (const w of wallets) {
       const li = document.createElement("li");
       li.className = "wallet-row";
+      const netBadge =
+        (w.network ?? "main") === "test"
+          ? ' <span class="testnet-badge" title="BSV testnet wallet">TESTNET</span>'
+          : "";
       li.innerHTML = `
         <div class="wallet-meta">
-          <strong class="wallet-label">${escapeHtml(w.label)}</strong>
+          <strong class="wallet-label">${escapeHtml(w.label)}</strong>${netBadge}
           <code class="wallet-fp" title="fingerprint">${w.fingerprint}</code>
           <span class="muted-line">${escapeHtml(w.path)}</span>
         </div>

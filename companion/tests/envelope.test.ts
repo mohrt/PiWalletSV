@@ -42,6 +42,7 @@ function makeXpub(): XpubExportT {
     path: "m/44'/236'/0'",
     label: "test wallet",
     fingerprint: hexToBytes("cf987d8c"),
+    network: "main",
   };
 }
 
@@ -118,6 +119,70 @@ describe("envelope codec", () => {
     expect(round.path).toBe(src.path);
     expect(round.label).toBe(src.label);
     expect(bytesToHex(round.fingerprint)).toBe(bytesToHex(src.fingerprint));
+    expect(round.network).toBe("main");
+  });
+
+  it("round-trips a testnet xpub_export", async () => {
+    const src: XpubExportT = { ...makeXpub(), network: "test" };
+    const blob = await encodeEnvelope(src);
+    const round = await decodeEnvelope(blob);
+    expect(round.kind).toBe(KIND_XPUB);
+    if (round.kind !== KIND_XPUB) return;
+    expect(round.network).toBe("test");
+  });
+
+  it("decodes pre-v1.1 xpub_export (no `net` field) as mainnet", async () => {
+    // Build a body without `net`, then gzip+CBOR exactly the way the
+    // pre-testnet companion would have done.
+    const { Encoder: E } = await import("cbor-x");
+    const enc = new E({
+      useRecords: false,
+      structuredClone: false,
+      mapsAsObjects: false,
+      tagUint8Array: false,
+    });
+    const src = makeXpub();
+    const body = new Map<string, unknown>();
+    body.set("v", ENVELOPE_VERSION);
+    body.set("kind", KIND_XPUB);
+    body.set("xpub", src.xpub);
+    body.set("path", src.path);
+    body.set("label", src.label);
+    body.set("fp", src.fingerprint);
+    const cbor = new Uint8Array(enc.encode(body));
+    const stream = new Blob([cbor])
+      .stream()
+      .pipeThrough(new CompressionStream("gzip"));
+    const blob = new Uint8Array(await new Response(stream).arrayBuffer());
+    const round = await decodeEnvelope(blob);
+    expect(round.kind).toBe(KIND_XPUB);
+    if (round.kind !== KIND_XPUB) return;
+    expect(round.network).toBe("main");
+  });
+
+  it("rejects xpub_export with an unknown `net` value", async () => {
+    const { Encoder: E } = await import("cbor-x");
+    const enc = new E({
+      useRecords: false,
+      structuredClone: false,
+      mapsAsObjects: false,
+      tagUint8Array: false,
+    });
+    const src = makeXpub();
+    const body = new Map<string, unknown>();
+    body.set("v", ENVELOPE_VERSION);
+    body.set("kind", KIND_XPUB);
+    body.set("xpub", src.xpub);
+    body.set("path", src.path);
+    body.set("label", src.label);
+    body.set("fp", src.fingerprint);
+    body.set("net", "regtest");
+    const cbor = new Uint8Array(enc.encode(body));
+    const stream = new Blob([cbor])
+      .stream()
+      .pipeThrough(new CompressionStream("gzip"));
+    const blob = new Uint8Array(await new Response(stream).arrayBuffer());
+    await expect(decodeEnvelope(blob)).rejects.toThrow(/net|main|test/i);
   });
 
   it("round-trips an unsigned_proposal (incl. headerAnchors map)", async () => {

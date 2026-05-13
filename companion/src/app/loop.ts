@@ -46,6 +46,7 @@ function makeXpub(): XpubExportT {
     path: "m/44'/236'/0'",
     label: "demo wallet",
     fingerprint: hexToBytes("cf987d8c"),
+    network: "main",
   };
 }
 

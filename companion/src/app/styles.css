@@ -66,6 +66,24 @@ a:hover {
   margin-left: 0.5rem;
 }
 
+/* TESTNET indicator. Renders inline next to a wallet label or any
+   testnet-only surface so the operator can't confuse a testnet
+   wallet with a real-money one at a glance. Yellow background,
+   black text — high contrast on both light and dark themes. */
+.testnet-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: #facc15;
+  color: #1f1300;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+
 .page-header nav a {
   color: var(--muted);
   margin-left: 1rem;

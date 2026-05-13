@@ -27,7 +27,7 @@ import {
   buildUnsignedProposal,
 } from "../lib/proposal.js";
 import { scanWalletUtxos } from "../lib/utxo.js";
-import { WocClient, WocError } from "../lib/woc.js";
+import { WocClient, WocError, wocBaseForNetwork } from "../lib/woc.js";
 import {
   type WalletRecord,
   getWallet,
@@ -35,6 +35,7 @@ import {
   setNextReceiveIndex,
   withDefaults,
 } from "../lib/wallets.js";
+import type { NetworkT } from "../lib/envelope.js";
 
 const RECENT_WINDOW = 8;
 const SATS_PER_BSV = 100_000_000;
@@ -80,7 +81,9 @@ export function mountWalletDetailPage(
   walletId: string,
 ): () => void {
   let cancelled = false;
-  let wallet: (WalletRecord & { nextReceiveIndex: number }) | null = null;
+  let wallet:
+    | (WalletRecord & { nextReceiveIndex: number; network: NetworkT })
+    | null = null;
   let scanRunning = false;
   let woc: WocClient | null = null;
   let sendBusy = false;
@@ -136,10 +139,14 @@ export function mountWalletDetailPage(
 
   function renderShell(): void {
     if (!wallet) return;
+    const netBadge =
+      wallet.network === "test"
+        ? ' <span class="testnet-badge" title="This wallet is on BSV testnet (TBSV).">TESTNET</span>'
+        : "";
     root.innerHTML = `
       <main class="page">
         <header class="page-header">
-          <h1>${escapeHtml(wallet.label)}<span class="brand"> · PiWalletSV companion</span></h1>
+          <h1>${escapeHtml(wallet.label)}${netBadge}<span class="brand"> · PiWalletSV companion</span></h1>
           <nav>
             <a href="#/encode">Encode</a>
             <a href="#/scan">Scan</a>
@@ -151,6 +158,7 @@ export function mountWalletDetailPage(
         <section class="card wallet-meta-card">
           <p class="muted-line">
             fingerprint <code>${wallet.fingerprint}</code> · ${escapeHtml(wallet.path)} ·
+            ${wallet.network === "test" ? "BSV testnet" : "BSV mainnet"} ·
             paired ${new Date(wallet.addedAt).toLocaleString()}
           </p>
           <p class="muted-line wallet-xpub-full" title="${escapeHtml(wallet.xpub)}">
@@ -333,10 +341,13 @@ export function mountWalletDetailPage(
       $status.classList.remove("error");
       $status.textContent = "Starting gap-limit scan (this can take a few seconds)…";
     }
-    if (!woc) woc = new WocClient();
+    if (!woc) {
+      woc = new WocClient({ baseUrl: wocBaseForNetwork(wallet.network) });
+    }
 
     try {
       const result = await scanWalletUtxos(wallet.xpub, woc, {
+        network: wallet.network,
         onProgress: ({ branch, index, address, found }) => {
           if (cancelled || !$status) return;
           const branchLabel = branch === RECEIVE_BRANCH ? "recv" : "change";
@@ -424,7 +435,9 @@ export function mountWalletDetailPage(
         `(${selection.totalInputSats.toLocaleString()} sats). ` +
         `Fetching SPV proofs…`;
 
-      if (!woc) woc = new WocClient();
+      if (!woc) {
+        woc = new WocClient({ baseUrl: wocBaseForNetwork(wallet.network) });
+      }
       const proofs = [];
       for (let i = 0; i < selection.inputs.length; i++) {
         const u = selection.inputs[i];
@@ -442,6 +455,7 @@ export function mountWalletDetailPage(
         wallet.xpub,
         CHANGE_BRANCH,
         nextChangeIdx,
+        wallet.network,
       );
       const changeAddress = changeDerived.address;
       const changeDerivation: [number, number] = [CHANGE_BRANCH, nextChangeIdx];
@@ -561,7 +575,7 @@ export function mountWalletDetailPage(
     const idx = wallet.nextReceiveIndex;
     let derived: ReturnType<typeof deriveAddress>;
     try {
-      derived = deriveAddress(wallet.xpub, RECEIVE_BRANCH, idx);
+      derived = deriveAddress(wallet.xpub, RECEIVE_BRANCH, idx, wallet.network);
     } catch (e) {
       renderError(`derivation error: ${(e as Error).message}`);
       return;
@@ -602,6 +616,7 @@ export function mountWalletDetailPage(
       RECEIVE_BRANCH,
       start,
       RECENT_WINDOW,
+      wallet.network,
     );
     const $list = root.querySelector<HTMLUListElement>("#receiveList")!;
     $list.innerHTML = "";
