@@ -62,7 +62,18 @@ from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from piwallet.core import derivation as deriv
 from piwallet.core import mnemonic as mnem
 
-VAULT_FORMAT_VERSION: int = 1
+VAULT_FORMAT_VERSION: int = 2
+"""On-disk format version. v2 introduced per-wallet ``network`` field
+(``"main"`` / ``"test"``); v1 vaults are forward-migrated on load by
+treating absent ``network`` keys as ``"main"`` and rewritten as v2 on
+the next ``_save``."""
+
+#: Range of vault format versions this build is willing to *read*. Each
+#: must have a forward-migration path inside :meth:`Vault._load` that
+#: produces an in-memory :class:`_VaultState` matching the latest
+#: schema (and therefore safe to rewrite as the latest version on
+#: next save).
+SUPPORTED_VAULT_VERSIONS: frozenset[int] = frozenset({1, 2})
 SCRYPT_N: int = 2**15  # ~32 MB memory; ~200 ms on Zero 2 W
 SCRYPT_R: int = 8
 SCRYPT_P: int = 1
@@ -164,7 +175,15 @@ def _now_iso() -> str:
 
 @dataclass(frozen=True)
 class WalletRecord:
-    """User-facing wallet description (no secrets)."""
+    """User-facing wallet description (no secrets).
+
+    ``network`` is ``"main"`` for BSV mainnet and ``"test"`` for BSV
+    testnet (TBSV). Every operation that renders an address — receive
+    QR, xpub fingerprint encode, change re-derivation in verify — must
+    consult this field. Defaults to ``"main"`` so legacy v1 vaults (no
+    explicit network) read back as mainnet wallets, matching their
+    pre-testnet behaviour byte-for-byte.
+    """
 
     id: str
     label: str
@@ -172,6 +191,7 @@ class WalletRecord:
     derivation_path: str
     word_count: int
     created_at: str
+    network: deriv.Network = deriv.NETWORK_MAIN
 
 
 @dataclass
@@ -260,6 +280,12 @@ class Vault:
                 derivation_path=w["derivationPath"],
                 word_count=w["wordCount"],
                 created_at=w["createdAt"],
+                # v1 vault records lack `network`; treat them as
+                # mainnet (which is what they were before the testnet
+                # support shipped). _load() seeds this field on
+                # forward migration, but we tolerate it being missing
+                # in case a future v1 read path bypasses _load.
+                network=w.get("network", deriv.NETWORK_MAIN),
             )
             for w in self._state.wallets
         ]
@@ -278,6 +304,7 @@ class Vault:
         *,
         coin_type: int = deriv.BSV_COIN_TYPE,
         account_index: int = deriv.DEFAULT_ACCOUNT_INDEX,
+        network: deriv.Network = deriv.DEFAULT_NETWORK,
     ) -> WalletRecord:
         """Encrypt a new wallet under the PIN-derived KEK.
 
@@ -285,12 +312,13 @@ class Vault:
         zeroed from the buffer. The mnemonic itself is NOT persisted.
 
         ``coin_type`` and ``account_index`` select the BIP44 account the
-        wallet derives at (``m/44'/coin_type'/account_index'``). Defaults
-        match BSV's SLIP-44 assignment (236) + account 0; passing other
-        values lets the operator stand up a wallet on a different
-        account or coin type without changing the seed. The chosen
-        path is persisted in the wallet record's ``derivation_path``
-        and surfaced through :class:`WalletRecord`.
+        wallet derives at (``m/44'/coin_type'/account_index'``).
+        ``network`` selects the address-encoding network (``"main"`` or
+        ``"test"``); defaults match BSV mainnet at SLIP-44 coin type
+        236 / account 0. The chosen path *and* network are persisted
+        in the wallet record and surfaced through
+        :class:`WalletRecord` so every later operation (receive,
+        verify, broadcast) knows which network it's targeting.
         """
         if self._state is None:
             raise VaultError("vault not initialized")
@@ -300,6 +328,11 @@ class Vault:
             raise VaultError(
                 f"coin_type and account_index must be non-negative; got "
                 f"coin_type={coin_type}, account_index={account_index}"
+            )
+        if network not in deriv.NETWORK_VALUES:
+            raise VaultError(
+                f"network must be one of {deriv.NETWORK_VALUES!r}, "
+                f"got {network!r}"
             )
 
         # Compute keys; treat the mnemonic and seed as sensitive.
@@ -328,6 +361,7 @@ class Vault:
                     "derivationPath": account.path,
                     "wordCount": word_count,
                     "createdAt": _now_iso(),
+                    "network": network,
                     "wrappedDek": wrapped_dek,
                     "xprvCiphertext": xprv_ciphertext,
                 }
@@ -340,6 +374,7 @@ class Vault:
                     derivation_path=account.path,
                     word_count=word_count,
                     created_at=rec["createdAt"],
+                    network=network,
                 )
             finally:
                 _zero_bytearray(xprv_payload)
@@ -481,10 +516,26 @@ class Vault:
             return
         if not isinstance(data, dict):
             raise VaultError("corrupted vault: top-level not a map")
-        if data.get("vaultVersion") != VAULT_FORMAT_VERSION:
-            raise VaultError(f"unsupported vault version: {data.get('vaultVersion')!r}")
+        on_disk_version = data.get("vaultVersion")
+        if on_disk_version not in SUPPORTED_VAULT_VERSIONS:
+            raise VaultError(
+                f"unsupported vault version: {on_disk_version!r}; "
+                f"this build supports {sorted(SUPPORTED_VAULT_VERSIONS)!r}"
+            )
+        wallets = list(data.get("wallets", []))
+        if on_disk_version < 2:
+            # v1 -> v2: every existing wallet was BSV mainnet. Inject
+            # the explicit network discriminator so list_wallets and
+            # add_wallet can rely on the field being present. The
+            # rewrite happens on the next _save (always at the latest
+            # version), so a v1 file becomes v2 the first time it's
+            # mutated.
+            for w in wallets:
+                w.setdefault("network", deriv.NETWORK_MAIN)
+        # Whatever we read, the in-memory state reports the latest
+        # version so the next save writes the canonical schema.
         self._state = _VaultState(
-            version=data["vaultVersion"],
+            version=VAULT_FORMAT_VERSION,
             created_at=data["createdAt"],
             scrypt_salt=bytes(data["scryptSalt"]),
             pin_attempt_counter=data.get("pinAttemptCounter", 0),
@@ -492,7 +543,7 @@ class Vault:
             locked_until=data.get("lockedUntil"),
             terms_accepted_at=data.get("termsAcceptedAt"),
             terms_version=data.get("termsVersion", 1),
-            wallets=list(data.get("wallets", [])),
+            wallets=wallets,
         )
 
     def _save(self) -> None:

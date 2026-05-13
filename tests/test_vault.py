@@ -157,6 +157,103 @@ def test_add_wallet_distinct_accounts_produce_distinct_xprvs(vault_path: Path) -
     assert b.derivation_path == "m/44'/236'/1'"
 
 
+# ---------------------------------------------------------------------------
+# Network field + v1 -> v2 schema migration
+# ---------------------------------------------------------------------------
+
+
+def test_add_wallet_defaults_to_mainnet(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    rec = v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="m")
+    assert rec.network == "main"
+
+
+def test_add_wallet_persists_testnet(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    rec = v.add_wallet(
+        pin=GOOD_PIN,
+        mnemonic_phrase=CANONICAL_MNEMONIC,
+        label="t",
+        network="test",
+    )
+    assert rec.network == "test"
+    # And it survives a reload from disk.
+    v2 = vlt.Vault(vault_path)
+    listed = v2.list_wallets()
+    assert listed[0].network == "test"
+
+
+def test_add_wallet_rejects_unknown_network(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    with pytest.raises(vlt.VaultError, match="network"):
+        v.add_wallet(
+            pin=GOOD_PIN,
+            mnemonic_phrase=CANONICAL_MNEMONIC,
+            label="bad",
+            network="testnet",  # type: ignore[arg-type]
+        )
+
+
+def test_v1_vault_is_read_as_mainnet_and_rewritten_as_v2(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A vault file written under format v1 (no per-wallet network field)
+    is forward-migrated: list_wallets yields network='main' and the next
+    save rewrites the file as v2.
+    """
+    import cbor2
+
+    vault_path = tmp_path / "vault.bin"
+
+    # Build a v2 vault first so we have realistic encrypted blobs, then
+    # rewrite the on-disk shape to v1 (no `network` keys, vaultVersion=1).
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="legacy")
+
+    raw = cbor2.loads(vault_path.read_bytes())
+    raw["vaultVersion"] = 1
+    for w in raw["wallets"]:
+        w.pop("network", None)
+    vault_path.write_bytes(cbor2.dumps(raw))
+
+    # Re-open: _load forward-migrates in memory.
+    v_legacy = vlt.Vault(vault_path)
+    listed = v_legacy.list_wallets()
+    assert len(listed) == 1
+    assert listed[0].network == "main"
+
+    # First mutation rewrites the file as v2 with explicit "main".
+    v_legacy.add_wallet(
+        pin=GOOD_PIN,
+        mnemonic_phrase=CANONICAL_MNEMONIC,
+        label="modern",
+    )
+    rewritten = cbor2.loads(vault_path.read_bytes())
+    assert rewritten["vaultVersion"] == 2
+    networks = [w.get("network") for w in rewritten["wallets"]]
+    assert networks == ["main", "main"]
+
+
+def test_unsupported_future_version_is_rejected(
+    tmp_path: Path,
+) -> None:
+    import cbor2
+
+    vault_path = tmp_path / "vault.bin"
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    raw = cbor2.loads(vault_path.read_bytes())
+    raw["vaultVersion"] = 99
+    vault_path.write_bytes(cbor2.dumps(raw))
+    with pytest.raises(vlt.VaultError, match="unsupported vault version"):
+        vlt.Vault(vault_path)
+
+
 def test_derive_signing_key_returns_correct_address(vault_path: Path) -> None:
     v = vlt.Vault(vault_path)
     v.create(pin=GOOD_PIN)
