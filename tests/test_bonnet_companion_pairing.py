@@ -38,6 +38,30 @@ def test_pairing_pw1_lines_join_decode_roundtrip(vault_pin_wallet: tuple) -> Non
     assert got.xpub == xpub_expected
 
 
+def test_pairing_pw1_lines_default_chunk_keeps_qr_low_density(
+    vault_pin_wallet: tuple,
+) -> None:
+    """Default chunk size produces multiple low-density frames.
+
+    A regression toward a single >700-char frame would push each QR
+    to ~120 modules square at 176 px (1.5 px/module), which sits at
+    the edge of phone-camera autofocus on a glowing TFT — the
+    hardware checkpoint #3 round-trip on 2026-05-13 found that this
+    failed to scan reliably. Keep each frame at 240 chars so the QR
+    rendered on the panel stays comfortably scannable.
+    """
+    vault, pin, rec = vault_pin_wallet
+    lines = pairing_pw1_lines(vault, pin, rec)
+    # 240-char base64 fragment + the PW1|N|i| header (<=10 chars). Cap
+    # at 256 to leave a small margin for the header without letting the
+    # default drift back into single-frame "version-25" territory.
+    assert all(len(line) <= 256 for line in lines), (
+        f"PW1 frame exceeded 256-char ceiling: {[len(line) for line in lines]}"
+    )
+    blob = join_multipart_lines(lines)
+    assert isinstance(env.decode(blob), env.XpubExport)
+
+
 def test_offer_companion_pairing_screen_confirms_true() -> None:
     s = OfferCompanionPairingScreen("my wallet")
     fb = FrameBuffer()

@@ -17,13 +17,23 @@ def pairing_pw1_lines(
     pin: str,
     wallet: WalletRecord,
     *,
-    chunk_chars: int = 720,
+    chunk_chars: int = 240,
 ) -> list[str]:
     """Return PW1 multipart lines for the gzip+CBOR ``xpub_export`` envelope.
 
     The wallet's network is stamped into the envelope so the companion
     can route the paired wallet to the correct base58check prefix and
     WhatsOnChain endpoint.
+
+    ``chunk_chars`` is deliberately small (240) so each rendered QR
+    stays at a low module count even on the bonnet's 240x240 panel:
+    at 720 chars the encoded payload pushed the QR to version ~25
+    with each module ~1.5 px wide, which sat right at the edge of
+    what a phone camera can autofocus and decode at arm's length.
+    240 chars puts each frame around version 10 (~57 modules square,
+    ~3 px per module at the 176 px QR target) and the multipart
+    animation cycles through 2-4 frames so the scanner has multiple
+    decode attempts per envelope.
     """
     xpub_str = vault.get_account_xpub(pin, wallet.id)
     payload = env.XpubExport(
