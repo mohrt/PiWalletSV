@@ -87,7 +87,11 @@ class WalletInfoScreen:
         )
 
         # Two-column layout: label on the left, value on the right.
+        # Network surfaces near the top so the operator immediately
+        # sees whether they're looking at a real-money wallet or a
+        # testnet one.
         rows: list[tuple[str, str]] = [
+            ("Network", self._format_network(self.wallet.network)),
             ("HD path", self.wallet.derivation_path),
             ("Fingerprint", self.wallet.fingerprint.hex()),
             ("Words", str(self.wallet.word_count)),
@@ -135,3 +139,14 @@ class WalletInfoScreen:
         # long for the column width and the time-of-day isn't useful
         # to the operator at this point.
         return iso.split("T", 1)[0] if "T" in iso else iso[:10]
+
+    @staticmethod
+    def _format_network(net: str) -> str:
+        """Render the wallet's network in a way the operator can act on."""
+        if net == "test":
+            return "TESTNET"
+        if net == "main":
+            return "mainnet"
+        # Future-proof: show whatever is stored if a future schema
+        # adds a new value the renderer hasn't been taught about.
+        return net

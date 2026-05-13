@@ -80,6 +80,10 @@ def _stub_run_screen(
 #: chooser is independently exercised in test_bonnet_hd_path_chooser.py.
 _BSV_DEFAULT: tuple[int, int] = (236, 0)
 
+#: Bypass the network chooser in tests that don't care about it; the
+#: chooser is independently exercised in test_bonnet_network_chooser.py.
+_DEFAULT_NETWORK: str = "main"
+
 
 def test_create_happy_path_saves_wallet(
     monkeypatch: pytest.MonkeyPatch,
@@ -110,7 +114,7 @@ def test_create_happy_path_saves_wallet(
     )
 
     outcome = cw.run_create_wallet(
-        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT, network=_DEFAULT_NETWORK
     )
     assert outcome.error is None
     assert outcome.cancelled is False
@@ -142,7 +146,7 @@ def test_create_cancel_at_show_phrase(
         ),
     )
     outcome = cw.run_create_wallet(
-        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT, network=_DEFAULT_NETWORK
     )
     assert outcome.cancelled is True
     assert outcome.wallet is None
@@ -177,7 +181,7 @@ def test_create_cancel_at_confirm_picker(
         ),
     )
     outcome = cw.run_create_wallet(
-        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT, network=_DEFAULT_NETWORK
     )
     assert outcome.wallet is None
     assert outcome.cancelled is True
@@ -212,7 +216,7 @@ def test_create_saves_custom_label(
         ),
     )
     outcome = cw.run_create_wallet(
-        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT, network=_DEFAULT_NETWORK
     )
     assert outcome.wallet is not None
     assert outcome.wallet.label == "river"
@@ -251,7 +255,7 @@ def test_create_default_label_avoids_collisions(
         ),
     )
     outcome = cw.run_create_wallet(
-        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT, network=_DEFAULT_NETWORK
     )
     assert outcome.wallet is not None
     assert outcome.wallet.label == "wallet-3"
@@ -303,7 +307,12 @@ def test_create_threads_custom_hd_path_into_vault(
     )
 
     outcome = cw.run_create_wallet(
-        display, input_mgr, vault, pin="123456", hd_path=(236, 3)
+        display,
+        input_mgr,
+        vault,
+        pin="123456",
+        hd_path=(236, 3),
+        network=_DEFAULT_NETWORK,
     )
     assert outcome.wallet is not None
     assert outcome.wallet.derivation_path == "m/44'/236'/3'"
@@ -325,6 +334,8 @@ def test_create_runs_hd_path_chooser_when_not_provided(
         return (0, 7)
 
     monkeypatch.setattr(cw, "run_hd_path_chooser", fake_chooser)
+    # Bypass the network chooser; tested separately below.
+    monkeypatch.setattr(cw, "run_network_chooser", lambda *_a, **_k: "main")
 
     def show_done(s):
         s.done = True
@@ -362,6 +373,7 @@ def test_create_cancels_when_chooser_returns_none(
 ) -> None:
     """Cancelling the chooser short-circuits the whole create flow."""
     monkeypatch.setattr(cw, "run_hd_path_chooser", lambda *_a, **_k: None)
+    monkeypatch.setattr(cw, "run_network_chooser", lambda *_a, **_k: "main")
 
     monkeypatch.setattr(
         cw,
@@ -374,6 +386,169 @@ def test_create_cancels_when_chooser_returns_none(
     )
 
     outcome = cw.run_create_wallet(display, input_mgr, vault, pin="123456")
+    assert outcome.cancelled is True
+    assert outcome.wallet is None
+    assert vault.list_wallets() == []
+
+
+# ---------------------------------------------------------------------------
+# Network chooser integration
+# ---------------------------------------------------------------------------
+
+
+def test_create_threads_network_main_into_vault(
+    monkeypatch: pytest.MonkeyPatch,
+    vault: Vault,
+    display: HeadlessDisplay,
+    input_mgr: InputManager,
+) -> None:
+    """Pre-selecting network='main' persists on the WalletRecord."""
+
+    def show_done(s):
+        s.done = True
+        s.result = True
+
+    def pick_done(s: MnemonicConfirmPickScreen):
+        s.done = True
+        s.result = " ".join(s.phrase_words)
+
+    monkeypatch.setattr(
+        cw,
+        "run_screen",
+        _stub_run_screen(
+            {
+                WordCountChooser: _wc_12,
+                EntropySourceChooser: _entropy_csr,
+                ShowPhraseScreen: show_done,
+                MnemonicConfirmPickScreen: pick_done,
+                WalletLabelEntryScreen: _label_use_default,
+            },
+        ),
+    )
+
+    outcome = cw.run_create_wallet(
+        display,
+        input_mgr,
+        vault,
+        pin="123456",
+        hd_path=_BSV_DEFAULT,
+        network="main",
+    )
+    assert outcome.wallet is not None
+    assert outcome.wallet.network == "main"
+    assert vault.list_wallets()[0].network == "main"
+
+
+def test_create_threads_network_test_into_vault(
+    monkeypatch: pytest.MonkeyPatch,
+    vault: Vault,
+    display: HeadlessDisplay,
+    input_mgr: InputManager,
+) -> None:
+    """Pre-selecting network='test' persists on the WalletRecord."""
+
+    def show_done(s):
+        s.done = True
+        s.result = True
+
+    def pick_done(s: MnemonicConfirmPickScreen):
+        s.done = True
+        s.result = " ".join(s.phrase_words)
+
+    monkeypatch.setattr(
+        cw,
+        "run_screen",
+        _stub_run_screen(
+            {
+                WordCountChooser: _wc_12,
+                EntropySourceChooser: _entropy_csr,
+                ShowPhraseScreen: show_done,
+                MnemonicConfirmPickScreen: pick_done,
+                WalletLabelEntryScreen: _label_use_default,
+            },
+        ),
+    )
+
+    outcome = cw.run_create_wallet(
+        display,
+        input_mgr,
+        vault,
+        pin="123456",
+        hd_path=_BSV_DEFAULT,
+        network="test",
+    )
+    assert outcome.wallet is not None
+    assert outcome.wallet.network == "test"
+    assert vault.list_wallets()[0].network == "test"
+
+
+def test_create_runs_network_chooser_when_network_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+    vault: Vault,
+    display: HeadlessDisplay,
+    input_mgr: InputManager,
+) -> None:
+    """If ``network`` is omitted, the create flow runs the chooser."""
+    chooser_called = {"called": False}
+
+    def fake_net_chooser(_d, _m, **_):
+        chooser_called["called"] = True
+        return "test"
+
+    monkeypatch.setattr(cw, "run_network_chooser", fake_net_chooser)
+
+    def show_done(s):
+        s.done = True
+        s.result = True
+
+    def pick_done(s: MnemonicConfirmPickScreen):
+        s.done = True
+        s.result = " ".join(s.phrase_words)
+
+    monkeypatch.setattr(
+        cw,
+        "run_screen",
+        _stub_run_screen(
+            {
+                WordCountChooser: _wc_12,
+                EntropySourceChooser: _entropy_csr,
+                ShowPhraseScreen: show_done,
+                MnemonicConfirmPickScreen: pick_done,
+                WalletLabelEntryScreen: _label_use_default,
+            },
+        ),
+    )
+
+    outcome = cw.run_create_wallet(
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+    )
+    assert chooser_called["called"]
+    assert outcome.wallet is not None
+    assert outcome.wallet.network == "test"
+
+
+def test_create_cancels_when_network_chooser_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+    vault: Vault,
+    display: HeadlessDisplay,
+    input_mgr: InputManager,
+) -> None:
+    """Cancelling the network chooser short-circuits the whole create flow."""
+    monkeypatch.setattr(cw, "run_network_chooser", lambda *_a, **_k: None)
+
+    monkeypatch.setattr(
+        cw,
+        "run_screen",
+        _stub_run_screen(
+            {
+                WordCountChooser: _wc_12,
+            },
+        ),
+    )
+
+    outcome = cw.run_create_wallet(
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+    )
     assert outcome.cancelled is True
     assert outcome.wallet is None
     assert vault.list_wallets() == []

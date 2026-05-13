@@ -24,6 +24,7 @@ def _wallet(
     derivation_path: str = "m/44'/236'/0'",
     word_count: int = 12,
     created_at: str = "2026-05-13T08:30:00+00:00",
+    network: str = "main",
 ) -> WalletRecord:
     return WalletRecord(
         id="w-0",
@@ -32,6 +33,7 @@ def _wallet(
         derivation_path=derivation_path,
         word_count=word_count,
         created_at=created_at,
+        network=network,  # type: ignore[arg-type]
     )
 
 
@@ -110,3 +112,24 @@ def test_format_created_at_handles_no_t_separator() -> None:
     s = WalletInfoScreen(wallet=_wallet())
     assert s._format_created_at("2026-05-13") == "2026-05-13"
     assert s._format_created_at("epoch-marker") == "epoch-mark"
+
+
+def test_format_network_renders_main_and_test() -> None:
+    """Network label is operator-readable; 'test' shouts in caps so it
+    can't be confused with a real-money wallet at a glance."""
+    assert WalletInfoScreen._format_network("main") == "mainnet"
+    assert WalletInfoScreen._format_network("test") == "TESTNET"
+
+
+def test_format_network_passes_unknown_through() -> None:
+    """A future schema value must render as-is rather than crashing."""
+    assert WalletInfoScreen._format_network("regtest") == "regtest"
+
+
+def test_draw_main_and_test_both_render() -> None:
+    """Smoke: both networks paint without error and produce different bytes."""
+    main_fb = FrameBuffer()
+    test_fb = FrameBuffer()
+    WalletInfoScreen(wallet=_wallet(network="main")).draw(main_fb)
+    WalletInfoScreen(wallet=_wallet(network="test")).draw(test_fb)
+    assert main_fb.image.tobytes() != test_fb.image.tobytes()

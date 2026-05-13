@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from piwallet.bonnet.choosers import EntropySourceChooser, WordCountChooser
 from piwallet.bonnet.entropy_screens import CameraEntropyScreen, DiceEntropyScreen
 from piwallet.bonnet.hd_path_chooser import run_hd_path_chooser
+from piwallet.bonnet.network_chooser import run_network_chooser
+from piwallet.core import derivation as deriv
 from piwallet.core import mnemonic as mnem
 from piwallet.core.mnemonic import MnemonicError
 from piwallet.core.vault import Vault, VaultError, WalletRecord
@@ -50,16 +52,20 @@ def run_create_wallet(
     target_fps: int = 30,
     word_count: int | None = None,
     hd_path: tuple[int, int] | None = None,
+    network: deriv.Network | None = None,
     idle_wake: IdleWakeTracker | None = None,
 ) -> CreateWalletOutcome:
     """Walk the operator through wallet creation.
 
-    ``word_count`` and ``hd_path`` are optional pre-selected choices
-    (caller already prompted for them); if either is ``None`` the
-    matching chooser screen runs inline. ``hd_path`` is a
-    ``(coin_type, account_index)`` tuple — defaults to BSV
-    ``(236, 0)`` if the operator accepts the preset chooser's first
-    row.
+    ``word_count``, ``network``, and ``hd_path`` are optional
+    pre-selected choices (caller already prompted for them); if any
+    is ``None`` the matching chooser screen runs inline.
+
+    ``network`` selects the wallet's address-encoding network
+    (``"main"`` or ``"test"``); the network chooser screen runs
+    after the word-count chooser and before the HD path chooser.
+    Defaults are mainnet + the BSV BIP44 path
+    ``m/44'/236'/0'`` if both choosers accept their preset rows.
     """
     wc = word_count
     if wc is None:
@@ -71,6 +77,17 @@ def run_create_wallet(
 
     if wc not in (12, 24):
         raise ValueError(f"word_count must be 12 or 24 (or None); got {wc}")
+
+    chosen_network: deriv.Network | None = network
+    if chosen_network is None:
+        chosen_network = run_network_chooser(
+            display,
+            input_mgr,
+            target_fps=target_fps,
+            idle_wake=idle_wake,
+        )
+        if chosen_network is None:
+            return CreateWalletOutcome(cancelled=True)
 
     chosen_path = hd_path
     if chosen_path is None:
@@ -134,6 +151,7 @@ def run_create_wallet(
             label,
             coin_type=coin_type,
             account_index=account_index,
+            network=chosen_network,
         )
         return CreateWalletOutcome(wallet=rec)
     except MnemonicError as exc:
