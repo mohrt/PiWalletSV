@@ -15,11 +15,12 @@ The CLI entry point is ``piwallet bonnet`` in :mod:`piwallet.cli`.
 
 from piwallet.bonnet.unlock import UnlockOutcome, UnlockScreen
 from piwallet.bonnet.wallet_detail import WalletDetailScreen
-from piwallet.bonnet.wallet_list import WalletListScreen
+from piwallet.bonnet.wallet_list import WalletListAction, WalletListScreen
 
 __all__ = [
     "UnlockOutcome",
     "UnlockScreen",
     "WalletDetailScreen",
+    "WalletListAction",
     "WalletListScreen",
 ]

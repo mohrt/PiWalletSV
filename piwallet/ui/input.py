@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, ClassVar
@@ -190,9 +190,10 @@ class InputManager:
                           already over by the time we sample. Hardware
                           tuning may bump this to ~10-15 ms if a polling
                           loop runs faster than 100 Hz.
-    long_ms        700    A button held continuously past this threshold
-                          emits a single LONG event. Used by "hold A to
-                          accept" disclaimer flows.
+    long_ms        700    Held past this threshold (same for every button unless
+                          overridden via ``long_press_ms_by_button``) emits one
+                          ``EventKind.LONG`` per press. Used by disclaimer
+                          hold-A / hold-B and other deliberate gestures.
     repeat_initial 400    Delay after PRESS before the first REPEAT.
     repeat_ms      120    Cadence of subsequent REPEATs while held.
     =========== ========= =================================================
@@ -204,6 +205,7 @@ class InputManager:
         *,
         debounce_ms: int = 0,
         long_ms: int = 700,
+        long_press_ms_by_button: Mapping[Button, int] | None = None,
         repeat_initial_ms: int = 400,
         repeat_ms: int = 120,
         clock: Callable[[], int] = _wall_clock_ms,
@@ -212,10 +214,15 @@ class InputManager:
             raise ValueError("repeat timings must be positive")
         if debounce_ms < 0 or long_ms <= 0:
             raise ValueError("debounce_ms must be non-negative and long_ms positive")
+        overrides: dict[Button, int] = dict(long_press_ms_by_button or ())
+        bad = [(b, ms) for b, ms in overrides.items() if ms <= 0]
+        if bad:
+            raise ValueError(f"long_press_ms_by_button values must be positive: {bad!r}")
 
         self._backend = backend
         self._debounce_ms = debounce_ms
         self._long_ms = long_ms
+        self._long_press_ms_by_button: dict[Button, int] = overrides
         self._repeat_initial_ms = repeat_initial_ms
         self._repeat_ms = repeat_ms
         self._clock = clock
@@ -233,6 +240,20 @@ class InputManager:
         self._last_repeat_ms: dict[Button, int] = {b: 0 for b in ALL_BUTTONS}
         # Whether we've already emitted the LONG event for this press.
         self._long_fired: dict[Button, bool] = {b: False for b in ALL_BUTTONS}
+
+    def now_ms(self) -> int:
+        """Monotonic milliseconds (same clock as debounce / long-press timing)."""
+        return self._clock()
+
+    def raw_any_pressed(self) -> bool:
+        """True if any hardware button reads pressed *right now* (pre-debounce).
+
+        Used to wake the display from idle blanking on the first 30 Hz sample
+        where the user has closed a contact, before :meth:`poll` may emit a
+        debounced :class:`Event`.
+        """
+        raw = self._backend.read_raw()
+        return any(raw.get(b, False) for b in ALL_BUTTONS)
 
     # -- queries used by widget code ----------------------------------
 
@@ -297,7 +318,13 @@ class InputManager:
                     # Defensive: shouldn't happen.
                     continue
                 held = now - started
-                if not self._long_fired[button] and held >= self._long_ms:
+                long_threshold_ms = (
+                    self._long_press_ms_by_button.get(button, self._long_ms)
+                )
+                if (
+                    not self._long_fired[button]
+                    and held >= long_threshold_ms
+                ):
                     self._long_fired[button] = True
                     events.append(Event(button, EventKind.LONG, now))
                 # Repeats only kick in after the initial delay.

@@ -166,11 +166,10 @@ def test_b_press_at_slot_zero_just_clears_does_not_move() -> None:
     assert s.cursor == 0
 
 
-def test_b_long_cancels_flow() -> None:
+def test_b_long_does_not_finish_or_cancel() -> None:
     s = PinEntryScreen(length=4, digits=[1, 2, 3, 4])
     s.on_event(_evt(Button.B, EventKind.LONG))
-    assert s.done is True
-    assert s.result is None
+    assert s.done is False
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +238,16 @@ def test_draw_with_subtitle_and_partial_pin() -> None:
     fb = FrameBuffer()
     s = PinEntryScreen(digits=[1, 2, 3, None, None, None], subtitle="2 attempts left")
     s.cursor = 3
+    s.draw(fb)  # no exception
+
+
+def test_draw_with_subtitle_alert_smoke() -> None:
+    fb = FrameBuffer()
+    s = PinEntryScreen(
+        length=4,
+        subtitle_alert="Wrong PIN",
+        subtitle="9 attempts left",
+    )
     s.draw(fb)  # no exception
 
 

@@ -1,0 +1,8 @@
+# Install as /etc/systemd/journald.conf.d/piwallet.conf
+# Caps persistent journal footprint so idle logs do not overrun small SD cards.
+#
+[Journal]
+Storage=persistent
+SystemMaxUse=32M
+SystemMaxFileSize=8M
+MaxRetentionSec=2week

@@ -58,7 +58,14 @@ def test_left_decrements_clamped_at_zero() -> None:
     assert s.index == 0
 
 
-def test_b_press_goes_back() -> None:
+def test_select_returns_back() -> None:
+    s = WalletDetailScreen(wallet=_wallet(), derive_address=_derive_stub)
+    s.on_event(_evt(Button.SELECT))
+    assert s.done is True
+    assert s.result == "back"
+
+
+def test_b_press_returns_back() -> None:
     s = WalletDetailScreen(wallet=_wallet(), derive_address=_derive_stub)
     s.on_event(_evt(Button.B, EventKind.PRESS))
     assert s.done is True

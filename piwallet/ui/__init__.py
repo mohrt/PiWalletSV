@@ -32,7 +32,10 @@ from piwallet.ui.input import (
     InputManager,
     open_input,
 )
+from piwallet.ui.label_entry import WalletLabelEntryScreen
 from piwallet.ui.pin_entry import PinEntryScreen, attempts_subtitle
+from piwallet.ui.show_phrase import ShowPhraseScreen
+from piwallet.ui.word_entry import MnemonicEntryScreen, WordEntryScreen
 
 __all__ = [
     "DISPLAY_HEIGHT",
@@ -46,7 +49,11 @@ __all__ = [
     "HeadlessDisplay",
     "InputBackend",
     "InputManager",
+    "MnemonicEntryScreen",
     "PinEntryScreen",
+    "ShowPhraseScreen",
+    "WalletLabelEntryScreen",
+    "WordEntryScreen",
     "attempts_subtitle",
     "open_display",
     "open_input",

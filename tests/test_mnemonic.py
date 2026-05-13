@@ -145,3 +145,11 @@ def test_autocomplete_limit() -> None:
 
 def test_autocomplete_case_insensitive() -> None:
     assert m.autocomplete("Abs") == m.autocomplete("abs")
+
+
+def test_words_starting_with_ma_includes_all_and_maze_last() -> None:
+    stem = m.words_starting_with("ma")
+    assert stem[0] == "machine"
+    assert stem[-1] == "maze"
+    assert len(stem) == 33
+    assert m.autocomplete("ma", limit=5) == stem[:5]

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from piwallet.ui.app import run_screen
+from piwallet.ui.app import (
+    IdleWakeTracker,
+    idle_suppresses_frame_paint,
+    run_screen,
+)
 from piwallet.ui.display import FrameBuffer, HeadlessDisplay
 from piwallet.ui.input import Button, Event, EventKind, FakeInputBackend, InputManager
 
@@ -111,6 +115,64 @@ def test_scripted_input_drives_menu_to_confirmation() -> None:
 
     assert screen.done is True
     assert screen.result == "receive"
+
+
+def test_idle_suppresses_frame_paint_after_timeout() -> None:
+    backend = FakeInputBackend()
+    clock = _Clock(0)
+    mgr = InputManager(backend, clock=clock, debounce_ms=0)
+    idle = IdleWakeTracker(mgr, timeout_ms=500)
+    assert idle.last_activity_ms == 0
+    clock.tick(600)
+    display = HeadlessDisplay()
+    assert idle_suppresses_frame_paint(
+        display, idle, [], mgr.now_ms(), input_mgr=mgr
+    ) is True
+    assert idle.asleep
+    assert display.backlight_on is False
+
+
+def test_idle_wake_on_next_input() -> None:
+    backend = FakeInputBackend()
+    clock = _Clock(0)
+    mgr = InputManager(backend, clock=clock, debounce_ms=0)
+    idle = IdleWakeTracker(mgr, timeout_ms=100)
+    clock.tick(200)
+    display = HeadlessDisplay()
+    assert idle_suppresses_frame_paint(
+        display, idle, [], mgr.now_ms(), input_mgr=mgr
+    ) is True
+    assert idle.asleep
+    assert display.backlight_on is False
+    backend.press(Button.A)
+    events = mgr.poll()
+    assert events
+    assert idle_suppresses_frame_paint(
+        display, idle, events, mgr.now_ms(), input_mgr=mgr
+    ) is False
+    assert not idle.asleep
+    assert display.backlight_on is True
+
+
+def test_idle_wake_on_raw_before_debounced_press() -> None:
+    """First poll after contact may emit zero events when debounce_ms > 0."""
+    backend = FakeInputBackend()
+    clock = _Clock(0)
+    mgr = InputManager(backend, clock=clock, debounce_ms=40)
+    idle = IdleWakeTracker(mgr, timeout_ms=100)
+    clock.tick(200)
+    display = HeadlessDisplay()
+    assert idle_suppresses_frame_paint(
+        display, idle, [], mgr.now_ms(), input_mgr=mgr
+    ) is True
+    backend.press(Button.A)
+    events = mgr.poll()
+    # Debounce hides the edge on this sample; without raw wake we'd stay blank.
+    assert idle_suppresses_frame_paint(
+        display, idle, events, mgr.now_ms(), input_mgr=mgr
+    ) is False
+    assert not idle.asleep
+    assert display.backlight_on is True
 
 
 def test_run_screen_respects_max_iterations() -> None:

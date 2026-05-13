@@ -1,0 +1,22 @@
+# Example: adjust paths/User= for your Pi image, then install to
+# /etc/systemd/system/piwallet-bonnet.service && systemctl enable --now piwallet-bonnet
+#
+[Unit]
+Description=PiWalletSV bonnet UI
+After=network-pre.target graphical.target
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi
+# Redundant defaults (process also applies them) — safe to tighten here for ops review.
+Environment=LIBCAMERA_LOG_LEVELS=*:WARN
+Environment=PICAMERA2_LOG_LEVEL=0
+Environment=PIWALLET_LOG_LEVEL=WARNING
+ExecStart=/home/pi/PiWallet/.venv/bin/piwallet bonnet --vault-path /home/pi/.piwallet-dev/vault.bin
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

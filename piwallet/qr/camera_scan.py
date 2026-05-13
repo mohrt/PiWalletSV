@@ -15,6 +15,9 @@ from collections.abc import Callable
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
+from PIL import Image
+
+from piwallet.camera_lcd import rgb888_thumbnail
 from piwallet.qr.multipart import MultipartAssembler, MultipartQrError
 
 if TYPE_CHECKING:
@@ -68,12 +71,23 @@ def scan_multipart_from_camera(
     autofocus: str = "continuous",
     settle_s: float = 1.0,
     on_progress: ProgressCallback | None = None,
+    on_lcd_thumbnail: Callable[[Image.Image], None] | None = None,
+    lcd_thumbnail_interval_s: float = 0.28,
+    mono_s: Callable[[], float] | None = None,
 ) -> bytes:
     """Block until all PW1 QR fragments are seen, then return assembled bytes.
 
     Press Ctrl+C to abort. Raises :class:`MultipartQrError` on conflicting
     fragments. Propagates ``RuntimeError`` when camera or pyzbar is missing.
+
+    When ``on_lcd_thumbnail`` is set (e.g. bonnet TFT), decode frames drive the loop
+    and a downscaled PIL thumbnail is emitted at ``lcd_thumbnail_interval_s`` intervals
+    for a low-rate live view (caller pastes onto a framebuffer separately).
     """
+    from piwallet.runtime_logging import prepare_runtime_for_cli_camera_scan
+
+    prepare_runtime_for_cli_camera_scan()
+
     picamera_cls, controls_mod = _import_camera_stack()
     decode = _import_pyzbar_decode()
 
@@ -86,11 +100,19 @@ def scan_multipart_from_camera(
     configure_autofocus(cam, controls_mod, autofocus)
     time.sleep(settle_s)
 
+    mono = mono_s if mono_s is not None else time.monotonic
+    last_thumb_mono = mono() - lcd_thumbnail_interval_s
+
     frame_no = 0
     try:
         while True:
             frame_no += 1
             frame = cam.capture_array("main")
+            if on_lcd_thumbnail is not None:
+                now = mono()
+                if now - last_thumb_mono >= lcd_thumbnail_interval_s:
+                    on_lcd_thumbnail(rgb888_thumbnail(frame, max_edge=208))
+                    last_thumb_mono = now
             results = decode(frame)
             if not results:
                 if on_progress:

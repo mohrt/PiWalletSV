@@ -112,6 +112,8 @@ class ListView:
 
     items: list[ListItem]
     title: str = ""
+    #: When set, used for the title bar text instead of :data:`COLOR_ACCENT`.
+    title_color: tuple[int, int, int] | None = None
     cursor: int = 0
     confirmed: object | None = None
     row_height: int = 28
@@ -183,7 +185,7 @@ class ListView:
                 self.title_height // 2,
                 self.title,
                 size=14,
-                color=COLOR_ACCENT,
+                color=self.title_color or COLOR_ACCENT,
                 anchor="mm",
             )
             y = self.title_height
@@ -280,8 +282,12 @@ class Modal:
             )
 
 
-def _wrap_lines(text: str, *, max_chars: int) -> list[str]:
-    """Greedy word-wrap, preserving explicit newlines."""
+def wrap_text_lines(text: str, *, max_chars: int) -> list[str]:
+    """Greedy word-wrap, preserving explicit newlines.
+
+    Breaks at spaces so words are not split mid-token unless a single
+    word exceeds ``max_chars`` (then it is hard-broken).
+    """
     out: list[str] = []
     for paragraph in text.split("\n"):
         if not paragraph.strip():
@@ -304,6 +310,10 @@ def _wrap_lines(text: str, *, max_chars: int) -> list[str]:
         if line:
             out.append(line)
     return out
+
+
+def _wrap_lines(text: str, *, max_chars: int) -> list[str]:
+    return wrap_text_lines(text, max_chars=max_chars)
 
 
 # ---------------------------------------------------------------------------

@@ -2,12 +2,14 @@
 
 Wraps :class:`piwallet.ui.pin_entry.PinEntryScreen` with a verify
 callback so the surrounding bonnet flow can recover or fail cleanly.
+Wrong PIN retries immediately show a fresh PIN entry with one fewer
+attempt, a visible Wrong PIN line in red, and the updated attempts hint
+(no interim cancel path).
 
 Outcome contract (returned via ``result``):
 
 * ``("ok", pin)``       on success - caller keeps the PIN in scope only
                          as long as it needs it.
-* ``("cancelled", None)`` if the user long-pressed B.
 * ``("wiped", None)``    if the vault wiped itself after too many tries.
 """
 
@@ -20,8 +22,9 @@ from typing import Literal
 from piwallet.ui.display import COLOR_DANGER, FrameBuffer
 from piwallet.ui.input import Event
 from piwallet.ui.pin_entry import PinEntryScreen, attempts_subtitle
+from piwallet.ui.widgets import Modal
 
-UnlockOutcomeKind = Literal["ok", "cancelled", "wiped"]
+UnlockOutcomeKind = Literal["ok", "wiped"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,13 +55,14 @@ class UnlockScreen:
     def __post_init__(self) -> None:
         self.pin_entry = self._make_pin_screen()
 
-    def _make_pin_screen(self) -> PinEntryScreen:
+    def _make_pin_screen(self, *, after_wrong_pin: bool = False) -> PinEntryScreen:
         subtitle, color = attempts_subtitle(self.attempts_remaining)
         return PinEntryScreen(
             length=self.length,
             title="Unlock vault",
             subtitle=subtitle,
             subtitle_color=color,
+            subtitle_alert="Wrong PIN" if after_wrong_pin else "",
             masked=False,  # show digits while editing; mask not enabled for v1
         )
 
@@ -70,11 +74,7 @@ class UnlockScreen:
         self.pin_entry.on_event(event)
         if not self.pin_entry.done:
             return
-        # PIN entry finished: either confirmed or cancelled.
-        if self.pin_entry.result is None:
-            self.done = True
-            self.result = UnlockOutcome(kind="cancelled", pin=None)
-            return
+        assert self.pin_entry.result is not None
         pin = str(self.pin_entry.result)
         outcome, info = self.verify(pin)
         if outcome == "ok":
@@ -94,15 +94,10 @@ class UnlockScreen:
                 self.done = True
                 self.result = UnlockOutcome(kind="wiped", pin=None)
                 return
-            # Re-prompt with an updated subtitle.
-            self.pin_entry = self._make_pin_screen()
+            self.pin_entry = self._make_pin_screen(after_wrong_pin=True)
 
     def draw(self, fb: FrameBuffer) -> None:
-        self.pin_entry.draw(fb)
-        # If the vault has been wiped (last try just blew it), paint a
-        # final banner before the surrounding loop swaps screens.
         if self.done and self.result is not None and self.result.kind == "wiped":
-            from piwallet.ui.widgets import Modal
             Modal(
                 title="Vault wiped",
                 body=(
@@ -112,3 +107,5 @@ class UnlockScreen:
                 footer="hold B to exit",
                 accent=COLOR_DANGER,
             ).draw(fb)
+            return
+        self.pin_entry.draw(fb)

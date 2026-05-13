@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from piwallet.bonnet.wallet_list import WalletListScreen
+from piwallet.bonnet.wallet_list import WalletListAction, WalletListScreen
 from piwallet.core.vault import WalletRecord
 from piwallet.ui.display import FrameBuffer
 from piwallet.ui.input import Button, Event, EventKind
@@ -42,15 +42,33 @@ def test_list_long_b_exits_with_none() -> None:
     assert s.result is None
 
 
-def test_list_empty_shows_placeholder_and_cant_confirm() -> None:
+def test_list_empty_still_offers_actions() -> None:
     s = WalletListScreen(wallets=[])
+    # First row is now "+ New wallet"; A confirms it.
     s.on_event(_evt(Button.A))
-    # Only item is disabled; A is a no-op.
-    assert s.done is False
-    # Long-B still works as a way out.
-    s.on_event(_evt(Button.B, EventKind.LONG))
     assert s.done is True
-    assert s.result is None
+    assert s.result is WalletListAction.NEW
+
+
+def test_list_offers_new_and_restore_at_bottom() -> None:
+    wallets = [_wallet("daily", 0), _wallet("savings", 1)]
+    s = WalletListScreen(wallets=wallets)
+    # 2 wallets + 2 actions = 4 rows. Cursor 0 -> 1 -> 2 -> 3.
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.DOWN))
+    assert s.cursor == 2
+    s.on_event(_evt(Button.A))
+    assert s.done is True
+    assert s.result is WalletListAction.NEW
+
+
+def test_list_restore_action() -> None:
+    wallets = [_wallet("daily")]
+    s = WalletListScreen(wallets=wallets)
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.A))
+    assert s.result is WalletListAction.RESTORE
 
 
 def test_list_draws() -> None:

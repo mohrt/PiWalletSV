@@ -3,8 +3,8 @@
 Reusable, domain-agnostic numeric-PIN entry widget. The screen exposes
 fixed-length digit slots (default 6); the user adjusts each slot with
 the joystick and confirms with A. On confirm the entered PIN is
-returned as a string in ``result``. Long-press B cancels and returns
-``None``.
+returned as a string in ``result``. There is intentionally no bail-out:
+the enclosing flow must retain the device gate.
 
 The screen is intentionally pure: it does NOT call the vault. Compose
 it inside a higher-level "unlock" flow that owns the verify-and-retry
@@ -22,7 +22,7 @@ RIGHT  Move active slot right (clamped at last slot).
 A      Confirm. If any slot is empty, advance to the next
        empty slot instead.
 B PRESS Backspace: clear the current slot and move left.
-B LONG Cancel the flow (``result = None``, ``done = True``).
+       (Long presses on ``B`` are ignored so accidental holds do not quit.)
 SELECT Same as A.
 ====== ======================================================
 
@@ -63,10 +63,11 @@ class PinEntryScreen:
     title: str = "Enter PIN"
     subtitle: str = ""  # e.g. "3 attempts left"
     subtitle_color: tuple[int, int, int] = COLOR_DIM
+    subtitle_alert: str = ""  # optional red line above subtitle (e.g. "Wrong PIN")
     masked: bool = False
     cursor: int = 0
     done: bool = False
-    result: object | None = None  # str pin on confirm, None on cancel
+    result: object | None = None  # str pin on confirm; None while editing
     digits: list[int | None] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -101,9 +102,6 @@ class PinEntryScreen:
             self._confirm_or_advance()
         elif b == Button.B and k == EventKind.PRESS:
             self._backspace()
-        elif b == Button.B and k == EventKind.LONG:
-            self.done = True
-            self.result = None
 
     def _cycle(self, delta: int) -> None:
         cur = self.digits[self.cursor]
@@ -164,12 +162,24 @@ class PinEntryScreen:
             anchor="mm",
         )
 
-        # Optional subtitle (e.g. "3 attempts left").
+        # Subtitle / helper lines under the title bar.
+        y_meta = title_h + 12
+        if self.subtitle_alert:
+            draw_text(
+                fb,
+                DISPLAY_WIDTH // 2,
+                y_meta,
+                self.subtitle_alert,
+                size=11,
+                color=COLOR_DANGER,
+                anchor="mm",
+            )
+            y_meta += 16
         if self.subtitle:
             draw_text(
                 fb,
                 DISPLAY_WIDTH // 2,
-                title_h + 12,
+                y_meta,
                 self.subtitle,
                 size=11,
                 color=self.subtitle_color,
@@ -201,7 +211,7 @@ class PinEntryScreen:
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 16,
-            "A confirm   B delete   hold B cancel",
+            "A confirm   B clear digit",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

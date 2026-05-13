@@ -137,6 +137,11 @@ The display should:
   `piwallet/ui/input.py::BonnetInputBackend._PINS`.)
 - LONG-press timing comfortable? (Bumpable via
   `piwallet/ui/app.py::make_input_manager(long_ms=...)`.)
+- **Top third random noise while the bottom looks fine?**
+  Wrong ST7789 row offset. Adafruit bonnet **[4506](https://www.adafruit.com/product/4506)**
+  needs ``y_offset=80`` — that is now the default in
+  ``piwallet/ui/display.py::ST7789Display``. Sanity script tunable via
+  ``scripts/bonnet_sanity.py --y-offset``.
 
 ## 7. Known gaps surfaced here
 

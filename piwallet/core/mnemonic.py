@@ -17,6 +17,7 @@ Important security notes:
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 
 from bsv.hd import mnemonic_from_entropy
@@ -60,6 +61,48 @@ def generate(word_count: int = 12) -> str:
         )
     entropy = secrets.token_bytes(WORDS_TO_ENTROPY_BYTES[word_count])
     return mnemonic_from_entropy(entropy)
+
+
+def mnemonic_from_material(material: bytes, word_count: int, *, domain: bytes) -> str:
+    """Build a BIP39 phrase from arbitrary material (camera JPEG, dice rolls, …).
+
+    The material is domain-separated and SHA-256 compressed to the exact
+    entropy length BIP39 expects (16 bytes for 12 words, 32 for 24). This is
+    not a substitute for a CSPRNG when ``material`` is low-entropy; callers
+    must collect enough physical entropy (long dice sequences, rich photos).
+
+    :param material: raw bytes to mix (e.g. JPEG file bytes, packed dice rolls).
+    :param domain: short stable tag, e.g. ``b"pwsv-cam-v1"`` or ``b"pwsv-dice-v1"``.
+    """
+    if word_count not in WORDS_TO_ENTROPY_BYTES:
+        raise MnemonicError(
+            f"unsupported word_count {word_count}; must be one of {SUPPORTED_WORD_COUNTS}"
+        )
+    nbytes = WORDS_TO_ENTROPY_BYTES[word_count]
+    digest = hashlib.sha256(domain + material).digest()
+    entropy = digest[:nbytes]
+    return mnemonic_from_entropy(entropy)
+
+
+_DICE_DOMAIN = b"piwalletsv-dice-v1\x00"
+_CAMERA_DOMAIN = b"piwalletsv-camera-v1\x00"
+
+
+def mnemonic_from_dice_rolls(rolls: list[int], word_count: int) -> str:
+    """Derive a mnemonic from base-6 die faces (1..6)."""
+    if not rolls:
+        raise MnemonicError("no dice rolls recorded")
+    for r in rolls:
+        if not isinstance(r, int) or not (1 <= r <= 6):
+            raise MnemonicError(f"invalid die face: {r!r} (expect 1..6)")
+    return mnemonic_from_material(bytes(rolls), word_count, domain=_DICE_DOMAIN)
+
+
+def mnemonic_from_camera_jpeg(jpeg_bytes: bytes, word_count: int) -> str:
+    """Derive a mnemonic from one camera still (JPEG bytes)."""
+    if not jpeg_bytes:
+        raise MnemonicError("empty camera capture")
+    return mnemonic_from_material(jpeg_bytes, word_count, domain=_CAMERA_DOMAIN)
 
 
 def validate(mnemonic: str) -> None:
@@ -108,16 +151,29 @@ def seed_from_mnemonic(mnemonic: str, passphrase: str = "") -> bytes:
     return seed
 
 
-def autocomplete(prefix: str, limit: int = 8) -> list[str]:
-    """Return BIP39 words starting with `prefix`, for joystick word entry.
+def words_starting_with(prefix: str) -> list[str]:
+    """All BIP39 English words whose spelling starts with ``prefix``.
 
-    Used by the Phase 2 bonnet UI's Trezor-style word picker. The function is
-    here in `core` (not `ui`) because it's pure logic and useful for tests.
+    Alphabetical order (same as :data:`BIP39_WORDLIST`). Used by the bonnet
+    word picker for correct unique-match detection; previews may show only a
+    head/tail subset when the stem matches many entries (e.g. ``ma…`` lists
+    33 words until you narrow).
 
-    :param prefix: lowercase letters typed so far. Empty string returns [].
-    :param limit: cap on suggestions returned.
+    Empty ``prefix`` returns an empty list.
     """
     if not prefix:
         return []
     p = prefix.lower()
-    return [w for w in BIP39_WORDLIST if w.startswith(p)][:limit]
+    return [w for w in BIP39_WORDLIST if w.startswith(p)]
+
+
+def autocomplete(prefix: str, limit: int = 8) -> list[str]:
+    """Return the first ``limit`` BIP39 words starting with ``prefix``.
+
+    For the full list prefer :func:`words_starting_with` (cheap: at most 2048
+    string checks per call).
+
+    :param prefix: lowercase letters typed so far. Empty string returns [].
+    :param limit: cap on suggestions returned.
+    """
+    return words_starting_with(prefix)[:limit]

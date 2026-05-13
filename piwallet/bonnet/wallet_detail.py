@@ -15,7 +15,8 @@ Controls
 LEFT       Previous receive index (clamped at 0).
 RIGHT      Next receive index.
 A          Same as RIGHT (advance to a fresh address).
-B PRESS    Back to the wallet list.
+SELECT     Same as B PRESS (back to manage menu).
+B PRESS    Back to the manage menu.
 B LONG     Exit the bonnet app (returned to caller).
 =========  ==================================================
 """
@@ -71,6 +72,9 @@ class WalletDetailScreen:
                 self.index -= 1
         elif b in (Button.RIGHT, Button.A) and k == EventKind.PRESS:
             self.index += 1
+        elif b == Button.SELECT and k == EventKind.PRESS:
+            self.done = True
+            self.result = "back"
         elif b == Button.B and k == EventKind.PRESS:
             self.done = True
             self.result = "back"
@@ -164,8 +168,17 @@ class WalletDetailScreen:
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 12,
-            "L/R index   A next   B back",
+            DISPLAY_HEIGHT - 24,
+            "L/R index   A next",
+            size=10,
+            color=COLOR_DIM,
+            anchor="mm",
+        )
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            DISPLAY_HEIGHT - 10,
+            "B back   hold B quit app",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

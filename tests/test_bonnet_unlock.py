@@ -62,10 +62,11 @@ def test_unlock_wrong_pin_decrements_attempts_and_re_prompts() -> None:
     screen = UnlockScreen(verify=verify, length=4, attempts_remaining=10)
     _type_pin(screen, "9999")
     _press_a(screen)
-    # First attempt failed; screen is still live, attempts dropped to 9.
+    # Immediate fresh PIN prompt; attempts tracked on subtitle + alert.
     assert screen.done is False
     assert screen.attempts_remaining == 9
     assert screen.pin_entry.digits == [None, None, None, None]
+    assert screen.pin_entry.subtitle_alert == "Wrong PIN"
     assert "9 attempts" in screen.pin_entry.subtitle
 
     # Try the correct PIN.
@@ -103,15 +104,13 @@ def test_unlock_zero_attempts_remaining_after_wrong_pin() -> None:
     assert screen.result is not None and screen.result.kind == "wiped"
 
 
-def test_unlock_cancelled_via_long_b() -> None:
+def test_long_b_during_unlock_pin_entry_does_not_exit() -> None:
     def verify(pin: str) -> tuple[str, int | None]:
         return ("ok", None)
 
     screen = UnlockScreen(verify=verify, length=4, attempts_remaining=10)
     screen.on_event(_evt(Button.B, EventKind.LONG))
-    assert screen.done is True
-    assert screen.result is not None and screen.result.kind == "cancelled"
-    assert screen.result.pin is None
+    assert screen.done is False
 
 
 def test_unlock_drawable() -> None:

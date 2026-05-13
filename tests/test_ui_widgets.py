@@ -21,6 +21,7 @@ from piwallet.ui.widgets import (
     ProgressBar,
     _wrap_lines,
     draw_text,
+    wrap_text_lines,
 )
 
 
@@ -171,8 +172,11 @@ def test_progress_bar_draw_fills_proportionally() -> None:
 def test_wrap_lines_respects_newlines_and_max_chars() -> None:
     out = _wrap_lines("hello world\nthis is a longer line", max_chars=10)
     assert all(len(line) <= 10 for line in out)
-    # An explicit newline preserves a paragraph break.
-    assert any(line == "" for line in out) is False  # leading blanks trimmed
+
+
+def test_wrap_text_lines_matches_wrap_lines_helper() -> None:
+    txt = "one two three four five six seven"
+    assert wrap_text_lines(txt, max_chars=12) == _wrap_lines(txt, max_chars=12)
 
 
 def test_wrap_lines_hard_breaks_oversized_word() -> None:

@@ -18,13 +18,19 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from piwallet.bonnet.choosers import WordCountChooser
 from piwallet.bonnet.unlock import UnlockScreen
 from piwallet.bonnet.wallet_detail import WalletDetailScreen
 from piwallet.bonnet.wallet_list import WalletListScreen
+from piwallet.bonnet.wallet_manage import WalletManageMenuScreen
+from piwallet.core import mnemonic as mnem
 from piwallet.core.vault import WalletRecord
 from piwallet.firstboot.disclaimer import DisclaimerScreen
 from piwallet.ui.display import FrameBuffer
+from piwallet.ui.label_entry import WalletLabelEntryScreen
 from piwallet.ui.pin_entry import PinEntryScreen
+from piwallet.ui.show_phrase import ShowPhraseScreen
+from piwallet.ui.word_entry import MnemonicEntryScreen, WordEntryScreen
 
 
 def _save(fb: FrameBuffer, path: Path) -> None:
@@ -97,6 +103,77 @@ def render_previews(out: Path) -> None:
     )
     detail.draw(fb)
     _save(fb, out / "09_wallet_detail.png")
+
+    # ---- 9b. Wallet manage menu ---------------------------------
+    fb = FrameBuffer()
+    WalletManageMenuScreen(wallet=_wallet("daily", 0)).draw(fb)
+    _save(fb, out / "09b_wallet_manage_menu.png")
+
+    # ---- 9c. Wallet label editor (cursor mid-word) ---------------
+    fb = FrameBuffer()
+    le = WalletLabelEntryScreen(title="Rename wallet", suggested_default="savings")
+    # Move cursor to the middle for a more illustrative shot.
+    le.cursor = 3
+    le.draw(fb)
+    _save(fb, out / "09c_label_edit_cursor_mid.png")
+
+    # ---- 10-11. Show-phrase ("write this down") -----------------
+    sample_phrase = (
+        "abandon ability able about above absent absorb abstract "
+        "absurd abuse access accident"
+    ).split()
+    for i, page in enumerate([0, 1, 2]):
+        fb = FrameBuffer()
+        sp = ShowPhraseScreen(words=sample_phrase, per_page=4, page=page)
+        sp.draw(fb)
+        _save(fb, out / f"10_show_phrase_p{i + 1}.png")
+
+    # ---- 12. Word-count chooser (restore flow) ------------------
+    fb = FrameBuffer()
+    WordCountChooser().draw(fb)
+    _save(fb, out / "12_word_count_chooser.png")
+
+    # ---- 13. Single word entry, fresh ---------------------------
+    fb = FrameBuffer()
+    WordEntryScreen(title="Word 1 of 12").draw(fb)
+    _save(fb, out / "13_word_entry_empty.png")
+
+    # ---- 14. Word entry mid-type with many matches --------------
+    fb = FrameBuffer()
+    s = WordEntryScreen(title="Word 1 of 12", prefix="a", candidate="b")
+    s.draw(fb)
+    _save(fb, out / "14_word_entry_many.png")
+
+    # ---- 15. Word entry with exact match ------------------------
+    fb = FrameBuffer()
+    s = WordEntryScreen(title="Word 1 of 12", prefix="abou", candidate="t")
+    s.draw(fb)
+    _save(fb, out / "15_word_entry_exact.png")
+
+    # ---- 16. Word entry with no match ---------------------------
+    fb = FrameBuffer()
+    s = WordEntryScreen(title="Word 3 of 12", prefix="z", candidate="z")
+    s.draw(fb)
+    _save(fb, out / "16_word_entry_no_match.png")
+
+    # ---- 17. Mnemonic entry screen (delegates to current word) --
+    fb = FrameBuffer()
+    me = MnemonicEntryScreen(word_count=12, mode="restore")
+    # advance the title to show "Word 4 of 12"
+    me.words = ["abandon", "ability", "able"]
+    me.current = me._new_word_screen()  # type: ignore[assignment]
+    me.draw(fb)
+    _save(fb, out / "17_mnemonic_entry.png")
+
+    # ---- 18. Restore phrase review (checksum OK) -----------------
+    fb = FrameBuffer()
+    phrase_words = mnem.generate(12).split()
+    me18 = MnemonicEntryScreen(word_count=12, mode="restore")
+    me18.words = phrase_words.copy()
+    me18.phase = "review"
+    me18._build_review_view()
+    me18.draw(fb)
+    _save(fb, out / "18_restore_phrase_review.png")
 
 
 def main() -> None:

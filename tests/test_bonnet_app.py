@@ -67,6 +67,7 @@ def test_no_vault_returns_exit_code_1(tmp_path: Path, accepted_terms: Path) -> N
     assert code == 1
     # The "No vault" banner should have rendered at least once.
     assert display.flip_count >= 1
+    assert display.backlight_on is False
 
 
 def test_disclaimer_declined_returns_exit_code_2(tmp_path: Path) -> None:
@@ -97,6 +98,7 @@ def test_disclaimer_declined_returns_exit_code_2(tmp_path: Path) -> None:
         target_fps=1000,
     )
     assert code == 2
+    assert display.backlight_on is False
 
 
 def test_verify_fn_routes_vault_errors(fresh_vault: tuple[Path, str]) -> None:

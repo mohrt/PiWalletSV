@@ -1,0 +1,188 @@
+"""Rotate PW1 multipart lines as full-screen QR codes for companion pairing.
+
+Each frame encodes one ``PW1|...`` barcode string (:mod:`piwallet.qr.multipart`).
+The companion app scans an animated sequence; this screen advances
+automatically and allows manual L/R to jump frames.
+
+Controls
+--------
+=========  ==================================================
+LEFT       Previous frame (wraps; resets the auto-advance timer).
+RIGHT      Next frame (wraps; resets the auto-advance timer).
+A / SEL    Done viewing -> back to the parent screen.
+B PRESS    Back to the parent screen (mirrors the deposit-address
+           screen so B is always "back").
+B LONG     Exit the bonnet app entirely.
+=========  ==================================================
+"""
+
+from __future__ import annotations
+
+import time
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Literal
+
+from piwallet.ui.display import (
+    COLOR_ACCENT,
+    COLOR_BG,
+    COLOR_DIM,
+    COLOR_FG,
+    DISPLAY_HEIGHT,
+    DISPLAY_WIDTH,
+    FrameBuffer,
+)
+from piwallet.ui.input import Button, Event, EventKind
+from piwallet.ui.qr_render import paste_qr, render_qr
+from piwallet.ui.widgets import draw_text
+
+PairingMultipartQrResult = Literal["back", "exit"]
+
+
+def _wall_mono_ms() -> int:
+    return time.monotonic_ns() // 1_000_000
+
+
+def _max_qr_px_for_footer(*, qr_top_y: int, first_footer_center_y: int, gap_px: int) -> int:
+    """Keep QR bottom edge at least ``gap_px`` below the ink of the first footer line.
+
+    Footer lines use ``anchor=mm``; reserve ~6 px below the QR for descenders/gap.
+    """
+    margin = 6
+    limit_y = first_footer_center_y - margin - gap_px
+    return max(32, min(DISPLAY_HEIGHT, limit_y) - qr_top_y)
+
+
+@dataclass
+class PairingMultipartQrScreen:
+    """Show ``pw1_frames`` as QR tiles with timed auto-advance.
+
+    ``qr_target_px`` defaults large enough for phone cameras at arm's length on a
+    240 px panel; layout stays a compact single-line header + foot hints.
+    """
+
+    pw1_frames: list[str]
+    title: str = "Pair companion"
+    auto_advance_ms: int = 420
+    qr_target_px: int = 176
+    idx: int = 0
+    done: bool = False
+    result: PairingMultipartQrResult | None = None
+    clock_ms: Callable[[], int] | None = None
+    _next_advance_after_ms: int = field(init=False, repr=False)
+    _mono: Callable[[], int] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if not self.pw1_frames:
+            raise ValueError("pw1_frames must be non-empty")
+        self._mono = self.clock_ms if self.clock_ms is not None else _wall_mono_ms
+        now = self._mono()
+        self._next_advance_after_ms = now + self.auto_advance_ms
+
+    # -- Input -------------------------------------------------------
+
+    def on_event(self, event: Event) -> None:
+        if self.done:
+            return
+        b = event.button
+        k = event.kind
+        n = len(self.pw1_frames)
+        if b == Button.LEFT and k in (EventKind.PRESS, EventKind.REPEAT):
+            self.idx = (self.idx - 1) % n
+            self._next_advance_after_ms = self._mono() + self.auto_advance_ms
+        elif b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
+            self.idx = (self.idx + 1) % n
+            self._next_advance_after_ms = self._mono() + self.auto_advance_ms
+        elif b == Button.B and k == EventKind.LONG:
+            self.done = True
+            self.result = "exit"
+        elif (b == Button.B and k == EventKind.PRESS) or (
+            b in (Button.A, Button.SELECT) and k == EventKind.PRESS
+        ):
+            self.done = True
+            self.result = "back"
+
+    # -- Render -------------------------------------------------------
+
+    def draw(self, fb: FrameBuffer) -> None:
+        now = self._mono()
+        n = len(self.pw1_frames)
+        if n > 1 and now >= self._next_advance_after_ms:
+            self.idx = (self.idx + 1) % n
+            self._next_advance_after_ms = now + self.auto_advance_ms
+
+        fb.clear(COLOR_BG)
+        title_h = 22
+        fb.draw.rectangle((0, 0, DISPLAY_WIDTH, title_h), fill=(20, 20, 32))
+        # Single header line so more vertical space goes to the QR.
+        head = f"{self.title}   {self.idx + 1} / {n}"
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            title_h // 2,
+            head,
+            size=12,
+            color=COLOR_ACCENT,
+            anchor="mm",
+        )
+        qr_y = title_h + 6
+        # Three footer lines (fixed centers); first must sit fully below the QR.
+        y_footer_scan = DISPLAY_HEIGHT - 38
+        y_footer_lr = DISPLAY_HEIGHT - 26
+        y_footer_done = DISPLAY_HEIGHT - 12
+        eff_px = min(
+            self.qr_target_px,
+            _max_qr_px_for_footer(
+                qr_top_y=qr_y,
+                first_footer_center_y=y_footer_scan,
+                gap_px=8,
+            ),
+        )
+        line = self.pw1_frames[self.idx]
+        try:
+            qr_img = render_qr(
+                line,
+                target_px=eff_px,
+                border=2,
+                error="M",
+            )
+            qr_x = (DISPLAY_WIDTH - eff_px) // 2
+            paste_qr(fb.image, qr_img, x=qr_x, y=qr_y)
+        except Exception as exc:  # pragma: no cover (segno edge)
+            draw_text(
+                fb,
+                DISPLAY_WIDTH // 2,
+                qr_y + eff_px // 2,
+                f"QR error:\n{exc!s}"[:96],
+                size=10,
+                color=COLOR_DIM,
+                anchor="mm",
+            )
+
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            y_footer_scan,
+            "Scan all frames",
+            size=10,
+            color=COLOR_FG,
+            anchor="mm",
+        )
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            y_footer_lr,
+            "L/R slide frame",
+            size=10,
+            color=COLOR_DIM,
+            anchor="mm",
+        )
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            y_footer_done,
+            "A / SEL / B  back   hold B quit app",
+            size=10,
+            color=COLOR_DIM,
+            anchor="mm",
+        )

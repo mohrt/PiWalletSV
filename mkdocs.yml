@@ -106,3 +106,4 @@ nav:
       - Conformance: protocol/conformance.md
   - Hardware tests:
       - Checkpoint 1 (bonnet boot path): hardware/checkpoint-1.md
+      - Checkpoint 2 (word entry): hardware/checkpoint-2.md

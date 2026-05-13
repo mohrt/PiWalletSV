@@ -132,6 +132,35 @@ def test_long_event_fires_exactly_once_per_press(
     assert any(e.kind == EventKind.LONG for e in events)
 
 
+def test_long_per_button_override_shortens_specific_button_only() -> None:
+    backend = FakeInputBackend()
+    clock = FakeClock()
+    mgr = InputManager(
+        backend,
+        clock=clock,
+        long_ms=900,
+        long_press_ms_by_button={Button.B: 300},
+        repeat_initial_ms=400,
+        repeat_ms=120,
+    )
+    backend.press(Button.B)
+    mgr.poll()
+    clock.tick(299)
+    assert mgr.poll() == []
+    clock.tick(5)
+    assert any(e.kind == EventKind.LONG for e in mgr.poll())
+
+    backend.release(Button.B)
+    mgr.poll()
+    backend.press(Button.A)
+    mgr.poll()
+    clock.tick(800)
+    events = mgr.poll()
+    assert not any(e.kind == EventKind.LONG for e in events)
+    clock.tick(200)
+    assert any(e.kind == EventKind.LONG for e in mgr.poll())
+
+
 def test_multiple_buttons_handled_independently(
     env: tuple[FakeInputBackend, FakeClock, InputManager],
 ) -> None:
@@ -164,6 +193,8 @@ def test_invalid_construction_args() -> None:
         InputManager(backend, long_ms=0)
     with pytest.raises(ValueError):
         InputManager(backend, repeat_ms=0)
+    with pytest.raises(ValueError, match="long_press_ms_by_button"):
+        InputManager(backend, long_press_ms_by_button={Button.B: 0})
 
 
 def test_open_input_fake() -> None:

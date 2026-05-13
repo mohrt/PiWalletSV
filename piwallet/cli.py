@@ -641,7 +641,7 @@ def firstboot_run(
 ) -> None:
     from piwallet.firstboot.disclaimer import DisclaimerScreen
     from piwallet.firstboot.terms import mark_accepted, requires_acceptance
-    from piwallet.ui.app import make_input_manager, run_screen
+    from piwallet.ui.app import IdleWakeTracker, make_input_manager, run_screen
     from piwallet.ui.display import open_display
     from piwallet.ui.input import open_input
 
@@ -652,8 +652,9 @@ def firstboot_run(
     disp = open_display(display)
     inp = open_input(input_backend)
     mgr = make_input_manager(inp)
+    idle = IdleWakeTracker(mgr)
     screen = DisclaimerScreen()
-    result = run_screen(disp, mgr, screen)
+    result = run_screen(disp, mgr, screen, idle_wake=idle)
     if result is True:
         state = mark_accepted(state_path)
         click.echo(f"accepted v{state.terms_version} at {state.accepted_at}")

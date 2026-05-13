@@ -88,6 +88,10 @@ class Display(ABC):
     def flip(self, framebuf: FrameBuffer) -> None:
         """Push the current frame to the physical or virtual screen."""
 
+    def set_backlight(self, on: bool) -> None:  # noqa: B027 (optional backlight)
+        """Drive the panel backlight when supported (e.g. ST7789 bonnet); default no-op."""
+        pass
+
     def close(self) -> None:  # noqa: B027 (optional override; default no-op by design)
         """Optional teardown hook. Default is a no-op."""
 
@@ -115,8 +119,12 @@ class HeadlessDisplay(Display):
         self.height = height
         self.image: Image.Image = Image.new("RGB", (width, height), COLOR_BG)
         self.flip_count: int = 0
+        self.backlight_on: bool = True
         # Optional: keep a small ring of recent frames for test diffing.
         self._history: list[Image.Image] = []
+
+    def set_backlight(self, on: bool) -> None:
+        self.backlight_on = bool(on)
 
     def flip(self, framebuf: FrameBuffer) -> None:
         if framebuf.size != (self.width, self.height):
@@ -147,10 +155,17 @@ class ST7789Display(Display):
 
     * CS  -> ``board.CE0`` (SPI chip-select 0)
     * DC  -> ``board.D25``
-    * RST -> wired to RST on the bonnet (no software reset pin needed,
-             but the driver accepts None)
+    * RST -> ``board.D24`` (hardware reset; matches Adafruit's Pi demos).
     * BL  -> ``board.D26`` (backlight; gated through a MOSFET on the
              bonnet so it stays OFF unless the pin is driven HIGH)
+
+    **Row offset.** The bonnet connects a **240 x 240 window** cropped from an
+    ST7789-sized internal RAM arrangement. Writes must skip the invisible
+    top rows with ``y_offset=80``. If ``y_offset`` is left at 0 you get a band
+    of **random noise occupying roughly the top third** of the glass while the
+    rest of the UI looks fine — identical symptom to a wrong pitft/kernel
+    offset. See Adafruit Learn (4506 Python setup) and
+    ``scripts/st7789_solid_fill_test.py`` in this repo.
 
     The constructor *lazily* imports the Adafruit stack so the rest of
     the module is importable on macOS for unit tests.
@@ -161,6 +176,10 @@ class ST7789Display(Display):
         spi_baudrate: int = 24_000_000,
         backlight_on: bool = True,
         rotation: int = 180,
+        *,
+        x_offset: int = 0,
+        y_offset: int = 80,
+        use_hw_reset_pin: bool = True,
     ) -> None:  # pragma: no cover
         try:
             import board  # type: ignore[import-not-found]
@@ -178,16 +197,22 @@ class ST7789Display(Display):
 
         cs = digitalio.DigitalInOut(board.CE0)
         dc = digitalio.DigitalInOut(board.D25)
+        rst_pin: Any = None
+        if use_hw_reset_pin:
+            try:
+                rst_pin = digitalio.DigitalInOut(board.D24)
+            except Exception:
+                rst_pin = None
         self._device: Any = st7789.ST7789(
             board.SPI(),
             cs=cs,
             dc=dc,
-            rst=None,
+            rst=rst_pin,
             baudrate=spi_baudrate,
             width=DISPLAY_WIDTH,
             height=DISPLAY_HEIGHT,
-            x_offset=0,
-            y_offset=0,
+            x_offset=x_offset,
+            y_offset=y_offset,
             rotation=rotation,
         )
         # The 1.3" 240x240 bonnet's backlight is gated through a MOSFET

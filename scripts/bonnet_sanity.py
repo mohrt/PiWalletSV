@@ -78,24 +78,24 @@ def _crosshair(display) -> None:
     display.flip(fb)
 
 
-def _open(display_kind: str, rotation: int):
-    """Build an ST7789 display with a tunable rotation, or whatever the
-    `open_display` factory picks for non-st7789 kinds."""
+def _open(display_kind: str, rotation: int, *, y_offset: int):
+    """Build an ST7789 display with tunable rotation/y_offset, or whatever
+    ``open_display`` picks for non-st7789 kinds."""
     if display_kind == "st7789":
         from piwallet.ui.display import ST7789Display
-        return ST7789Display(rotation=rotation)
+        return ST7789Display(rotation=rotation, y_offset=y_offset)
     if display_kind == "auto":
         try:
             from piwallet.ui.display import ST7789Display
-            return ST7789Display(rotation=rotation)
+            return ST7789Display(rotation=rotation, y_offset=y_offset)
         except RuntimeError:
             return open_display("headless")
     return open_display(display_kind)
 
 
-def run_display_test(display_kind: str, rotation: int) -> None:
-    print(f"opening display: {display_kind} (rotation={rotation})")
-    display = _open(display_kind, rotation)
+def run_display_test(display_kind: str, rotation: int, *, y_offset: int) -> None:
+    print(f"opening display: {display_kind} (rotation={rotation}, y_offset={y_offset})")
+    display = _open(display_kind, rotation, y_offset=y_offset)
     try:
         for name, fn in (("color bars", _color_bars), ("crosshair", _crosshair)):
             print(f"  painting: {name}")
@@ -105,12 +105,20 @@ def run_display_test(display_kind: str, rotation: int) -> None:
         display.close()
 
 
-def run_input_test(input_kind: str, display_kind: str | None, rotation: int) -> None:
+def run_input_test(
+    input_kind: str,
+    display_kind: str | None,
+    rotation: int,
+    *,
+    y_offset: int,
+) -> None:
     print(f"opening input backend: {input_kind}")
     backend = open_input(input_kind)
     mgr = make_input_manager(backend, repeat_ms=120, long_ms=700)
 
-    display = _open(display_kind, rotation) if display_kind else None
+    display = (
+        _open(display_kind, rotation, y_offset=y_offset) if display_kind else None
+    )
     fb = FrameBuffer() if display else None
 
     last_label = "(press any button)"
@@ -166,14 +174,24 @@ def main() -> None:
         choices=[0, 90, 180, 270],
         help="ST7789 panel rotation in degrees (default: 180 for Adafruit 4506).",
     )
+    parser.add_argument(
+        "--y-offset",
+        type=int,
+        default=80,
+        metavar="N",
+        help=(
+            "ST7789 row offset for Adafruit bonnet 4506 (default: 80). "
+            "If the top third shows random noise, this is wrong; try 80."
+        ),
+    )
     args = parser.parse_args()
 
     if args.input_only:
-        run_input_test(args.input, args.display, args.rotation)
+        run_input_test(args.input, args.display, args.rotation, y_offset=args.y_offset)
         return
-    run_display_test(args.display, args.rotation)
+    run_display_test(args.display, args.rotation, y_offset=args.y_offset)
     if not args.display_only:
-        run_input_test(args.input, args.display, args.rotation)
+        run_input_test(args.input, args.display, args.rotation, y_offset=args.y_offset)
 
 
 if __name__ == "__main__":
