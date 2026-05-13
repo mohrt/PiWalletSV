@@ -93,6 +93,67 @@ def test_xpub_export_rejects_missing_keys() -> None:
         e.XpubExport.from_cbor({"v": 1, "kind": "xpub", "xpub": "x"})
 
 
+def test_xpub_export_defaults_to_main_network() -> None:
+    """Default kwarg keeps existing call sites byte-identical apart from
+    a new ``net`` field appearing in the encoded payload."""
+    original = make_xpub_export()
+    assert original.network == "main"
+    blob = e.encode(original)
+    decoded = e.decode(blob)
+    assert isinstance(decoded, e.XpubExport)
+    assert decoded.network == "main"
+
+
+def test_xpub_export_carries_testnet_marker() -> None:
+    original = e.XpubExport(
+        xpub="xpub6CdMDgU2hzWyeZ852LWqp5AfDz3ty2cRfi4jEw9BT8aNYugMQvVykQsKLARZdb"
+        "qKKp7yTviJdL1N9saYLmJNKD1rwVAwLTmU8r8qKeoyG4R",
+        path="m/44'/236'/0'",
+        label="testnet wallet",
+        fingerprint=DUMMY_FP,
+        network="test",
+    )
+    blob = e.encode(original)
+    decoded = e.decode(blob)
+    assert isinstance(decoded, e.XpubExport)
+    assert decoded.network == "test"
+    assert decoded == original
+
+
+def test_xpub_export_pre_v1_1_envelope_decodes_as_main() -> None:
+    """An xpub_export envelope encoded by a pre-testnet build (no
+    ``net`` key) decodes as ``network='main'``. Locks the wire-level
+    backward compatibility promise."""
+    body = {
+        "v": e.ENVELOPE_VERSION,
+        "kind": "xpub",
+        "xpub": "xpub6CdMDgU2hzWyeZ852LWqp5AfDz3ty2cRfi4jEw9BT8aNYugMQvVykQsKLARZdb"
+        "qKKp7yTviJdL1N9saYLmJNKD1rwVAwLTmU8r8qKeoyG4R",
+        "path": "m/44'/236'/0'",
+        "label": "legacy",
+        "fp": DUMMY_FP,
+    }
+    blob = gzip.compress(cbor2.dumps(body))
+    decoded = e.decode(blob)
+    assert isinstance(decoded, e.XpubExport)
+    assert decoded.network == "main"
+
+
+def test_xpub_export_rejects_unknown_network() -> None:
+    body = {
+        "v": e.ENVELOPE_VERSION,
+        "kind": "xpub",
+        "xpub": "xpub6CdMDgU2hzWyeZ852LWqp5AfDz3ty2cRfi4jEw9BT8aNYugMQvVykQsKLARZdb"
+        "qKKp7yTviJdL1N9saYLmJNKD1rwVAwLTmU8r8qKeoyG4R",
+        "path": "m/44'/236'/0'",
+        "label": "x",
+        "fp": DUMMY_FP,
+        "net": "regtest",
+    }
+    with pytest.raises(e.EnvelopeError, match="network"):
+        e.XpubExport.from_cbor(body)
+
+
 # ---- unsigned_proposal ---------------------------------------------------
 
 

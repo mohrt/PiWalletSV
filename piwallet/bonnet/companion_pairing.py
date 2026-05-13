@@ -19,13 +19,19 @@ def pairing_pw1_lines(
     *,
     chunk_chars: int = 720,
 ) -> list[str]:
-    """Return PW1 multipart lines for the gzip+CBOR ``xpub_export`` envelope."""
+    """Return PW1 multipart lines for the gzip+CBOR ``xpub_export`` envelope.
+
+    The wallet's network is stamped into the envelope so the companion
+    can route the paired wallet to the correct base58check prefix and
+    WhatsOnChain endpoint.
+    """
     xpub_str = vault.get_account_xpub(pin, wallet.id)
     payload = env.XpubExport(
         xpub=xpub_str,
         path=wallet.derivation_path,
         label=wallet.label or "wallet",
         fingerprint=wallet.fingerprint,
+        network=wallet.network,
     )
     blob = env.encode(payload)
     return split_envelope_to_lines(blob, max_encoded_chunk_chars=chunk_chars)

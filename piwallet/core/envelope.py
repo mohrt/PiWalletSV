@@ -47,9 +47,21 @@ class EnvelopeError(ValueError):
 # ---------------------------------------------------------------------------
 
 
+#: Allowed values for the xpub_export envelope's ``net`` field.
+VALID_NETWORKS: frozenset[str] = frozenset({"main", "test"})
+
+
 @dataclass(frozen=True)
 class XpubExport:
-    """Pi -> phone pairing payload."""
+    """Pi -> phone pairing payload.
+
+    ``network`` is ``"main"`` for BSV mainnet (legacy P2PKH prefix
+    0x00) or ``"test"`` for BSV testnet (prefix 0x6F). The companion
+    keys its address renderer + WhatsOnChain endpoint off this value
+    so a paired wallet hits the right network end-to-end. Older
+    envelopes that predate this field are accepted on the receive
+    side as ``"main"`` (the only network the Pi supported pre-v1.1).
+    """
 
     KIND: ClassVar[str] = KIND_XPUB_EXPORT
 
@@ -57,6 +69,7 @@ class XpubExport:
     path: str
     label: str
     fingerprint: bytes  # 4 bytes, self-fingerprint (hash160(pubkey)[:4])
+    network: str = "main"
 
     def to_cbor(self) -> dict[str, Any]:
         return {
@@ -66,6 +79,7 @@ class XpubExport:
             "path": self.path,
             "label": self.label,
             "fp": self.fingerprint,
+            "net": self.network,
         }
 
     @classmethod
@@ -74,11 +88,21 @@ class XpubExport:
         fp = body["fp"]
         if not isinstance(fp, (bytes, bytearray)) or len(fp) != 4:
             raise EnvelopeError("fingerprint 'fp' must be 4 bytes")
+        # Forward-migrate pre-v1.1 envelopes that lack the `net` key:
+        # everything before testnet support shipped was mainnet, so
+        # treat the absence as an explicit "main".
+        net = str(body.get("net", "main"))
+        if net not in VALID_NETWORKS:
+            raise EnvelopeError(
+                f"network 'net' must be one of {sorted(VALID_NETWORKS)!r}; "
+                f"got {net!r}"
+            )
         return cls(
             xpub=str(body["xpub"]),
             path=str(body["path"]),
             label=str(body["label"]),
             fingerprint=bytes(fp),
+            network=net,
         )
 
 

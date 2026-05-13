@@ -216,6 +216,7 @@ def xpub_export_cmd(
         path=rec.derivation_path,
         label=label if label is not None else rec.label,
         fingerprint=rec.fingerprint,
+        network=rec.network,
     )
     blob = env.encode(payload)
 
@@ -560,6 +561,7 @@ def _summarize_xpub_export(x: env.XpubExport) -> str:
             f"kind: xpub_export v={env.ENVELOPE_VERSION}",
             f"label: {x.label}",
             f"path: {x.path}",
+            f"network: {x.network}",
             f"fingerprint: {x.fingerprint.hex()}",
             f"xpub: {x.xpub}",
         ]

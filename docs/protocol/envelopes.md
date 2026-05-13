@@ -101,27 +101,44 @@ wallet's addresses and start querying balances.
 {
     "v":     1,
     "kind":  "xpub",
-    "xpub":  <text string>,    // Base58Check serialized BIP32 xpub at m/44'/236'/0'
-    "path":  <text string>,    // canonical path, MUST be "m/44'/236'/0'"
+    "xpub":  <text string>,    // Base58Check serialized BIP32 xpub at the path below
+    "path":  <text string>,    // BIP44 account path, e.g. "m/44'/236'/0'"
     "label": <text string>,    // human-readable label the signer reports
-    "fp":    <bytes, length 4> // self-fingerprint of `xpub` (see derivation.md §4)
+    "fp":    <bytes, length 4>,// self-fingerprint of `xpub` (see derivation.md §4)
+    "net":   <text string>     // OPTIONAL: "main" (default) or "test"; absence = "main"
 }
 ```
 
 Constraints:
 
 - `xpub` SHOULD parse as a Base58Check BIP32 extended public key at
-  depth 3, with the correct version bytes for mainnet (`0488B21E`).
-- `path` MUST be `m/44'/236'/0'` in v1.
+  depth 3. Mainnet xpubs use version bytes `0488B21E`; testnet xpubs
+  use `043587CF`. The companion MUST tolerate both for `net="test"`
+  envelopes.
+- `path` is a BIP44 account path of the form `m/44'/<coin>'/<account>'`.
+  The signer surfaces this so the companion can render path metadata;
+  in v1 the signer rejects paths outside this shape.
 - `label` is informational. The companion MAY rename a wallet locally
   before persisting it; the signer's label is treated as a default,
   not authoritative metadata.
 - `fp` MUST equal the self-fingerprint computed from `xpub`. The
   companion MUST verify this equality.
+- `net` is OPTIONAL and defaults to `"main"`. Allowed values are
+  `"main"` (BSV mainnet) and `"test"` (BSV testnet). The companion
+  MUST honour this field when:
+  - rendering P2PKH addresses (mainnet uses base58check prefix
+    `0x00`, testnet uses `0x6F`),
+  - selecting its WhatsOnChain (or equivalent) endpoint
+    (mainnet: `…/v1/bsv/main`, testnet: `…/v1/bsv/test`).
+  Pre-v1.1 envelopes lack this field; the companion MUST treat their
+  absence as `"main"` to avoid breaking existing pairings.
 
 A companion seeing two distinct `xpub_export` envelopes with the same
 `fp` and `path` MUST treat them as the same wallet (e.g., re-pairing
-after a vault wipe) and surface that to the user.
+after a vault wipe) and surface that to the user. Re-pairing across
+networks (same `fp` + `path` but different `net`) is treated as a
+distinct wallet entry; the companion warns the user before discarding
+prior watch-only state.
 
 ## 4. `unsigned_proposal` (`kind = "tx"`)
 
