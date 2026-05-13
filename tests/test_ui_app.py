@@ -154,6 +154,56 @@ def test_idle_wake_on_next_input() -> None:
     assert display.backlight_on is True
 
 
+def test_idle_timeout_zero_never_sleeps() -> None:
+    """``timeout_ms == 0`` is the "Off" preset; the panel never blanks.
+
+    Even after a long quiet period the idle tracker must not flip to
+    asleep state. This is the path Settings -> Sleep timer -> Off
+    wires up.
+    """
+    backend = FakeInputBackend()
+    clock = _Clock(0)
+    mgr = InputManager(backend, clock=clock, debounce_ms=0)
+    idle = IdleWakeTracker(mgr, timeout_ms=0)
+    display = HeadlessDisplay()
+    # 30 minutes of idle wall-clock time.
+    clock.tick(1_800_000)
+    assert idle_suppresses_frame_paint(
+        display, idle, [], mgr.now_ms(), input_mgr=mgr
+    ) is False
+    assert idle.asleep is False
+    assert display.backlight_on is True
+
+
+def test_idle_timeout_zero_wakes_panel_if_previously_asleep() -> None:
+    """Switching to "Off" while asleep must turn the backlight back on.
+
+    Operator path: timer at 1 min, panel blanks, operator goes to
+    Settings, drops timer to "Off", saves; the bonnet writes
+    ``idle.timeout_ms = 0`` in place. The next idle poll has to
+    notice the asleep state and reverse it instead of leaving the
+    panel dark forever.
+    """
+    backend = FakeInputBackend()
+    clock = _Clock(0)
+    mgr = InputManager(backend, clock=clock, debounce_ms=0)
+    idle = IdleWakeTracker(mgr, timeout_ms=60_000)
+    display = HeadlessDisplay()
+    clock.tick(120_000)
+    idle_suppresses_frame_paint(
+        display, idle, [], mgr.now_ms(), input_mgr=mgr
+    )
+    assert idle.asleep is True
+    assert display.backlight_on is False
+    # Operator picks "Off" -> caller mutates timeout_ms in place.
+    idle.timeout_ms = 0
+    assert idle_suppresses_frame_paint(
+        display, idle, [], mgr.now_ms(), input_mgr=mgr
+    ) is False
+    assert idle.asleep is False
+    assert display.backlight_on is True
+
+
 def test_idle_wake_on_raw_before_debounced_press() -> None:
     """First poll after contact may emit zero events when debounce_ms > 0."""
     backend = FakeInputBackend()

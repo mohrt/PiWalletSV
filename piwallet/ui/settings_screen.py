@@ -1,15 +1,17 @@
 """Bonnet global settings screen.
 
 A minimal value-editor for :class:`piwallet.core.settings.BonnetSettings`.
-Today the only setting is screen brightness; the screen is structured
-as a small row table so future toggles (sleep timeout, panel rotation,
-target FPS) drop in without redesign.
+Two rows today — Brightness (continuous slider) and Sleep timer
+(discrete cycle: 1 min / 5 min / off). The screen is structured as a
+small row table so future toggles (panel rotation, target FPS, etc.)
+drop in without redesign.
 
 Controls
 --------
 =========  ==================================================
 UP/DOWN    Move the cursor between settings rows.
-LEFT/RIGHT Adjust the highlighted row's value (live preview).
+LEFT/RIGHT Adjust the highlighted row's value (live preview for
+           brightness; cycles the discrete value for sleep timer).
 A / SEL    Save the draft and return ``"saved"``.
 B PRESS    Discard the draft and return ``"back"``; the
            caller restores the original brightness on exit.
@@ -26,6 +28,9 @@ Design notes
   responsive and large enough that ten or so left/rights span the full
   legal range. Holding the joystick triggers ``REPEAT`` events which
   step at the bonnet's repeat cadence.
+- The sleep timer cycles through a discrete preset list rather than a
+  free-form slider so operators can't end up with a 17-second timeout
+  by accident, and so a future migration can enumerate legal values.
 - The screen never persists settings on its own — that's the
   caller's job, so the same flow can be reused when the bonnet boots
   to a settings re-prompt or runs an inline brightness tweak.
@@ -37,7 +42,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
-from piwallet.core.settings import BonnetSettings
+from piwallet.core.settings import (
+    SLEEP_TIMER_OPTIONS_MS,
+    BonnetSettings,
+)
 from piwallet.ui.display import (
     COLOR_ACCENT,
     COLOR_BG,
@@ -73,11 +81,32 @@ def _brightness_value_text(s: BonnetSettings) -> str:
     return f"{round(s.brightness * 100):d}%"
 
 
+def _format_sleep_timeout_ms(ms: int) -> str:
+    """Operator-readable sleep-timer label.
+
+    ``0`` is the "Off" preset — never blank; positive values render
+    in minutes (the only granularity the preset list ships with).
+    """
+    if ms <= 0:
+        return "Off"
+    minutes = ms // 60_000
+    return f"{minutes} min"
+
+
+def _sleep_timer_value_text(s: BonnetSettings) -> str:
+    return _format_sleep_timeout_ms(s.sleep_timeout_ms)
+
+
 SETTINGS_ROWS: tuple[SettingsRow, ...] = (
     SettingsRow(
         key="brightness",
         label="Brightness",
         value_text=_brightness_value_text,
+    ),
+    SettingsRow(
+        key="sleep_timer",
+        label="Sleep timer",
+        value_text=_sleep_timer_value_text,
     ),
 )
 
@@ -144,14 +173,41 @@ class SettingsScreen:
 
     def _adjust(self, delta: float) -> None:
         row = self.rows[self.cursor]
-        if row.key != "brightness":
+        if row.key == "brightness":
+            new_brightness = clamp_brightness(self._draft.brightness + delta)
+            if new_brightness == self._draft.brightness:
+                return
+            self._draft = replace(self._draft, brightness=new_brightness)
+            if self.apply_brightness is not None:
+                self.apply_brightness(new_brightness)
             return
-        new_brightness = clamp_brightness(self._draft.brightness + delta)
-        if new_brightness == self._draft.brightness:
+        if row.key == "sleep_timer":
+            self._cycle_sleep_timer(step=1 if delta > 0 else -1)
             return
-        self._draft = replace(self._draft, brightness=new_brightness)
-        if self.apply_brightness is not None:
-            self.apply_brightness(new_brightness)
+
+    def _cycle_sleep_timer(self, *, step: int) -> None:
+        """Advance the sleep-timer preset by one slot in either direction.
+
+        Wraps at the ends so L/R cycles indefinitely. ``step`` is +1
+        for RIGHT, -1 for LEFT. The ``replace`` is unconditional even
+        when there's only one preset (currently three) — it keeps the
+        ``_draft`` identity stable for callers that diff state.
+        """
+        options = SLEEP_TIMER_OPTIONS_MS
+        if not options:
+            return
+        try:
+            idx = options.index(self._draft.sleep_timeout_ms)
+        except ValueError:
+            # Drafted value drifted off the preset list (e.g. a hand-
+            # edited file that load_settings let through). Snap back
+            # to the default index 0 before stepping.
+            idx = 0
+        new_idx = (idx + step) % len(options)
+        new_value = options[new_idx]
+        if new_value == self._draft.sleep_timeout_ms:
+            return
+        self._draft = replace(self._draft, sleep_timeout_ms=new_value)
 
     def _restore_preview(self) -> None:
         if (

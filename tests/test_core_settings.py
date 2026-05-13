@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from piwallet.core.settings import (
+    DEFAULT_SLEEP_TIMEOUT_MS,
     SETTINGS_SCHEMA_VERSION,
+    SLEEP_TIMER_OPTIONS_MS,
     BonnetSettings,
     load_settings,
     save_settings,
@@ -93,3 +95,92 @@ def test_with_brightness_returns_a_new_instance() -> None:
     s2 = s.with_brightness(0.4)
     assert s is not s2
     assert s.brightness == MAX_BRIGHTNESS  # unchanged
+
+
+# ---------------------------------------------------------------------------
+# Sleep timer (added in schema v2)
+# ---------------------------------------------------------------------------
+
+
+def test_default_sleep_timeout_is_5_minutes() -> None:
+    """Default keeps the panel lit long enough for a recovery flow.
+
+    A short default would cut off operators mid-mnemonic-entry; a
+    long-but-not-infinite default avoids leaving an unattended
+    unlocked device burning the backlight indefinitely.
+    """
+    assert DEFAULT_SLEEP_TIMEOUT_MS == 300_000
+    assert BonnetSettings().sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS
+
+
+def test_sleep_timer_presets_are_1min_5min_off_in_cycle_order() -> None:
+    """Cycle order matters — L/R steps through this tuple verbatim."""
+    assert SLEEP_TIMER_OPTIONS_MS == (60_000, 300_000, 0)
+
+
+def test_save_then_load_roundtrips_sleep_timer(tmp_path: Path) -> None:
+    p = tmp_path / "settings.json"
+    save_settings(BonnetSettings().with_sleep_timeout_ms(60_000), p)
+    reloaded = load_settings(p)
+    assert reloaded.sleep_timeout_ms == 60_000
+
+
+def test_load_v1_file_migrates_to_default_sleep_timeout(tmp_path: Path) -> None:
+    """A v1 file lacks ``sleep_timeout_ms``; load fills the 5 min default."""
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"schema_version": 1, "brightness": 0.6}))
+    s = load_settings(p)
+    assert s.sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS
+    assert s.brightness == pytest.approx(0.6)
+
+
+def test_load_v1_file_save_re_stamps_v2(tmp_path: Path) -> None:
+    """Round-tripping a v1 file through save bumps the on-disk version to v2."""
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"schema_version": 1, "brightness": 0.6}))
+    save_settings(load_settings(p), p)
+    payload = json.loads(p.read_text())
+    assert payload["schema_version"] == SETTINGS_SCHEMA_VERSION  # i.e. 2
+    assert payload["sleep_timeout_ms"] == DEFAULT_SLEEP_TIMEOUT_MS
+
+
+def test_load_snaps_unknown_sleep_timeout_to_default(tmp_path: Path) -> None:
+    """Hand-edited file with a 17 s timeout falls back to the 5 min default."""
+    p = tmp_path / "settings.json"
+    p.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "brightness": 0.8,
+                "sleep_timeout_ms": 17_000,  # not a preset
+            }
+        )
+    )
+    s = load_settings(p)
+    assert s.sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS
+
+
+def test_load_accepts_off_preset(tmp_path: Path) -> None:
+    """``0`` is the legal "Off" preset; load must keep it intact."""
+    p = tmp_path / "settings.json"
+    p.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "brightness": 0.7,
+                "sleep_timeout_ms": 0,
+            }
+        )
+    )
+    assert load_settings(p).sleep_timeout_ms == 0
+
+
+def test_with_sleep_timeout_ms_snaps_to_preset_and_returns_new_instance() -> None:
+    s = BonnetSettings()
+    # Exact preset stays intact.
+    assert s.with_sleep_timeout_ms(60_000).sleep_timeout_ms == 60_000
+    assert s.with_sleep_timeout_ms(0).sleep_timeout_ms == 0
+    # Non-preset snaps back to the default.
+    assert s.with_sleep_timeout_ms(17_000).sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS
+    # Original is untouched.
+    assert s.sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS

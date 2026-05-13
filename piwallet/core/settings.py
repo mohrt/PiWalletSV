@@ -38,7 +38,32 @@ from piwallet.ui.display import (
 #: Version of the on-disk settings schema. Bump when adding required
 #: fields; load_settings will migrate older files forward by filling
 #: defaults.
-SETTINGS_SCHEMA_VERSION: int = 1
+SETTINGS_SCHEMA_VERSION: int = 2
+
+#: Sleep-timer presets surfaced in the Settings screen. Order is the
+#: cycle order under L/R input: 1 min -> 5 min -> off -> 1 min -> ...
+#: ``0`` means "never blank the panel"; any other value is a positive
+#: idle duration in milliseconds before the backlight goes off.
+SLEEP_TIMER_OPTIONS_MS: tuple[int, ...] = (60_000, 300_000, 0)
+
+#: Default screen sleep timer. Five minutes is long enough that the
+#: bonnet doesn't blank during a multi-step recovery flow but short
+#: enough that a forgotten unlocked device dims well before sleeping
+#: hours of CPU on a wasted backlight.
+DEFAULT_SLEEP_TIMEOUT_MS: int = 300_000
+
+
+def _normalize_sleep_timeout_ms(raw: int) -> int:
+    """Snap ``raw`` to a known preset, defaulting to 5 min on garbage.
+
+    The on-disk file is hand-editable, and we don't want a typo to
+    bury the operator in an "infinite sleep" or a 1 ms panel-blank
+    storm. We accept exact preset matches verbatim and fall back to
+    the 5 min default for anything else (including negatives).
+    """
+    if raw in SLEEP_TIMER_OPTIONS_MS:
+        return raw
+    return DEFAULT_SLEEP_TIMEOUT_MS
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,10 +73,17 @@ class BonnetSettings:
     schema_version: int = SETTINGS_SCHEMA_VERSION
     #: Software-dimming multiplier in ``[MIN_BRIGHTNESS, 1.0]``.
     brightness: float = MAX_BRIGHTNESS
+    #: Idle duration before the backlight blanks. ``0`` disables sleep
+    #: entirely (the panel stays lit until the bonnet exits).
+    sleep_timeout_ms: int = DEFAULT_SLEEP_TIMEOUT_MS
 
     def with_brightness(self, level: float) -> BonnetSettings:
         """Return a copy with ``brightness`` clamped into the legal range."""
         return replace(self, brightness=clamp_brightness(level))
+
+    def with_sleep_timeout_ms(self, ms: int) -> BonnetSettings:
+        """Return a copy with ``sleep_timeout_ms`` snapped to a preset."""
+        return replace(self, sleep_timeout_ms=_normalize_sleep_timeout_ms(ms))
 
 
 def default_settings_path() -> Path:
@@ -77,10 +109,17 @@ def load_settings(path: Path | None = None) -> BonnetSettings:
         return BonnetSettings()
     if not isinstance(data, dict):
         return BonnetSettings()
+    # Forward-migrate fields added since the file was last written.
+    # ``sleep_timeout_ms`` was introduced with schema v2; v1 files
+    # silently default to the 5 min preset so the operator's first
+    # interaction with the new feature isn't an indefinitely-on panel.
     return BonnetSettings(
         schema_version=int(data.get("schema_version", SETTINGS_SCHEMA_VERSION)),
         brightness=clamp_brightness(
             float(data.get("brightness", MAX_BRIGHTNESS)),
+        ),
+        sleep_timeout_ms=_normalize_sleep_timeout_ms(
+            int(data.get("sleep_timeout_ms", DEFAULT_SLEEP_TIMEOUT_MS)),
         ),
     )
 
@@ -105,9 +144,11 @@ def save_settings(settings: BonnetSettings, path: Path | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 __all__ = [
+    "DEFAULT_SLEEP_TIMEOUT_MS",
     "MAX_BRIGHTNESS",
     "MIN_BRIGHTNESS",
     "SETTINGS_SCHEMA_VERSION",
+    "SLEEP_TIMER_OPTIONS_MS",
     "BonnetSettings",
     "default_settings_path",
     "load_settings",

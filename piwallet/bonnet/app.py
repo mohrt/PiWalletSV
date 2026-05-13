@@ -316,11 +316,13 @@ def run_bonnet(
         input_mgr = make_input_manager(open_input("auto"))
 
     # Apply persisted brightness up front so the disclaimer / unlock
-    # screens already reflect the operator's preference.
+    # screens already reflect the operator's preference. The sleep
+    # timer is threaded into IdleWakeTracker so the disclaimer flow
+    # already honours the operator's setting (5 min default; 0 = off).
     settings = load_settings(settings_path)
     display.set_brightness(settings.brightness)
 
-    idle_wake = IdleWakeTracker(input_mgr)
+    idle_wake = IdleWakeTracker(input_mgr, timeout_ms=settings.sleep_timeout_ms)
 
     try:
         # ---- 1. Disclaimer --------------------------------------
@@ -426,6 +428,10 @@ def run_bonnet(
                     target_fps=target_fps,
                     idle_wake=idle_wake,
                 )
+                # Apply the (possibly edited) sleep timeout immediately
+                # so the next idle window honours the operator's choice
+                # without needing a bonnet restart.
+                idle_wake.timeout_ms = settings.sleep_timeout_ms
                 if exit_requested:
                     return 0
                 continue

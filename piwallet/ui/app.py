@@ -30,7 +30,9 @@ from piwallet.ui.display import Display, FrameBuffer
 from piwallet.ui.input import Button, Event, InputBackend, InputManager
 
 # Default bonnet idle blanking (backlight off until the next button event).
-IDLE_TIMEOUT_MS: int = 60_000
+# Five minutes matches `piwallet.core.settings.DEFAULT_SLEEP_TIMEOUT_MS`;
+# do not edit one without the other.
+IDLE_TIMEOUT_MS: int = 300_000
 
 
 @dataclass
@@ -40,6 +42,11 @@ class IdleWakeTracker:
     Wired into :func:`run_screen` for every bonnet flow. Uses the same
     millisecond clock as the :class:`InputManager` so tests can fast-forward
     idle with a synthetic clock.
+
+    ``timeout_ms == 0`` disables sleep entirely: the panel stays lit
+    until the bonnet exits. The Settings screen surfaces this as the
+    "Off" preset; operators on a bench-mounted device with mains power
+    typically pick it.
     """
 
     input_mgr: InputManager
@@ -65,6 +72,18 @@ def idle_suppresses_frame_paint(
     this frame because the backlight is off and no input woke the panel.
     """
     if idle_wake is None:
+        return False
+    # ``timeout_ms == 0`` is the "Off" preset: never blank, never wake;
+    # we still record activity so a later edit that re-enables sleep
+    # starts counting from the right reference point.
+    if idle_wake.timeout_ms <= 0:
+        if events:
+            idle_wake.last_activity_ms = events[-1].at_ms
+        if idle_wake.asleep:
+            # Defensive: if a previous (smaller) timeout ever put us
+            # to sleep and the operator then disabled sleep, undo it.
+            idle_wake.asleep = False
+            display.set_backlight(True)
         return False
     if events:
         idle_wake.last_activity_ms = events[-1].at_ms

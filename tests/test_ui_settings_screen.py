@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from piwallet.core.settings import BonnetSettings
+from piwallet.core.settings import (
+    DEFAULT_SLEEP_TIMEOUT_MS,
+    SLEEP_TIMER_OPTIONS_MS,
+    BonnetSettings,
+)
 from piwallet.ui.display import (
     MAX_BRIGHTNESS,
     MIN_BRIGHTNESS,
@@ -13,7 +17,9 @@ from piwallet.ui.display import (
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.settings_screen import (
     BRIGHTNESS_STEP,
+    SETTINGS_ROWS,
     SettingsScreen,
+    _format_sleep_timeout_ms,
 )
 
 
@@ -197,3 +203,132 @@ def test_draw_at_maximum_brightness() -> None:
     fb = FrameBuffer()
     s = _make_screen(brightness=MAX_BRIGHTNESS)
     s.draw(fb)
+
+
+# ---------------------------------------------------------------------------
+# Sleep timer row
+# ---------------------------------------------------------------------------
+
+
+def test_settings_rows_include_brightness_then_sleep_timer() -> None:
+    """Order is fixed — brightness first, sleep timer second.
+
+    The Settings screen's row ordering is observable via cursor index;
+    if a future edit reorders the rows, every existing test that
+    pokes ``cursor`` (and anyone's muscle memory on a real device)
+    has to update too.
+    """
+    keys = [row.key for row in SETTINGS_ROWS]
+    assert keys[:2] == ["brightness", "sleep_timer"]
+
+
+def test_format_sleep_timeout_ms_renders_each_preset() -> None:
+    assert _format_sleep_timeout_ms(60_000) == "1 min"
+    assert _format_sleep_timeout_ms(300_000) == "5 min"
+    assert _format_sleep_timeout_ms(0) == "Off"
+
+
+def test_down_moves_cursor_to_sleep_timer_row() -> None:
+    s = _make_screen(brightness=0.5)
+    assert s.cursor == 0  # brightness
+    s.on_event(_evt(Button.DOWN))
+    assert s.cursor == 1  # sleep_timer
+
+
+def test_right_on_sleep_timer_cycles_to_next_preset() -> None:
+    """Default is 5 min; RIGHT advances to the next slot in the cycle.
+
+    Cycle order: 1 min -> 5 min -> off, so RIGHT from 5 min lands on
+    Off rather than wrapping back to 1 min. (LEFT goes back to 1 min.)
+    """
+    s = _make_screen(brightness=0.5)
+    s.on_event(_evt(Button.DOWN))  # cursor -> sleep_timer
+    s.on_event(_evt(Button.RIGHT))
+    assert s.draft.sleep_timeout_ms == 0  # "Off"
+
+
+def test_left_on_sleep_timer_steps_back_through_cycle() -> None:
+    s = _make_screen(brightness=0.5)
+    s.on_event(_evt(Button.DOWN))  # cursor -> sleep_timer
+    # Default index is 1 (5 min). LEFT goes to index 0 (1 min).
+    s.on_event(_evt(Button.LEFT))
+    assert s.draft.sleep_timeout_ms == 60_000
+
+
+def test_sleep_timer_cycle_wraps_in_both_directions() -> None:
+    s = _make_screen(brightness=0.5)
+    s.on_event(_evt(Button.DOWN))
+    # Walk the full forward cycle once.
+    s.on_event(_evt(Button.RIGHT))  # 5 min -> off
+    s.on_event(_evt(Button.RIGHT))  # off  -> 1 min
+    s.on_event(_evt(Button.RIGHT))  # 1 min -> 5 min
+    assert s.draft.sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS
+
+
+def test_sleep_timer_does_not_emit_brightness_preview() -> None:
+    """Cycling the sleep timer must not poke ``apply_brightness``."""
+    rec: list[float] = []
+    s = _make_screen(brightness=0.5, apply_recorder=rec)
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.RIGHT))
+    s.on_event(_evt(Button.LEFT))
+    assert rec == []
+
+
+def test_save_persists_sleep_timer_change() -> None:
+    s = _make_screen(brightness=0.5)
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.RIGHT))  # 5 min -> off
+    s.on_event(_evt(Button.A))
+    assert s.result == "saved"
+    assert s.settings.sleep_timeout_ms == 0
+    # Brightness round-trips untouched.
+    assert s.settings.brightness == pytest.approx(0.5)
+
+
+def test_cancel_reverts_sleep_timer_change() -> None:
+    s = _make_screen(brightness=0.5)
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.RIGHT))  # draft moves to "off"
+    s.on_event(_evt(Button.B))
+    # Persisted value is unchanged.
+    assert s.settings.sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS
+
+
+def test_brightness_unchanged_when_only_sleep_timer_edited_and_saved() -> None:
+    rec: list[float] = []
+    s = _make_screen(brightness=0.6, apply_recorder=rec)
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.RIGHT))
+    s.on_event(_evt(Button.A))
+    assert s.settings.brightness == pytest.approx(0.6)
+    # No preview events fired because brightness wasn't touched.
+    assert rec == []
+
+
+def test_drafted_off_preset_stays_off_through_redraw() -> None:
+    """Sleep-timer changes are visible to the value renderer immediately."""
+    s = _make_screen(brightness=0.5)
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.RIGHT))  # 5 min -> off
+    fb = FrameBuffer()
+    s.draw(fb)  # must not raise
+    assert s.draft.sleep_timeout_ms == 0
+
+
+def test_unknown_drafted_value_snaps_to_first_preset_on_cycle() -> None:
+    """Hand-edited file with non-preset value still cycles cleanly.
+
+    ``_cycle_sleep_timer`` recovers by snapping to index 0 before
+    stepping, so an L/R press from a corrupt draft lands on the
+    second preset (1 min -> 5 min).
+    """
+    s = SettingsScreen(
+        settings=BonnetSettings(sleep_timeout_ms=DEFAULT_SLEEP_TIMEOUT_MS),
+    )
+    # Forcibly drift the draft off the preset list.
+    s._draft = BonnetSettings(sleep_timeout_ms=17_000)  # type: ignore[attr-defined]
+    s.cursor = 1  # sleep_timer
+    s.on_event(_evt(Button.RIGHT))
+    # idx 0 (1 min) + step → idx 1 (5 min).
+    assert s.draft.sleep_timeout_ms == SLEEP_TIMER_OPTIONS_MS[1]
