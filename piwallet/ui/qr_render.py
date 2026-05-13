@@ -7,14 +7,41 @@ addresses, animated PW1 frames from envelope blobs, etc.) on the
 We use ``segno`` because it's pure Python (no native deps on the Pi)
 and gives us direct access to the matrix iterator, which lets us
 control pixel quantization precisely.
+
+Render cost on a Pi Zero 2 W is dominated by the per-pixel Python
+loop (tens of thousands of writes for an xpub QR at ~176 px). To keep
+the bonnet UI responsive we cache the resulting :class:`PIL.Image`
+keyed on the full render parameter tuple — animated multipart-QR
+screens redraw the same handful of frames at ~30 fps, and address
+screens redraw the same single QR until the index changes.
+
+Cache invariants:
+
+- The cache is bounded (``_QR_CACHE_MAX``) and uses LRU eviction so a
+  long-lived bonnet process can't OOM from accumulated frames.
+- Returned images **must not be mutated** by callers. ``paste_qr``
+  composites onto a destination buffer without touching the QR.
+- ``clear_qr_cache()`` is exposed for tests and for explicit cleanup
+  on screen transitions.
 """
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Iterable
 
 import segno
 from PIL import Image
+
+#: Maximum number of cached QR renders. PW1 multipart sequences for an
+#: xpub_export envelope are typically <= 16 frames; address screens
+#: keep one per index. 64 leaves comfortable headroom while bounding
+#: peak memory at roughly ``64 * 240 * 240 * 3 ≈ 11 MB`` worst case.
+_QR_CACHE_MAX: int = 64
+
+#: Module-private LRU cache keyed on ``(data, target_px, border, fg, bg, error)``.
+#: ``OrderedDict`` gives O(1) insertion + ``move_to_end`` for cache hits.
+_qr_cache: OrderedDict[tuple, Image.Image] = OrderedDict()
 
 
 def render_qr(
@@ -38,10 +65,43 @@ def render_qr(
 
     ``error`` is the QR error-correction level: ``"L"``, ``"M"``,
     ``"Q"``, or ``"H"``.
+
+    Repeated calls with identical arguments return the same cached
+    image instance (do not mutate it — see module docstring).
     """
     if target_px < 32:
         raise ValueError(f"target_px must be >= 32, got {target_px}")
 
+    key: tuple = (data, target_px, border, fg, bg, error)
+    cached = _qr_cache.get(key)
+    if cached is not None:
+        _qr_cache.move_to_end(key)
+        return cached
+
+    img = _render_qr_uncached(
+        data,
+        target_px=target_px,
+        border=border,
+        fg=fg,
+        bg=bg,
+        error=error,
+    )
+    _qr_cache[key] = img
+    if len(_qr_cache) > _QR_CACHE_MAX:
+        _qr_cache.popitem(last=False)
+    return img
+
+
+def _render_qr_uncached(
+    data: str | bytes,
+    *,
+    target_px: int,
+    border: int,
+    fg: tuple[int, int, int],
+    bg: tuple[int, int, int],
+    error: str,
+) -> Image.Image:
+    """Slow path: encode + draw a fresh QR image. Used by the cache miss branch."""
     payload: object
     if isinstance(data, bytes):
         # segno wants bytes through the explicit `bytes` argument so it
@@ -58,7 +118,6 @@ def render_qr(
         raise RuntimeError("segno produced an empty QR matrix")
 
     bordered = modules + 2 * border
-    # Integer scale: how many display pixels per QR module?
     scale = max(1, target_px // bordered)
     inner_px = scale * modules
     pad_px = (target_px - inner_px) // 2
@@ -77,6 +136,16 @@ def render_qr(
                     if 0 <= px < target_px and 0 <= py < target_px:
                         pixels[px, py] = fg
     return img
+
+
+def clear_qr_cache() -> None:
+    """Drop every cached render. Tests + explicit cleanup paths use this."""
+    _qr_cache.clear()
+
+
+def qr_cache_size() -> int:
+    """Return the current number of cached entries (testing aid)."""
+    return len(_qr_cache)
 
 
 def paste_qr(
