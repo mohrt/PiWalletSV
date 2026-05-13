@@ -53,7 +53,8 @@ def test_list_empty_still_offers_actions() -> None:
 def test_list_offers_new_and_restore_at_bottom() -> None:
     wallets = [_wallet("daily", 0), _wallet("savings", 1)]
     s = WalletListScreen(wallets=wallets)
-    # 2 wallets + 2 actions = 4 rows. Cursor 0 -> 1 -> 2 -> 3.
+    # 2 wallets + 3 actions (new/restore/settings) = 5 rows.
+    # Cursor 0 -> 1 -> 2 lands on "+ New wallet".
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.DOWN))
     assert s.cursor == 2
@@ -65,10 +66,31 @@ def test_list_offers_new_and_restore_at_bottom() -> None:
 def test_list_restore_action() -> None:
     wallets = [_wallet("daily")]
     s = WalletListScreen(wallets=wallets)
+    # 1 wallet + 3 actions = 4 rows. Cursor 0 -> 1 -> 2 lands on "+ Restore".
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.A))
     assert s.result is WalletListAction.RESTORE
+
+
+def test_list_settings_action() -> None:
+    """Settings row sits at the bottom and confirms to WalletListAction.SETTINGS."""
+    wallets = [_wallet("daily")]
+    s = WalletListScreen(wallets=wallets)
+    # 1 wallet + 3 actions = 4 rows; the settings row is the last.
+    for _ in range(3):
+        s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.A))
+    assert s.result is WalletListAction.SETTINGS
+
+
+def test_list_settings_action_on_empty_vault() -> None:
+    s = WalletListScreen(wallets=[])
+    # 0 wallets + 3 actions: rows are New(0), Restore(1), Settings(2).
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.A))
+    assert s.result is WalletListAction.SETTINGS
 
 
 def test_list_draws() -> None:

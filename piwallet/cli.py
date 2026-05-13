@@ -677,6 +677,12 @@ def firstboot_run(
     help="Override the disclaimer state file. Defaults to ~/.piwallet-dev/terms.json.",
 )
 @click.option(
+    "--settings-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Override the global settings file. Defaults to ~/.piwallet-dev/settings.json.",
+)
+@click.option(
     "--display",
     type=click.Choice(["auto", "st7789", "headless"]),
     default="auto",
@@ -699,6 +705,7 @@ def firstboot_run(
 def bonnet_cmd(
     vault_path: Path,
     terms_path: Path | None,
+    settings_path: Path | None,
     display: str,
     input_backend: str,
     fps: int,
@@ -717,6 +724,7 @@ def bonnet_cmd(
         display=disp,
         input_mgr=mgr,
         terms_path=terms_path,
+        settings_path=settings_path,
         target_fps=fps,
     )
     sys.exit(code)

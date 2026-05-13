@@ -1,14 +1,14 @@
 """Wallet list screen.
 
 Renders a :class:`piwallet.ui.widgets.ListView` of :class:`WalletRecord`
-entries from an unlocked vault, plus two action rows ("+ New wallet"
-/ "+ Restore wallet"). ``A`` confirms the highlighted row; long-press
-B exits the bonnet app.
+entries from an unlocked vault, plus three action rows ("+ New wallet",
+"+ Restore wallet", and "Settings"). ``A`` confirms the highlighted
+row; long-press B exits the bonnet app.
 
 ``result`` semantics:
 
 * ``str``                    — a wallet id (operator drilled into a wallet).
-* :class:`WalletListAction`  — operator picked the New or Restore action.
+* :class:`WalletListAction`  — operator picked New, Restore, or Settings.
 * ``None``                   — long-press B exit.
 """
 
@@ -29,6 +29,7 @@ class WalletListAction(Enum):
 
     NEW = "new"
     RESTORE = "restore"
+    SETTINGS = "settings"
 
 
 @dataclass
@@ -47,10 +48,13 @@ class WalletListScreen:
             ListItem(label=self._format_label(w), value=w.id)
             for w in self.wallets
         ]
-        # Action rows always present so the user can always create or
-        # restore -- even on a fresh vault (empty wallets list).
+        # Action rows always present so the user can always create,
+        # restore, or open settings — even on a fresh vault (empty
+        # wallets list). Settings sits below the wallet actions so it
+        # doesn't compete for attention with the primary CTAs.
         items.append(ListItem(label="+ New wallet", value=WalletListAction.NEW))
         items.append(ListItem(label="+ Restore wallet", value=WalletListAction.RESTORE))
+        items.append(ListItem(label="Settings", value=WalletListAction.SETTINGS))
         self._list = ListView(items=items, title=self.title)
 
     @staticmethod

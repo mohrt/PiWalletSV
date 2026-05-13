@@ -44,6 +44,11 @@ from piwallet.bonnet.unlock import UnlockOutcome, UnlockScreen, VerifyFn
 from piwallet.bonnet.wallet_list import WalletListAction, WalletListScreen
 from piwallet.bonnet.wallet_manage import run_wallet_manage
 from piwallet.core import derivation as deriv
+from piwallet.core.settings import (
+    BonnetSettings,
+    load_settings,
+    save_settings,
+)
 from piwallet.core.vault import (
     Vault,
     VaultError,
@@ -67,6 +72,7 @@ from piwallet.ui.display import (
 )
 from piwallet.ui.input import InputManager, open_input
 from piwallet.ui.pairing_multipart_qr_screen import PairingMultipartQrScreen
+from piwallet.ui.settings_screen import SettingsScreen
 from piwallet.ui.widgets import Modal, draw_text
 
 log = logging.getLogger(__name__)
@@ -222,12 +228,55 @@ def _show_status(display: Display, lines: list[str]) -> None:
     display.flip(fb)
 
 
+def _run_settings_loop(
+    display: Display,
+    input_mgr: InputManager,
+    settings: BonnetSettings,
+    *,
+    settings_path: Path | None,
+    target_fps: int,
+    idle_wake: IdleWakeTracker,
+) -> tuple[BonnetSettings, bool]:
+    """Open the Settings screen, persist on save, return ``(settings, exit_requested)``.
+
+    Live brightness preview is wired to ``display.set_brightness`` so the
+    panel reflects the in-progress draft. The screen itself restores the
+    preview on cancel; we re-apply the persisted brightness on save so
+    the active panel state matches what we just wrote to disk.
+
+    The ``exit_requested`` flag mirrors long-B semantics from the rest
+    of the bonnet UI: long-pressing B inside Settings should quit the
+    whole app (consistent with the wallet list / manage menu behaviour),
+    so the caller checks the flag and returns from ``run_bonnet``.
+    """
+    screen = SettingsScreen(
+        settings=settings,
+        apply_brightness=display.set_brightness,
+    )
+    run_screen(
+        display,
+        input_mgr,
+        screen,
+        target_fps=target_fps,
+        idle_wake=idle_wake,
+    )
+    if screen.result == "saved":
+        save_settings(screen.settings, settings_path)
+        display.set_brightness(screen.settings.brightness)
+        return screen.settings, False
+    # "back": SettingsScreen has already reverted the live preview.
+    if screen.result == "exit":
+        return settings, True
+    return settings, False
+
+
 def run_bonnet(
     vault_path: Path,
     *,
     display: Display | None = None,
     input_mgr: InputManager | None = None,
     terms_path: Path | None = None,
+    settings_path: Path | None = None,
     target_fps: int = 30,
 ) -> int:
     """Run the bonnet boot loop.
@@ -239,6 +288,11 @@ def run_bonnet(
              one via the CLI yet.
     * 2   -- the disclaimer was cancelled.
     * 3   -- the vault wiped itself during unlock.
+
+    ``settings_path`` overrides the location of the persistent global
+    settings JSON file (default: ``~/.piwallet-dev/settings.json``).
+    Settings are loaded on entry and persisted only when the operator
+    saves changes from the Settings screen.
     """
     from piwallet.runtime_logging import prepare_runtime_for_bonnet
 
@@ -250,6 +304,11 @@ def run_bonnet(
         display = open_display("auto")
     if input_mgr is None:
         input_mgr = make_input_manager(open_input("auto"))
+
+    # Apply persisted brightness up front so the disclaimer / unlock
+    # screens already reflect the operator's preference.
+    settings = load_settings(settings_path)
+    display.set_brightness(settings.brightness)
 
     idle_wake = IdleWakeTracker(input_mgr)
 
@@ -347,6 +406,18 @@ def run_bonnet(
                     )
                     if quit_requested:
                         return 0
+                continue
+            if chosen is WalletListAction.SETTINGS:
+                settings, exit_requested = _run_settings_loop(
+                    display,
+                    input_mgr,
+                    settings,
+                    settings_path=settings_path,
+                    target_fps=target_fps,
+                    idle_wake=idle_wake,
+                )
+                if exit_requested:
+                    return 0
                 continue
             wallet = next((w for w in wallets if w.id == chosen), None)
             if wallet is None:

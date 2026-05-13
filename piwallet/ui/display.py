@@ -73,16 +73,33 @@ class FrameBuffer:
         return self.image.size
 
 
+#: Minimum software-brightness multiplier. Below this the panel becomes
+#: practically unreadable; we clamp the user-visible setting so a slip of
+#: the joystick can't black the screen.
+MIN_BRIGHTNESS: float = 0.20
+
+#: Maximum brightness; the no-op identity that skips dimming entirely.
+MAX_BRIGHTNESS: float = 1.0
+
+
 class Display(ABC):
     """Backend-agnostic display contract.
 
     Implementations promise that ``flip(framebuf)`` is an atomic push:
     after it returns, the user can safely mutate ``framebuf`` again
     without tearing the on-screen image.
+
+    ``brightness`` is a software dimming multiplier in
+    ``[MIN_BRIGHTNESS, MAX_BRIGHTNESS]``. The bonnet's hardware
+    backlight is a digital MOSFET gate (no PWM channel on its GPIO),
+    so true backlight dimming isn't available; instead, the active
+    backend may multiply pixel intensities before the SPI push.
+    The default value of 1.0 is a no-op and incurs zero cost.
     """
 
     width: int = DISPLAY_WIDTH
     height: int = DISPLAY_HEIGHT
+    brightness: float = MAX_BRIGHTNESS
 
     @abstractmethod
     def flip(self, framebuf: FrameBuffer) -> None:
@@ -92,6 +109,16 @@ class Display(ABC):
         """Drive the panel backlight when supported (e.g. ST7789 bonnet); default no-op."""
         pass
 
+    def set_brightness(self, level: float) -> None:
+        """Set the software-dimming multiplier in ``[MIN_BRIGHTNESS, MAX_BRIGHTNESS]``.
+
+        The base implementation just stores the clamped value;
+        subclasses that support visible dimming (currently
+        :class:`ST7789Display`) consult ``self.brightness`` in
+        ``flip()``.
+        """
+        self.brightness = clamp_brightness(level)
+
     def close(self) -> None:  # noqa: B027 (optional override; default no-op by design)
         """Optional teardown hook. Default is a no-op."""
 
@@ -100,6 +127,13 @@ class Display(ABC):
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+
+def clamp_brightness(level: float) -> float:
+    """Clamp ``level`` into ``[MIN_BRIGHTNESS, MAX_BRIGHTNESS]``."""
+    if level != level:  # NaN guard
+        return MAX_BRIGHTNESS
+    return max(MIN_BRIGHTNESS, min(MAX_BRIGHTNESS, float(level)))
 
 
 class HeadlessDisplay(Display):
@@ -127,6 +161,10 @@ class HeadlessDisplay(Display):
         self.backlight_on = bool(on)
 
     def flip(self, framebuf: FrameBuffer) -> None:
+        # HeadlessDisplay deliberately does NOT apply software dimming —
+        # tests assert exact pixel values on `image`, and a brightness
+        # multiplier would silently break those. The recorded brightness
+        # remains observable via the inherited `brightness` attribute.
         if framebuf.size != (self.width, self.height):
             raise ValueError(
                 f"framebuf size {framebuf.size} does not match display "
@@ -232,7 +270,17 @@ class ST7789Display(Display):
             self._backlight.value = bool(on)
 
     def flip(self, framebuf: FrameBuffer) -> None:  # pragma: no cover
-        self._device.image(framebuf.image)
+        # Apply software dimming when configured below 1.0. PIL's
+        # ImageEnhance.Brightness is implemented in C against MUL tables
+        # and runs in a few ms for a 240x240 RGB image — well within the
+        # bonnet's per-frame budget. When brightness is 1.0 (the common
+        # case) we skip the work entirely.
+        img = framebuf.image
+        if self.brightness < MAX_BRIGHTNESS:
+            from PIL import ImageEnhance
+
+            img = ImageEnhance.Brightness(img).enhance(self.brightness)
+        self._device.image(img)
 
     def close(self) -> None:
         # pragma: no cover - hardware teardown only runs on the Pi.
