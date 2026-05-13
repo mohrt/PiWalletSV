@@ -97,3 +97,27 @@ def test_non_pw1_does_not_error(line: str) -> None:
 
     asm = MultipartAssembler()
     assert asm.feed(line) is None
+
+
+def test_split_balances_chunks_when_payload_doesnt_fit_evenly() -> None:
+    """Trailing chunks must be roughly the same size as leading chunks.
+
+    A naive ``[max, max, ..., remainder]`` split lands a tiny tail
+    chunk after a full one, which renders as visually-very-different
+    QRs (one dense, one near-empty). On a phone the autofocus has
+    to re-acquire each cycle and decoding rates plummet. The
+    balanced-split rule keeps every fragment within roughly one
+    character of the others.
+    """
+    blob = b"y" * 200
+    lines = split_envelope_to_lines(blob, max_encoded_chunk_chars=120)
+    payloads = [ln.split("|", 3)[3] for ln in lines]
+    assert len(payloads) >= 2
+    # All fragments are within 1 char of each other (the largest being
+    # at most one larger than the smallest by one due to the ceil split).
+    sizes = [len(p) for p in payloads]
+    assert max(sizes) - min(sizes) <= 1, sizes
+    # No fragment may exceed the requested ceiling.
+    assert max(sizes) <= 120
+    # And the round-trip still works.
+    assert join_multipart_lines(lines) == blob

@@ -63,7 +63,11 @@ class PairingMultipartQrScreen:
 
     pw1_frames: list[str]
     title: str = "Pair companion"
-    auto_advance_ms: int = 420
+    # 700 ms / frame leaves the phone scanner enough time to autofocus
+    # on a fresh QR, decode it, and update its received-frame set
+    # before the panel rotates. The earlier 420 ms default produced
+    # cycles too fast for arm's-length scanning under indoor light.
+    auto_advance_ms: int = 700
     qr_target_px: int = 176
     idx: int = 0
     done: bool = False

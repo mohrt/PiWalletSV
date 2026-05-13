@@ -52,6 +52,13 @@ def split_envelope_to_lines(data: bytes, *, max_encoded_chunk_chars: int = 720) 
     at byte mode or alphanumeric-heavy payloads stays scannable on the
     bonnet camera at moderate distance.
 
+    Chunks are *balanced*: when the payload doesn't divide evenly we
+    pick ``n_chunks = ceil(len / max)`` and then size each chunk at
+    ``ceil(len / n_chunks)`` so the trailing fragment can't shrink to
+    a tiny QR. An unbalanced split (e.g. ``[240, 26]``) renders one
+    dense frame and one near-empty one, which is hard to scan reliably
+    on a phone — both frames look very different to the autofocus.
+
     :param data: usually `envelope.encode(...)` gzip+cbor bytes.
     :param max_encoded_chunk_chars: max characters per Base64 slice.
     """
@@ -63,10 +70,11 @@ def split_envelope_to_lines(data: bytes, *, max_encoded_chunk_chars: int = 720) 
         return [f"{MAGIC}{SEP}1{SEP}0{SEP}"]
 
     n_chunks = math.ceil(len(blob_b64) / max_encoded_chunk_chars)
+    chunk_size = math.ceil(len(blob_b64) / n_chunks)
     lines: list[str] = []
     for i in range(n_chunks):
-        start = i * max_encoded_chunk_chars
-        frag = blob_b64[start : start + max_encoded_chunk_chars]
+        start = i * chunk_size
+        frag = blob_b64[start : start + chunk_size]
         lines.append(f"{MAGIC}{SEP}{n_chunks}{SEP}{i}{SEP}{frag}")
     return lines
 
