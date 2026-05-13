@@ -41,6 +41,20 @@ CANONICAL_CHANGE_ADDRESSES = [
     "1FVCwj1goPiMWb5qCUrerT3FRkW7cfthL7",
 ]
 
+# Same xpub bytes, but rendered with the testnet P2PKH version byte
+# (0x6F). Locks the testnet path against silent prefix-byte regressions
+# in bsv-sdk or our wrapper.
+CANONICAL_TESTNET_RECEIVE_ADDRESSES = [
+    "mycHrh2o8UWnXM3Qk218KvMSSM8FWgNxFH",
+    "mtDoCVz5ZzZfBu8jr9yzsodsWUM4Fc7Q14",
+    "mjbTCux3QNo9rJ8Pc84zKJvBqG7MYWcUDa",
+]
+CANONICAL_TESTNET_CHANGE_ADDRESSES = [
+    "mgbDYw1XgFLEmPDrgEqtx91cmXVjPGg6un",
+    "mwgxkbe9DDLNqZxGt4U8fhmYNWc1P4Wxvq",
+    "mv1AEn6fcR9cHhZSv3q2gNFaHk6pZEDcyu",
+]
+
 
 @pytest.fixture
 def canonical_master():
@@ -135,6 +149,63 @@ def test_xpub_round_trip(canonical_master) -> None:
     xpub_str = str(acct.xpub)
     parsed = d.parse_xpub(xpub_str)
     assert d.derive_address(parsed, 0, 0) == CANONICAL_RECEIVE_ADDRESSES[0]
+
+
+# ---------------------------------------------------------------------------
+# Network-aware address rendering
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("idx", [0, 1, 2])
+def test_derive_address_testnet_receive_canonical(canonical_master, idx: int) -> None:
+    """Testnet P2PKH version (0x6F) on the same xpub gives the canonical 'm…' addresses."""
+    acct = d.derive_account(canonical_master)
+    got = d.derive_address(acct.xpub, d.CHANGE_RECEIVE, idx, network="test")
+    assert got == CANONICAL_TESTNET_RECEIVE_ADDRESSES[idx]
+
+
+@pytest.mark.parametrize("idx", [0, 1, 2])
+def test_derive_address_testnet_change_canonical(canonical_master, idx: int) -> None:
+    acct = d.derive_account(canonical_master)
+    got = d.derive_address(acct.xpub, d.CHANGE_INTERNAL, idx, network="test")
+    assert got == CANONICAL_TESTNET_CHANGE_ADDRESSES[idx]
+
+
+def test_derive_address_default_network_is_main(canonical_master) -> None:
+    """Omitting network must keep the pre-testnet behaviour byte-for-byte."""
+    acct = d.derive_account(canonical_master)
+    assert d.derive_address(acct.xpub, 0, 0) == CANONICAL_RECEIVE_ADDRESSES[0]
+
+
+def test_derive_address_main_explicit_matches_default(canonical_master) -> None:
+    acct = d.derive_account(canonical_master)
+    assert d.derive_address(acct.xpub, 0, 0) == d.derive_address(
+        acct.xpub, 0, 0, network="main"
+    )
+
+
+def test_derive_address_rejects_unknown_network(canonical_master) -> None:
+    acct = d.derive_account(canonical_master)
+    with pytest.raises(ValueError, match="network must be"):
+        d.derive_address(acct.xpub, 0, 0, network="testnet")  # type: ignore[arg-type]
+
+
+def test_derive_address_main_and_test_differ(canonical_master) -> None:
+    """The same xpub branch produces different rendered addresses per network."""
+    acct = d.derive_account(canonical_master)
+    main = d.derive_address(acct.xpub, 0, 0, network="main")
+    test = d.derive_address(acct.xpub, 0, 0, network="test")
+    assert main != test
+    # Mainnet legacy P2PKH addresses start with '1'; testnet with 'm' or 'n'.
+    assert main.startswith("1")
+    assert test[0] in ("m", "n")
+
+
+def test_network_constants_exist() -> None:
+    assert d.NETWORK_MAIN == "main"
+    assert d.NETWORK_TEST == "test"
+    assert set(d.NETWORK_VALUES) == {"main", "test"}
+    assert d.DEFAULT_NETWORK == "main"
 
 
 def test_different_account_indices_produce_different_xpubs(canonical_master) -> None:

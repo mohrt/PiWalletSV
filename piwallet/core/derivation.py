@@ -1,8 +1,11 @@
-"""HD wallet derivation: BIP32 + BIP44, fixed at `m/44'/236'/0'` for BSV.
+"""HD wallet derivation: BIP32 + BIP44 + optional testnet support.
 
-PiWalletSV v1 design: each on-device wallet uses a SINGLE BIP44 account at
-`m/44'/236'/0'`. Multi-account-per-seed is deferred to v2 per the locked
-plan decisions. Coin type 236 is BSV's SLIP-44 assignment.
+PiWalletSV v1 design: each on-device wallet uses a SINGLE BIP44 account
+(default ``m/44'/236'/0'`` for BSV mainnet). Coin type and account
+index are configurable per wallet (since the v0 wallet-create
+chooser shipped); the v1.1 addition here is per-wallet **network**
+selection so a wallet's seed can drive either BSV mainnet
+(`"main"`) or testnet (`"test"`) addresses without re-derivation.
 
 Two-tier API:
 
@@ -10,25 +13,60 @@ Two-tier API:
 - `account_xprv(master)` -> Xprv at `m/44'/236'/0'` (depth 3, hardened).
 - `account_xpub(account_xprv)` -> Xpub at the same path. This is what gets
   exported to the companion PWA over QR for watch-only address discovery.
-- `derive_address(xpub, change, index)` -> str. Derives a P2PKH address
-  from the account xpub, taking the non-hardened `change/index` path. The
-  PWA does this; the Pi does this for the change re-derivation safety check
-  in sign.py.
-- `derive_signing_key(xprv, change, index)` -> bsv.PrivateKey. Used on the
-  Pi during signing.
+- `derive_address(xpub, change, index, *, network="main")` -> str.
+  Derives a P2PKH address from the account xpub, taking the
+  non-hardened `change/index` path. The address prefix byte is
+  selected by ``network``: mainnet uses ``0x00`` (legacy
+  Bitcoin / BSV mainnet) and testnet uses ``0x6F``. The PWA does
+  this; the Pi does this for the change re-derivation safety check
+  in sign.py / verify.py.
+- `derive_signing_key(xprv, change, index)` -> bsv.PrivateKey. Used on
+  the Pi during signing. Signing is network-independent (same curve
+  + same sighash math); only the *address* derived from the public
+  key changes.
 
-The plan's "verify, then sign" rule depends on `derive_address` being a pure
-function of (xpub, change, index): the Pi re-derives the proposal's claimed
-change `scriptPubKey` and rejects mismatches.
+The plan's "verify, then sign" rule depends on ``derive_address``
+being a pure function of (xpub, change, index, network): the Pi
+re-derives the proposal's claimed change ``scriptPubKey`` and rejects
+mismatches. Network is therefore part of the verification contract,
+not a UI hint.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from bsv import PrivateKey, hash160
+from bsv.constants import Network as _BsvNetwork
 from bsv.hd import Xprv, Xpub
 from bsv.hd import master_xprv_from_seed as _master_xprv_from_seed
+
+#: Network discriminator. ``"main"`` selects BSV mainnet (P2PKH prefix
+#: ``0x00``); ``"test"`` selects BSV testnet (P2PKH prefix ``0x6F``).
+#: Stored in :class:`AccountKeys`, persisted on each :class:`WalletRecord`,
+#: and carried in the xpub_export envelope to the companion.
+Network = Literal["main", "test"]
+
+NETWORK_MAIN: Network = "main"
+NETWORK_TEST: Network = "test"
+NETWORK_VALUES: tuple[Network, ...] = (NETWORK_MAIN, NETWORK_TEST)
+DEFAULT_NETWORK: Network = NETWORK_MAIN
+
+# Internal mapping to bsv-sdk's Network enum used by PublicKey.address.
+_BSV_NETWORK_FOR: dict[Network, _BsvNetwork] = {
+    NETWORK_MAIN: _BsvNetwork.MAINNET,
+    NETWORK_TEST: _BsvNetwork.TESTNET,
+}
+
+
+def _bsv_network(network: Network) -> _BsvNetwork:
+    try:
+        return _BSV_NETWORK_FOR[network]
+    except KeyError:
+        raise ValueError(
+            f"network must be one of {NETWORK_VALUES!r}, got {network!r}"
+        ) from None
 
 BSV_COIN_TYPE: int = 236
 """SLIP-44 coin type for Bitcoin SV."""
@@ -134,16 +172,31 @@ def _validate_branch_index(change: int, index: int) -> None:
         raise ValueError(f"index out of non-hardened range: {index}")
 
 
-def derive_address(xpub: Xpub, change: int, index: int) -> str:
+def derive_address(
+    xpub: Xpub,
+    change: int,
+    index: int,
+    *,
+    network: Network = DEFAULT_NETWORK,
+) -> str:
     """Derive a P2PKH address at `<xpub>/change/index` from the account xpub.
 
     Pure function (no I/O). Used by:
+
     - the companion PWA to enumerate addresses for UTXO discovery,
     - the Pi during sign-time change re-derivation,
     - the receive flow on the PWA.
+
+    ``network`` selects the base58check version byte (``0x00`` for
+    mainnet, ``0x6F`` for testnet). The xpub bytes themselves are the
+    same regardless of network — same secp256k1 public key and chain
+    code — but the rendered string differs. Defaults to ``"main"`` so
+    the existing single-arg callsites stay byte-for-byte identical to
+    the pre-testnet codebase.
     """
     _validate_branch_index(change, index)
-    return xpub.ckd(change).ckd(index).address()
+    leaf = xpub.ckd(change).ckd(index)
+    return leaf.key.address(network=_bsv_network(network))
 
 
 def derive_signing_key(account_xprv: Xprv, change: int, index: int) -> PrivateKey:
