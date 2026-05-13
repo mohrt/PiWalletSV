@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from piwallet.bonnet.choosers import EntropySourceChooser, WordCountChooser
 from piwallet.bonnet.entropy_screens import CameraEntropyScreen, DiceEntropyScreen
+from piwallet.bonnet.hd_path_chooser import run_hd_path_chooser
 from piwallet.core import mnemonic as mnem
 from piwallet.core.mnemonic import MnemonicError
 from piwallet.core.vault import Vault, VaultError, WalletRecord
@@ -48,8 +49,18 @@ def run_create_wallet(
     *,
     target_fps: int = 30,
     word_count: int | None = None,
+    hd_path: tuple[int, int] | None = None,
     idle_wake: IdleWakeTracker | None = None,
 ) -> CreateWalletOutcome:
+    """Walk the operator through wallet creation.
+
+    ``word_count`` and ``hd_path`` are optional pre-selected choices
+    (caller already prompted for them); if either is ``None`` the
+    matching chooser screen runs inline. ``hd_path`` is a
+    ``(coin_type, account_index)`` tuple — defaults to BSV
+    ``(236, 0)`` if the operator accepts the preset chooser's first
+    row.
+    """
     wc = word_count
     if wc is None:
         wcs = WordCountChooser()
@@ -60,6 +71,17 @@ def run_create_wallet(
 
     if wc not in (12, 24):
         raise ValueError(f"word_count must be 12 or 24 (or None); got {wc}")
+
+    chosen_path = hd_path
+    if chosen_path is None:
+        chosen_path = run_hd_path_chooser(
+            display,
+            input_mgr,
+            target_fps=target_fps,
+            idle_wake=idle_wake,
+        )
+        if chosen_path is None:
+            return CreateWalletOutcome(cancelled=True)
 
     ents = EntropySourceChooser()
     run_screen(display, input_mgr, ents, target_fps=target_fps, idle_wake=idle_wake)
@@ -105,7 +127,14 @@ def run_create_wallet(
         else:
             label = name_scr.result.strip() or _next_default_label(vault)
 
-        rec = vault.add_wallet(pin, picker.result, label)
+        coin_type, account_index = chosen_path
+        rec = vault.add_wallet(
+            pin,
+            picker.result,
+            label,
+            coin_type=coin_type,
+            account_index=account_index,
+        )
         return CreateWalletOutcome(wallet=rec)
     except MnemonicError as exc:
         return CreateWalletOutcome(error=str(exc))

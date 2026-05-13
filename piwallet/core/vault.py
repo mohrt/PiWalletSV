@@ -270,22 +270,47 @@ class Vault:
             return 0
         return max(0, self._state.pin_attempt_threshold - self._state.pin_attempt_counter)
 
-    def add_wallet(self, pin: str, mnemonic_phrase: str, label: str) -> WalletRecord:
+    def add_wallet(
+        self,
+        pin: str,
+        mnemonic_phrase: str,
+        label: str,
+        *,
+        coin_type: int = deriv.BSV_COIN_TYPE,
+        account_index: int = deriv.DEFAULT_ACCOUNT_INDEX,
+    ) -> WalletRecord:
         """Encrypt a new wallet under the PIN-derived KEK.
 
         Mnemonic is converted to seed → xprv → encrypted, then immediately
         zeroed from the buffer. The mnemonic itself is NOT persisted.
+
+        ``coin_type`` and ``account_index`` select the BIP44 account the
+        wallet derives at (``m/44'/coin_type'/account_index'``). Defaults
+        match BSV's SLIP-44 assignment (236) + account 0; passing other
+        values lets the operator stand up a wallet on a different
+        account or coin type without changing the seed. The chosen
+        path is persisted in the wallet record's ``derivation_path``
+        and surfaced through :class:`WalletRecord`.
         """
         if self._state is None:
             raise VaultError("vault not initialized")
         _validate_pin(pin)
         mnem.validate(mnemonic_phrase)
+        if coin_type < 0 or account_index < 0:
+            raise VaultError(
+                f"coin_type and account_index must be non-negative; got "
+                f"coin_type={coin_type}, account_index={account_index}"
+            )
 
         # Compute keys; treat the mnemonic and seed as sensitive.
         seed_bytes = bytearray(mnem.seed_from_mnemonic(mnemonic_phrase))
         try:
             master = deriv.master_xprv_from_seed(bytes(seed_bytes))
-            account = deriv.derive_account(master)
+            account = deriv.derive_account(
+                master,
+                coin_type=coin_type,
+                account=account_index,
+            )
             # Persist the full Base58Check xprv string. Slightly larger than
             # raw 64 bytes (key + chain_code), but means we don't need to
             # reassemble the BIP32 metadata on unlock.

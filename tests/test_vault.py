@@ -95,6 +95,68 @@ def test_add_wallet_persists_across_reload(vault_path: Path) -> None:
     assert listed[0].fingerprint.hex() == EXPECTED_FP_HEX
 
 
+def test_add_wallet_with_custom_coin_type_and_account(vault_path: Path) -> None:
+    """Custom (coin_type, account_index) is reflected in WalletRecord.derivation_path."""
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    rec = v.add_wallet(
+        pin=GOOD_PIN,
+        mnemonic_phrase=CANONICAL_MNEMONIC,
+        label="alt",
+        coin_type=0,
+        account_index=2,
+    )
+    assert rec.derivation_path == "m/44'/0'/2'"
+    # And it survives a vault reload.
+    v2 = vlt.Vault(vault_path)
+    assert v2.list_wallets()[0].derivation_path == "m/44'/0'/2'"
+
+
+def test_add_wallet_rejects_negative_coin_type(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    with pytest.raises(vlt.VaultError):
+        v.add_wallet(
+            pin=GOOD_PIN,
+            mnemonic_phrase=CANONICAL_MNEMONIC,
+            label="bad",
+            coin_type=-1,
+        )
+
+
+def test_add_wallet_rejects_negative_account_index(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    with pytest.raises(vlt.VaultError):
+        v.add_wallet(
+            pin=GOOD_PIN,
+            mnemonic_phrase=CANONICAL_MNEMONIC,
+            label="bad",
+            account_index=-5,
+        )
+
+
+def test_add_wallet_distinct_accounts_produce_distinct_xprvs(vault_path: Path) -> None:
+    """Two wallets at different account indices have different fingerprints."""
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    a = v.add_wallet(
+        pin=GOOD_PIN,
+        mnemonic_phrase=CANONICAL_MNEMONIC,
+        label="a",
+        account_index=0,
+    )
+    b = v.add_wallet(
+        pin=GOOD_PIN,
+        mnemonic_phrase=CANONICAL_MNEMONIC,
+        label="b",
+        account_index=1,
+    )
+    assert a.fingerprint != b.fingerprint
+    assert a.derivation_path == "m/44'/236'/0'"
+    assert b.derivation_path == "m/44'/236'/1'"
+
+
 def test_derive_signing_key_returns_correct_address(vault_path: Path) -> None:
     v = vlt.Vault(vault_path)
     v.create(pin=GOOD_PIN)

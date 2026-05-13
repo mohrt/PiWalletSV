@@ -76,6 +76,11 @@ def _stub_run_screen(
     return fake_run_screen
 
 
+#: Bypass the HD path chooser in tests that don't care about it; the
+#: chooser is independently exercised in test_bonnet_hd_path_chooser.py.
+_BSV_DEFAULT: tuple[int, int] = (236, 0)
+
+
 def test_create_happy_path_saves_wallet(
     monkeypatch: pytest.MonkeyPatch,
     vault: Vault,
@@ -104,11 +109,14 @@ def test_create_happy_path_saves_wallet(
         ),
     )
 
-    outcome = cw.run_create_wallet(display, input_mgr, vault, pin="123456")
+    outcome = cw.run_create_wallet(
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+    )
     assert outcome.error is None
     assert outcome.cancelled is False
     assert outcome.wallet is not None
     assert outcome.wallet.label == "wallet-1"
+    assert outcome.wallet.derivation_path == "m/44'/236'/0'"
     assert vault.list_wallets()[0].id == outcome.wallet.id
 
 
@@ -133,7 +141,9 @@ def test_create_cancel_at_show_phrase(
             },
         ),
     )
-    outcome = cw.run_create_wallet(display, input_mgr, vault, pin="123456")
+    outcome = cw.run_create_wallet(
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+    )
     assert outcome.cancelled is True
     assert outcome.wallet is None
     assert outcome.error is None
@@ -166,7 +176,9 @@ def test_create_cancel_at_confirm_picker(
             },
         ),
     )
-    outcome = cw.run_create_wallet(display, input_mgr, vault, pin="123456")
+    outcome = cw.run_create_wallet(
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+    )
     assert outcome.wallet is None
     assert outcome.cancelled is True
     assert vault.list_wallets() == []
@@ -199,7 +211,9 @@ def test_create_saves_custom_label(
             },
         ),
     )
-    outcome = cw.run_create_wallet(display, input_mgr, vault, pin="123456")
+    outcome = cw.run_create_wallet(
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+    )
     assert outcome.wallet is not None
     assert outcome.wallet.label == "river"
 
@@ -236,7 +250,9 @@ def test_create_default_label_avoids_collisions(
             },
         ),
     )
-    outcome = cw.run_create_wallet(display, input_mgr, vault, pin="123456")
+    outcome = cw.run_create_wallet(
+        display, input_mgr, vault, pin="123456", hd_path=_BSV_DEFAULT
+    )
     assert outcome.wallet is not None
     assert outcome.wallet.label == "wallet-3"
 
@@ -254,3 +270,110 @@ def test_create_rejects_bad_word_count(
             pin="123456",
             word_count=15,
         )
+
+
+def test_create_threads_custom_hd_path_into_vault(
+    monkeypatch: pytest.MonkeyPatch,
+    vault: Vault,
+    display: HeadlessDisplay,
+    input_mgr: InputManager,
+) -> None:
+    """A non-default ``hd_path`` is reflected in the saved wallet's derivation path."""
+
+    def show_done(s):
+        s.done = True
+        s.result = True
+
+    def pick_done(s: MnemonicConfirmPickScreen):
+        s.done = True
+        s.result = " ".join(s.phrase_words)
+
+    monkeypatch.setattr(
+        cw,
+        "run_screen",
+        _stub_run_screen(
+            {
+                WordCountChooser: _wc_12,
+                EntropySourceChooser: _entropy_csr,
+                ShowPhraseScreen: show_done,
+                MnemonicConfirmPickScreen: pick_done,
+                WalletLabelEntryScreen: _label_use_default,
+            },
+        ),
+    )
+
+    outcome = cw.run_create_wallet(
+        display, input_mgr, vault, pin="123456", hd_path=(236, 3)
+    )
+    assert outcome.wallet is not None
+    assert outcome.wallet.derivation_path == "m/44'/236'/3'"
+    # Persisted in the vault file too.
+    assert vault.list_wallets()[0].derivation_path == "m/44'/236'/3'"
+
+
+def test_create_runs_hd_path_chooser_when_not_provided(
+    monkeypatch: pytest.MonkeyPatch,
+    vault: Vault,
+    display: HeadlessDisplay,
+    input_mgr: InputManager,
+) -> None:
+    """If ``hd_path`` is omitted, ``run_create_wallet`` calls the chooser."""
+    chooser_called = {"called": False}
+
+    def fake_chooser(_d, _m, **_):
+        chooser_called["called"] = True
+        return (0, 7)
+
+    monkeypatch.setattr(cw, "run_hd_path_chooser", fake_chooser)
+
+    def show_done(s):
+        s.done = True
+        s.result = True
+
+    def pick_done(s: MnemonicConfirmPickScreen):
+        s.done = True
+        s.result = " ".join(s.phrase_words)
+
+    monkeypatch.setattr(
+        cw,
+        "run_screen",
+        _stub_run_screen(
+            {
+                WordCountChooser: _wc_12,
+                EntropySourceChooser: _entropy_csr,
+                ShowPhraseScreen: show_done,
+                MnemonicConfirmPickScreen: pick_done,
+                WalletLabelEntryScreen: _label_use_default,
+            },
+        ),
+    )
+
+    outcome = cw.run_create_wallet(display, input_mgr, vault, pin="123456")
+    assert chooser_called["called"]
+    assert outcome.wallet is not None
+    assert outcome.wallet.derivation_path == "m/44'/0'/7'"
+
+
+def test_create_cancels_when_chooser_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+    vault: Vault,
+    display: HeadlessDisplay,
+    input_mgr: InputManager,
+) -> None:
+    """Cancelling the chooser short-circuits the whole create flow."""
+    monkeypatch.setattr(cw, "run_hd_path_chooser", lambda *_a, **_k: None)
+
+    monkeypatch.setattr(
+        cw,
+        "run_screen",
+        _stub_run_screen(
+            {
+                WordCountChooser: _wc_12,
+            },
+        ),
+    )
+
+    outcome = cw.run_create_wallet(display, input_mgr, vault, pin="123456")
+    assert outcome.cancelled is True
+    assert outcome.wallet is None
+    assert vault.list_wallets() == []
