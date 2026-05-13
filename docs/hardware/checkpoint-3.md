@@ -44,10 +44,17 @@ tests, but only the round-trip on real hardware can prove that:
 From the dev machine:
 
 ```sh
-rsync -av --delete --exclude='.venv/' --exclude='__pycache__/' \
-    --exclude='node_modules/' --exclude='companion/dist/' \
+rsync -av --delete \
+    --exclude='.venv/' \
+    --exclude='__pycache__/' \
+    --exclude='node_modules/' \
+    --exclude='site/' \
+    --exclude='companion/dist/' \
     ./ <user>@<host>:<repo-path>/
 ```
+
+The `site/` exclude matters if you've ever run `mkdocs build` locally —
+the rendered HTML lands there and serves no purpose on the Pi.
 
 On the Pi:
 

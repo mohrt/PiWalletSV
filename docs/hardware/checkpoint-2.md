@@ -23,8 +23,12 @@ can prove that:
 From the dev machine:
 
 ```sh
-rsync -av --delete --exclude='.venv/' --exclude='__pycache__/' \
-    --exclude='node_modules/' --exclude='companion/dist/' \
+rsync -av --delete \
+    --exclude='.venv/' \
+    --exclude='__pycache__/' \
+    --exclude='node_modules/' \
+    --exclude='site/' \
+    --exclude='companion/dist/' \
     ./ <user>@<host>:<repo-path>/
 ```
 
