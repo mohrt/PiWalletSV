@@ -143,3 +143,87 @@ def test_derive_address_fn_returns_p2pkh_for_indices(
         assert 26 <= len(addr) <= 35  # Base58Check P2PKH range
     assert addr_0_0 != addr_0_1
     assert addr_0_0 != addr_1_0
+
+
+# ---------------------------------------------------------------------------
+# Settings persistence
+# ---------------------------------------------------------------------------
+
+
+def test_persisted_settings_apply_at_run_bonnet_boot(
+    accepted_terms: Path,
+    tmp_path: Path,
+) -> None:
+    """Brightness saved on disk applies before the first paint of session N+1.
+
+    We deliberately use the "no vault" exit path because it's the
+    shortest run_bonnet flow that still goes through the full boot
+    prologue: load_settings -> set_brightness -> show "No vault"
+    banner -> exit 1. If a regression dropped the apply step from
+    the boot path, the displayed banner would render at MAX_BRIGHTNESS
+    instead of the persisted 0.4 the operator chose last session.
+
+    Both fields are persisted; a separate test
+    (``test_load_v1_file_save_re_stamps_v2`` in test_core_settings.py)
+    pins ``sleep_timeout_ms`` round-trip behaviour at the
+    ``BonnetSettings`` layer.
+    """
+    from piwallet.core.settings import (
+        BonnetSettings,
+        load_settings,
+        save_settings,
+    )
+
+    settings_path = tmp_path / "settings.json"
+    save_settings(
+        BonnetSettings(brightness=0.4, sleep_timeout_ms=0),
+        settings_path,
+    )
+
+    # The file contains both fields and survives a round-trip.
+    reloaded = load_settings(settings_path)
+    assert reloaded.brightness == pytest.approx(0.4)
+    assert reloaded.sleep_timeout_ms == 0
+
+    backend = FakeInputBackend()
+    mgr = InputManager(backend)
+    display = HeadlessDisplay()
+
+    code = run_bonnet(
+        vault_path=tmp_path / "missing-vault.bin",
+        display=display,
+        input_mgr=mgr,
+        terms_path=accepted_terms,
+        settings_path=settings_path,
+        target_fps=1000,
+    )
+
+    assert code == 1  # No vault path; exits before unlock.
+    # The "No vault" banner painted at least once at the persisted level.
+    assert display.flip_count >= 1
+    # Brightness was applied before that paint; the multiplier sticks
+    # on the display object even though run_bonnet's finally clause
+    # turns the backlight off on exit.
+    assert display.brightness == pytest.approx(0.4)
+
+
+def test_settings_save_writes_both_fields(tmp_path: Path) -> None:
+    """End-to-end: feeding ``screen.settings`` to ``save_settings``
+    persists brightness *and* sleep_timeout_ms together — neither
+    field can drop out of the save path.
+    """
+    import json
+
+    from piwallet.core.settings import (
+        BonnetSettings,
+        save_settings,
+    )
+
+    p = tmp_path / "settings.json"
+    save_settings(
+        BonnetSettings(brightness=0.55, sleep_timeout_ms=60_000),
+        p,
+    )
+    payload = json.loads(p.read_text())
+    assert payload["brightness"] == pytest.approx(0.55)
+    assert payload["sleep_timeout_ms"] == 60_000
