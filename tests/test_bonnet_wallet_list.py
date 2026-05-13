@@ -53,8 +53,8 @@ def test_list_empty_still_offers_actions() -> None:
 def test_list_offers_new_and_restore_at_bottom() -> None:
     wallets = [_wallet("daily", 0), _wallet("savings", 1)]
     s = WalletListScreen(wallets=wallets)
-    # 2 wallets + 3 actions (new/restore/settings) = 5 rows.
-    # Cursor 0 -> 1 -> 2 lands on "+ New wallet".
+    # 2 wallets + 2 CTA rows (new/restore) = 4 rows. Cursor 0 -> 1 -> 2
+    # lands on "+ New wallet"; settings is no longer a row.
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.DOWN))
     assert s.cursor == 2
@@ -66,30 +66,47 @@ def test_list_offers_new_and_restore_at_bottom() -> None:
 def test_list_restore_action() -> None:
     wallets = [_wallet("daily")]
     s = WalletListScreen(wallets=wallets)
-    # 1 wallet + 3 actions = 4 rows. Cursor 0 -> 1 -> 2 lands on "+ Restore".
+    # 1 wallet + 2 CTAs = 3 rows. Cursor 0 -> 1 -> 2 lands on "+ Restore".
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.A))
     assert s.result is WalletListAction.RESTORE
 
 
-def test_list_settings_action() -> None:
-    """Settings row sits at the bottom and confirms to WalletListAction.SETTINGS."""
+def test_list_no_settings_row_among_items() -> None:
+    """Settings is reached via gesture, not by drilling into a row."""
+    wallets = [_wallet("daily"), _wallet("savings", 1)]
+    s = WalletListScreen(wallets=wallets)
+    # 2 wallets + only New + Restore.
+    assert len(s._list.items) == 4
+    labels = [item.label for item in s._list.items]
+    assert "Settings" not in labels
+
+
+def test_list_long_select_opens_settings() -> None:
+    """Long-press SELECT (joystick centre) confirms to SETTINGS without a row."""
     wallets = [_wallet("daily")]
     s = WalletListScreen(wallets=wallets)
-    # 1 wallet + 3 actions = 4 rows; the settings row is the last.
-    for _ in range(3):
-        s.on_event(_evt(Button.DOWN))
-    s.on_event(_evt(Button.A))
+    s.on_event(_evt(Button.SELECT, EventKind.LONG))
+    assert s.done is True
     assert s.result is WalletListAction.SETTINGS
 
 
-def test_list_settings_action_on_empty_vault() -> None:
+def test_list_short_select_still_confirms_highlighted_row() -> None:
+    """Quick SELECT press must keep its existing "confirm" semantics."""
+    wallets = [_wallet("daily")]
+    s = WalletListScreen(wallets=wallets)
+    # Highlight the first wallet by default; SELECT confirms it.
+    s.on_event(_evt(Button.SELECT, EventKind.PRESS))
+    assert s.done is True
+    assert s.result == "wallet-0"
+
+
+def test_list_long_select_works_on_empty_vault() -> None:
+    """Settings must be reachable even when there are no wallets yet."""
     s = WalletListScreen(wallets=[])
-    # 0 wallets + 3 actions: rows are New(0), Restore(1), Settings(2).
-    s.on_event(_evt(Button.DOWN))
-    s.on_event(_evt(Button.DOWN))
-    s.on_event(_evt(Button.A))
+    s.on_event(_evt(Button.SELECT, EventKind.LONG))
+    assert s.done is True
     assert s.result is WalletListAction.SETTINGS
 
 
