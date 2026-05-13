@@ -113,12 +113,22 @@ def _make_derive_address_fn(
     wallet_id: str,
     pin: str,
 ) -> Callable[[int, int], str]:
-    """Build a ``(change, index) -> address`` closure for a wallet."""
+    """Build a ``(change, index) -> address`` closure for a wallet.
+
+    Reads the wallet's stored network (``"main"`` / ``"test"``) so
+    rendered addresses are valid for the network the operator
+    configured at create-time.
+    """
     xpub_str = vault.get_account_xpub(pin, wallet_id)
     xpub = deriv.parse_xpub(xpub_str)
+    rec = next(
+        (w for w in vault.list_wallets() if w.id == wallet_id),
+        None,
+    )
+    network: deriv.Network = rec.network if rec is not None else deriv.NETWORK_MAIN
 
     def derive(change: int, index: int) -> str:
-        return deriv.derive_address(xpub, change, index)
+        return deriv.derive_address(xpub, change, index, network=network)
     return derive
 
 

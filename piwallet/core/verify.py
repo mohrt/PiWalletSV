@@ -133,12 +133,25 @@ def verify_proposal(
     account_xpub_str: str,
     *,
     max_fee_rate_satskb: int | None = None,
+    network: deriv.Network = deriv.DEFAULT_NETWORK,
 ) -> VerifiedProposal:
     """Validate `proposal` against `account_xpub_str` and the included anchors.
 
     :param proposal: decoded `UnsignedProposal` (already deserialized).
     :param account_xpub_str: Base58Check xpub at `m/44'/coin'/account'`.
     :param max_fee_rate_satskb: optional sanity cap on the proposal's fee rate.
+    :param network: ``"main"`` or ``"test"`` — the wallet's
+        address-encoding network. P2PKH scripts are
+        **network-invariant at the bytes level** (the HASH160 is the
+        same for both networks; only the rendered base58check string
+        differs), so this kwarg does NOT gate verification: a
+        mainnet proposal will verify under either network kwarg and
+        vice versa. The kwarg is plumbed through so future
+        per-network checks (e.g. testnet-only opcode whitelists, or
+        BIP21 URI emission) can be added without an API change, and
+        so error messages render addresses in the user's expected
+        format. Defaults to ``"main"`` to keep existing single-arg
+        callsites byte-identical.
     :returns: `VerifiedProposal` ready for sign.py.
     :raises ProposalVerificationError: with a short, user-displayable reason.
     """
@@ -204,7 +217,9 @@ def verify_proposal(
         # from prevout_script_hex.
         change, index = ip.derivation
         try:
-            expected_address = deriv.derive_address(account_xpub, change, index)
+            expected_address = deriv.derive_address(
+                account_xpub, change, index, network=network
+            )
         except ValueError as exc:
             raise ProposalVerificationError(
                 f"{ctx}: bad derivation {ip.derivation}: {exc}"
@@ -234,7 +249,9 @@ def verify_proposal(
     out = proposal.outputs[proposal.change_index]
     cd_branch, cd_index = proposal.change_derivation
     try:
-        change_address = deriv.derive_address(account_xpub, cd_branch, cd_index)
+        change_address = deriv.derive_address(
+            account_xpub, cd_branch, cd_index, network=network
+        )
     except ValueError as exc:
         raise ProposalVerificationError(
             f"bad changeDerivation {proposal.change_derivation}: {exc}"
@@ -295,8 +312,20 @@ def _merkle_path_anchored(
         return False
 
 
-def script_address_or_none(script_hex: str) -> str | None:
-    """Try to extract the P2PKH address from a script. Returns None on non-P2PKH."""
+def script_address_or_none(
+    script_hex: str,
+    *,
+    network: deriv.Network = deriv.DEFAULT_NETWORK,
+) -> str | None:
+    """Try to extract the P2PKH address from a script.
+
+    Returns the base58check-encoded address on a successful P2PKH
+    template match, or ``None`` for non-P2PKH scripts and parse errors.
+    The address is rendered for ``network`` (mainnet ``0x00`` or
+    testnet ``0x6F``); callers showing addresses to the operator must
+    supply the wallet's network so the rendered string is one the
+    operator's tools and the network's nodes will accept.
+    """
     try:
         s = Script(script_hex)
         # P2PKH is OP_DUP OP_HASH160 <20-byte> OP_EQUALVERIFY OP_CHECKSIG
@@ -307,8 +336,29 @@ def script_address_or_none(script_hex: str) -> str | None:
             and len(chunks[2].data) == 20
         ):
             from bsv import to_base58_check
-            from bsv.constants import ADDRESS_MAINNET_PREFIX
-            return to_base58_check(chunks[2].data, prefix=ADDRESS_MAINNET_PREFIX.to_bytes(1, "big"))
+            from bsv.constants import (
+                ADDRESS_MAINNET_PREFIX,
+                ADDRESS_TESTNET_PREFIX,
+            )
+
+            prefix_bytes = (
+                ADDRESS_MAINNET_PREFIX
+                if network == deriv.NETWORK_MAIN
+                else ADDRESS_TESTNET_PREFIX
+            )
+            # bsv-sdk's to_base58_check is typed `List[int]` for both
+            # args (it concatenates them with `+`), so we have to
+            # convert the bytes-typed prefix and the bytes-typed h160
+            # payload to lists. The original implementation tried
+            # `prefix.to_bytes(1, "big")` and would have raised
+            # AttributeError on this version of the SDK — the helper
+            # has no internal callers, which is why the bug never
+            # surfaced. Tests in test_verify.py now exercise both
+            # network paths to guard against future regressions.
+            return to_base58_check(
+                list(chunks[2].data),
+                prefix=list(prefix_bytes),
+            )
     except Exception:
         return None
     return None

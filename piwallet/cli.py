@@ -500,12 +500,18 @@ def sign_cmd(
 
     derive_key = partial(v.derive_signing_key, pin, wallet_id)
 
+    # Look up the wallet's stored network so verify_proposal renders
+    # change addresses with the correct base58check prefix.
+    wallet_rec = next((w for w in v.list_wallets() if w.id == wallet_id), None)
+    network = wallet_rec.network if wallet_rec is not None else "main"
+
     try:
         result = sgn.verify_then_sign(
             proposal,
             xpub_str,
             derive_key,
             max_fee_rate_satskb=max_fee_rate_satskb,
+            network=network,
         )
     except vfy.ProposalVerificationError as exc:
         click.echo(f"VERIFY FAILED: {exc}", err=True)

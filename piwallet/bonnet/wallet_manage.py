@@ -113,12 +113,23 @@ def _make_derive_address_fn(
     wallet_id: str,
     pin: str,
 ) -> Callable[[int, int], str]:
-    """Build a ``(change, index) -> address`` closure for a wallet."""
+    """Build a ``(change, index) -> address`` closure for a wallet.
+
+    The returned closure renders addresses with the wallet's stored
+    network (mainnet ``0x00`` / testnet ``0x6F`` P2PKH prefix), so the
+    deposit-address QR / receive screen always shows a string the
+    target network's nodes will accept.
+    """
     xpub_str = vault.get_account_xpub(pin, wallet_id)
     xpub = deriv.parse_xpub(xpub_str)
+    rec = next(
+        (w for w in vault.list_wallets() if w.id == wallet_id),
+        None,
+    )
+    network: deriv.Network = rec.network if rec is not None else deriv.NETWORK_MAIN
 
     def derive(change: int, index: int) -> str:
-        return deriv.derive_address(xpub, change, index)
+        return deriv.derive_address(xpub, change, index, network=network)
 
     return derive
 

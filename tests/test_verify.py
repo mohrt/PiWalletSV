@@ -193,6 +193,73 @@ def test_fee_rate_cap_at_or_above_passes(
     assert result.fee_sats == 500
 
 
+# ---- network kwarg plumbing ----------------------------------------------
+#
+# Note: P2PKH scripts are network-invariant at the bytes level — the
+# HASH160 payload is the same for both networks, only the rendered
+# base58check address string differs. So the network kwarg on
+# verify_proposal does NOT gate verification. These tests cover the
+# pieces that DO need network awareness: positive testnet verification,
+# default-network preservation, and the script_address_or_none helper.
+
+
+@pytest.fixture
+def testnet_proposal() -> env.UnsignedProposal:
+    blob, _meta = build_proposal_01(network="test")
+    decoded = env.decode(blob)
+    assert isinstance(decoded, env.UnsignedProposal)
+    return decoded
+
+
+def test_testnet_proposal_verifies_under_testnet(
+    testnet_proposal: env.UnsignedProposal, account_xpub_str: str
+) -> None:
+    """A testnet proposal must verify when the wallet is configured for testnet."""
+    result = v.verify_proposal(testnet_proposal, account_xpub_str, network="test")
+    assert result.inputs[0].derivation == (0, 0)
+    assert result.fee_sats == 500
+
+
+def test_default_network_is_main(
+    proposal: env.UnsignedProposal, account_xpub_str: str
+) -> None:
+    """Calling verify_proposal without a network kwarg keeps mainnet behaviour."""
+    result = v.verify_proposal(proposal, account_xpub_str)
+    assert result.fee_sats == 500
+
+
+def test_p2pkh_script_invariance_across_networks(
+    testnet_proposal: env.UnsignedProposal, account_xpub_str: str
+) -> None:
+    """A testnet proposal verifies even under network='main' because P2PKH
+    scripts are bytes-identical across networks for the same key. Lock this
+    invariant in so a future contributor doesn't accidentally weaken the
+    network kwarg into a false safety claim.
+    """
+    # Both calls succeed; the rendered addresses in any error message
+    # would differ but the verification result itself is the same.
+    main_result = v.verify_proposal(testnet_proposal, account_xpub_str, network="main")
+    test_result = v.verify_proposal(testnet_proposal, account_xpub_str, network="test")
+    assert main_result.fee_sats == test_result.fee_sats
+
+
+def test_script_address_or_none_renders_for_network() -> None:
+    """script_address_or_none uses the network's base58check prefix."""
+    h160_bytes = b"\x00" * 20
+    h160_list = list(h160_bytes)
+    from bsv import P2PKH as _P2PKH
+    from bsv import to_base58_check
+    from bsv.constants import ADDRESS_MAINNET_PREFIX, ADDRESS_TESTNET_PREFIX
+
+    main_addr = to_base58_check(h160_list, prefix=list(ADDRESS_MAINNET_PREFIX))
+    test_addr = to_base58_check(h160_list, prefix=list(ADDRESS_TESTNET_PREFIX))
+    script_hex = _P2PKH().lock(main_addr).hex()
+
+    assert v.script_address_or_none(script_hex) == main_addr
+    assert v.script_address_or_none(script_hex, network="main") == main_addr
+    assert v.script_address_or_none(script_hex, network="test") == test_addr
+
+
 # ---- offline chain tracker -----------------------------------------------
 
 

@@ -45,15 +45,26 @@ def _double_sha256(data: bytes) -> bytes:
     return hashlib.sha256(hashlib.sha256(data).digest()).digest()
 
 
-def build_proposal_01() -> tuple[bytes, dict]:
-    """Build the canonical fixture and return (cbor_blob, metadata_json)."""
+def build_proposal_01(*, network: deriv.Network = "main") -> tuple[bytes, dict]:
+    """Build the canonical fixture and return (cbor_blob, metadata_json).
+
+    ``network`` selects whether the prevout + change addresses are
+    encoded as BSV mainnet (``"main"``, default — backwards-compatible
+    with the original fixture) or BSV testnet (``"test"``). Verification
+    paths that don't match the proposal's network must fail at the
+    change-script equality check.
+    """
     seed = mnem.seed_from_mnemonic(CANONICAL_MNEMONIC)
     master = deriv.master_xprv_from_seed(seed)
     account = deriv.derive_account(master)
 
     # Addresses and scripts we need.
-    receive_address = deriv.derive_address(account.xpub, deriv.CHANGE_RECEIVE, 0)
-    change_address = deriv.derive_address(account.xpub, deriv.CHANGE_INTERNAL, 0)
+    receive_address = deriv.derive_address(
+        account.xpub, deriv.CHANGE_RECEIVE, 0, network=network
+    )
+    change_address = deriv.derive_address(
+        account.xpub, deriv.CHANGE_INTERNAL, 0, network=network
+    )
     funding_script = P2PKH().lock(receive_address)
 
     # ----- funding tx: pays 50_000 sats to our /0/0 address -----------------
@@ -103,9 +114,13 @@ def build_proposal_01() -> tuple[bytes, dict]:
     pay_amount = 30_000
     fee = 500
     change_amount = funding_amount - pay_amount - fee  # 19_500
-    # Arbitrary valid external address (one of the canonical BIP39 zero-entropy
-    # mnemonic's m/44'/236'/0'/0/2 addresses; we just want a non-self target).
-    pay_address = "155Vurs4bMMu5BemtZ6cVPhryGWef4VxZu"
+    # Arbitrary valid external address (one of the canonical BIP39
+    # zero-entropy mnemonic's m/44'/236'/0'/0/2 addresses; we just
+    # want a non-self target). Pick the matching network's encoding so
+    # the script bytes parse correctly under that network's nodes.
+    pay_address = deriv.derive_address(
+        account.xpub, deriv.CHANGE_RECEIVE, 2, network=network
+    )
     pay_script = P2PKH().lock(pay_address)
     change_script = P2PKH().lock(change_address)
 

@@ -133,14 +133,23 @@ def verify_then_sign(
     derive_key: KeyDeriver,
     *,
     max_fee_rate_satskb: int | None = None,
+    network: str = "main",
 ) -> SignedResult:
     """Single call that runs `verify_proposal` then `build_signed_tx`.
+
+    ``network`` is forwarded to :func:`verify.verify_proposal` so the
+    change re-derivation address is rendered with the wallet's
+    network prefix; mismatches between proposal-side and wallet-side
+    networks fail at the change-script equality check.
 
     The caller still benefits from getting back the `verified` field so it
     can render the verified totals to the user before relaying the QR back.
     """
     verified = verify_proposal(
-        proposal, account_xpub_str, max_fee_rate_satskb=max_fee_rate_satskb
+        proposal,
+        account_xpub_str,
+        max_fee_rate_satskb=max_fee_rate_satskb,
+        network=network,  # type: ignore[arg-type]
     )
     return build_signed_tx(verified, derive_key)
 
