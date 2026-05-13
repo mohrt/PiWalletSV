@@ -104,8 +104,19 @@ def vault_init(ctx: click.Context) -> None:
 
 @vault.command("add", help="Add a wallet from a mnemonic supplied on stdin.")
 @click.option("--label", required=True, help="Human-readable label for the wallet.")
+@click.option(
+    "--network",
+    type=click.Choice(["main", "test"], case_sensitive=False),
+    default="main",
+    show_default=True,
+    help=(
+        "Network this wallet derives addresses for. Affects the base58check "
+        "prefix and the WoC base URL the companion talks to; does NOT affect "
+        "key material. Use 'test' for TBSV testnet wallets."
+    ),
+)
 @click.pass_context
-def vault_add(ctx: click.Context, label: str) -> None:
+def vault_add(ctx: click.Context, label: str, network: str) -> None:
     path = ctx.obj["vault_path"]
     if not path.exists():
         click.echo("vault does not exist; run `piwallet vault init` first", err=True)
@@ -114,7 +125,12 @@ def vault_add(ctx: click.Context, label: str) -> None:
     phrase = click.get_text_stream("stdin").read().strip()
     v = Vault(path)
     try:
-        rec = v.add_wallet(pin=pin, mnemonic_phrase=phrase, label=label)
+        rec = v.add_wallet(
+            pin=pin,
+            mnemonic_phrase=phrase,
+            label=label,
+            network=network.lower(),  # type: ignore[arg-type]
+        )
     except WrongPinError as exc:
         click.echo(f"WRONG PIN ({exc.attempts_remaining} attempts left)", err=True)
         sys.exit(2)
@@ -136,9 +152,14 @@ def vault_list(ctx: click.Context) -> None:
         return
     v = Vault(path)
     for w in v.list_wallets():
+        # Render network as TESTNET in caps so it visually pops in a
+        # mixed-network listing; mainnet stays lowercase to match how
+        # we render it on the bonnet's wallet-info screen.
+        net_label = "TESTNET" if w.network == "test" else "mainnet"
         click.echo(
             f"{w.id}\t{w.fingerprint.hex()}\t{w.label}\t"
-            f"{w.derivation_path}\t{w.word_count} words\t{w.created_at}"
+            f"{w.derivation_path}\t{net_label}\t"
+            f"{w.word_count} words\t{w.created_at}"
         )
 
 

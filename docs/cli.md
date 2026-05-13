@@ -78,13 +78,24 @@ Create a new empty vault. Interactive: prompts for PIN twice. Refuses
 if the vault file already exists; see [Operate § Wiping](operate.md#wiping-the-vault)
 for how to start over.
 
-### `vault add --label <name>`
+### `vault add --label <name> [--network main|test]`
 
 Add a wallet from a mnemonic on stdin:
 
 ```bash
 piwallet mnemonic new \
   | piwallet vault --vault-path ~/.piwallet-dev/vault.bin add --label "Daily"
+```
+
+Pass `--network test` for a TBSV testnet wallet. The flag affects the
+base58check prefix the signer renders for receive addresses and the
+WoC base URL the companion talks to; it does **not** change the key
+material. Defaults to `main`.
+
+```bash
+piwallet mnemonic new \
+  | piwallet vault --vault-path ~/.piwallet-dev/vault.bin add \
+        --label "Faucet" --network test
 ```
 
 Or restore from an existing phrase:
@@ -99,8 +110,16 @@ and persists the wallet record.
 
 ### `vault list`
 
-Print one line per wallet (`<id> <label>`). **Does not require the
-PIN** — the public metadata is unencrypted. Safe to script.
+Print one tab-separated line per wallet:
+
+```text
+<id>  <fp>  <label>  <hd_path>  <network>  <words>  <created_at>
+```
+
+Network renders as `mainnet` or `TESTNET` (caps for emphasis so a
+testnet wallet can't be missed in a mixed-network listing). **Does
+not require the PIN** — the public metadata is unencrypted. Safe to
+script.
 
 ### `vault export-xpub <wallet-id>`
 

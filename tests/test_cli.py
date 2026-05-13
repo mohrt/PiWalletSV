@@ -216,6 +216,93 @@ def test_decode_unsigned_fixture() -> None:
     assert "headerAnchors: [812345]" in res.output
 
 
+def test_vault_list_renders_network_column(tmp_path: Path) -> None:
+    """`vault list` distinguishes mainnet vs testnet wallets visually.
+
+    Without this, an operator can't tell which records hold testnet
+    keys from CLI output alone — the bonnet's wallet-info screen
+    surfaces the network but the CLI is what scripts and backup
+    monitors consume.
+    """
+    runner = CliRunner()
+    vault_path = tmp_path / "vault.bin"
+
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "init"],
+        input=f"{PIN}\n{PIN}\n",
+    )
+    assert res.exit_code == 0, res.output
+
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "add", "--label", "main-w"],
+        input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
+    )
+    assert res.exit_code == 0, res.output
+
+    other = (
+        "legal winner thank year wave sausage worth useful legal winner thank yellow"
+    )
+    res = runner.invoke(
+        main,
+        [
+            "vault",
+            "--vault-path",
+            str(vault_path),
+            "add",
+            "--label",
+            "test-w",
+            "--network",
+            "test",
+        ],
+        input=f"{PIN}\n{other}\n",
+    )
+    assert res.exit_code == 0, res.output
+
+    res = runner.invoke(main, ["vault", "--vault-path", str(vault_path), "list"])
+    assert res.exit_code == 0, res.output
+
+    main_line = next(line for line in res.output.splitlines() if "main-w" in line)
+    test_line = next(line for line in res.output.splitlines() if "test-w" in line)
+    # Tab-separated columns: id, fp, label, hd_path, network, words, created_at.
+    assert "\tmainnet\t" in main_line
+    assert "\tTESTNET\t" in test_line
+    # Mainnet should not get the loud uppercase label and vice-versa.
+    assert "\tTESTNET\t" not in main_line
+    assert "\tmainnet\t" not in test_line
+
+
+def test_vault_add_rejects_unknown_network(tmp_path: Path) -> None:
+    """Click's choice validation refuses anything other than main/test."""
+    runner = CliRunner()
+    vault_path = tmp_path / "vault.bin"
+
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "init"],
+        input=f"{PIN}\n{PIN}\n",
+    )
+    assert res.exit_code == 0
+
+    res = runner.invoke(
+        main,
+        [
+            "vault",
+            "--vault-path",
+            str(vault_path),
+            "add",
+            "--label",
+            "regtest-w",
+            "--network",
+            "regtest",
+        ],
+        input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
+    )
+    assert res.exit_code != 0
+    assert "regtest" in res.output  # Click echoes the rejected value
+
+
 def test_mnemonic_new() -> None:
     runner = CliRunner()
     for n in (12, 24):
