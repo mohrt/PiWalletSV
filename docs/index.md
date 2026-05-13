@@ -28,6 +28,16 @@ animated QR codes. The Pi never touches a network.
     Bring up the bonnet, install the signer, run the companion in a
     browser. Start here if you've just got the hardware.
 
+-   :material-package-down: __[Build & deploy](build.md)__
+
+    Take a blank Pi from a freshly-flashed SD card to an autostarting
+    bonnet kiosk under systemd, with bounded journald logs.
+
+-   :material-cog: __[Operate](operate.md)__
+
+    Day-to-day ops: logs, exit codes, vault stewardship, factory
+    reset, updates, and troubleshooting the deployment itself.
+
 -   :material-shape: __[Architecture](architecture.md)__
 
     The two-host design, the trust boundary, the data flow, and why
@@ -38,6 +48,11 @@ animated QR codes. The Pi never touches a network.
 
     Pairing, receiving, sending, broadcasting, restoring. The same
     journey a normal user would take.
+
+-   :material-console: __[CLI reference](cli.md)__
+
+    Every `piwallet` subcommand with options, exit codes, and
+    pipe-friendly examples.
 
 -   :material-code-tags: __[Develop](develop.md)__
 

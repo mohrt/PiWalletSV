@@ -92,8 +92,11 @@ extra:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Build & deploy: build.md
+  - Operate: operate.md
   - Architecture: architecture.md
   - User manual: user-manual.md
+  - CLI reference: cli.md
   - Develop: develop.md
   - Security: security.md
   - Disclaimer: disclaimer.md
