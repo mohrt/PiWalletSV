@@ -59,73 +59,46 @@ def test_returns_real_prevout_values_not_claimed(
     assert result.inputs[0].prevout_sats == 50_000
 
 
-# ---- header chain failures ----------------------------------------------
+# ---- header anchor failures ---------------------------------------------
 
 
-def test_missing_headers(
+def test_missing_anchors(
     proposal: env.UnsignedProposal, account_xpub_str: str
 ) -> None:
-    bad = dataclasses.replace(proposal, headers=())
-    with pytest.raises(v.ProposalVerificationError, match="no headers"):
+    bad = dataclasses.replace(proposal, header_anchors={})
+    with pytest.raises(v.ProposalVerificationError, match="no header anchors"):
         v.verify_proposal(bad, account_xpub_str)
 
 
-def test_chain_with_wrong_first_prev_hash(
+def test_anchor_root_mismatch(
     proposal: env.UnsignedProposal, account_xpub_str: str
 ) -> None:
-    """A header chain whose first ``prev_hash`` does not equal the
-    firmware checkpoint must be rejected by the chain validator
-    before any input is touched."""
-    forged_first = bytearray(proposal.headers[0])
-    # prev_hash lives at offset 4..36; flip the leading byte.
-    forged_first[4] ^= 0xFF
+    """An anchor map that publishes the wrong Merkle root for the
+    BUMP's claimed height must be rejected. This is the only check
+    standing between a malicious anchor and a signature: if the BUMP-
+    derived root doesn't match the anchored root, the verifier must
+    refuse."""
+    (height,) = proposal.header_anchors
     bad = dataclasses.replace(
-        proposal, headers=(bytes(forged_first), *proposal.headers[1:])
+        proposal, header_anchors={height: b"\x00" * 32}
     )
-    with pytest.raises(v.ProposalVerificationError, match="prev_hash mismatch"):
+    with pytest.raises(v.ProposalVerificationError, match="merkle root mismatch"):
         v.verify_proposal(bad, account_xpub_str)
 
 
-def test_chain_with_failed_pow(
+def test_anchor_for_wrong_height_is_rejected(
     proposal: env.UnsignedProposal, account_xpub_str: str
 ) -> None:
-    """Tightening any header's ``bits`` so its declared target is
-    below its actual hash must trigger the per-header PoW
-    rejection before SPV inputs are checked."""
-    forged = bytearray(proposal.headers[0])
-    # bits at offset 72..76. Set to 0x1c000001 (impossibly tight).
-    forged[72:76] = (0x1C000001).to_bytes(4, "little")
+    """If the proposal anchors a different height than the BUMP
+    claims, the verifier should refuse with a clear ``no header
+    anchor for height ...`` message — easier to diagnose than a
+    silent merkle-root failure."""
+    (real_height,) = proposal.header_anchors
+    real_root = proposal.header_anchors[real_height]
     bad = dataclasses.replace(
-        proposal, headers=(bytes(forged), *proposal.headers[1:])
+        proposal, header_anchors={real_height + 1: real_root}
     )
-    with pytest.raises(v.ProposalVerificationError, match="header chain invalid"):
-        v.verify_proposal(bad, account_xpub_str)
-
-
-def test_proposal_with_wrong_checkpoint_height(
-    proposal: env.UnsignedProposal, account_xpub_str: str
-) -> None:
-    """The proposal's claimed ``checkpoint_height`` must match the
-    firmware's recent checkpoint for the wallet's network. Lying
-    about the checkpoint lets a malicious companion ship a
-    PoW-self-consistent fork from a different starting point; this
-    check stops it at envelope decode time."""
-    bad = dataclasses.replace(
-        proposal, checkpoint_height=proposal.checkpoint_height + 1
-    )
-    with pytest.raises(v.ProposalVerificationError, match="checkpointHeight"):
-        v.verify_proposal(bad, account_xpub_str)
-
-
-def test_chain_too_short_for_confirmation_depth(
-    proposal: env.UnsignedProposal, account_xpub_str: str
-) -> None:
-    """Truncating the chain so the deepest input has fewer than
-    :data:`v.MIN_CONFIRMATION_DEPTH` confirmations must be rejected.
-    The bonnet refuses to sign a proposal that the operator
-    couldn't confidently broadcast."""
-    bad = dataclasses.replace(proposal, headers=proposal.headers[:1])
-    with pytest.raises(v.ProposalVerificationError, match="confirmation"):
+    with pytest.raises(v.ProposalVerificationError, match="no header anchor"):
         v.verify_proposal(bad, account_xpub_str)
 
 
@@ -271,34 +244,14 @@ def test_default_network_is_main(
     assert result.fee_sats == 500
 
 
-def test_proposal_checkpoint_pins_to_wallets_network(
-    testnet_proposal: env.UnsignedProposal, account_xpub_str: str
-) -> None:
-    """Envelope v2 makes the SPV chain explicitly network-bound: the
-    proposal's first header must link to the firmware's recent
-    checkpoint *for the wallet's network*. A testnet proposal
-    presented to a mainnet-configured signer therefore fails at the
-    chain validation step rather than silently succeeding because the
-    P2PKH script bytes happened to match.
-
-    P2PKH scripts ARE bytes-identical across networks (same HASH160
-    for the same key, only the rendered base58check string differs);
-    we still pin that invariant via
-    :func:`test_script_address_or_none_renders_for_network` and the
-    canonical address fixture. What this test guards against is the
-    *separate* invariant that the SPV chain machinery refuses to
-    treat a testnet chain as a mainnet chain even when the locking
-    scripts would match — without that refusal, a malicious
-    companion could ship a testnet chain to a mainnet signer to
-    bypass the recent-checkpoint pin."""
-    # Wallet configured for testnet → testnet proposal verifies.
-    test_result = v.verify_proposal(testnet_proposal, account_xpub_str, network="test")
-    assert test_result.fee_sats == 500
-
-    # Same proposal under network='main' → fails because the chain
-    # links to the testnet checkpoint, not the mainnet one.
-    with pytest.raises(v.ProposalVerificationError, match="header chain invalid"):
-        v.verify_proposal(testnet_proposal, account_xpub_str, network="main")
+# A v1-era cross-network checkpoint test lived here; it relied on
+# firmware checkpoints to discriminate mainnet from testnet chains.
+# With the simpler "trust WoC's anchor map" model, network is enforced
+# by the change-address re-derivation step. P2PKH script bytes are
+# network-invariant, so a testnet proposal with a testnet xpub and a
+# valid anchor will technically verify under either network kwarg —
+# the kwarg is plumbed through to address rendering, not to chain
+# pinning. This is documented in `verify_proposal`'s docstring.
 
 
 def test_script_address_or_none_renders_for_network() -> None:

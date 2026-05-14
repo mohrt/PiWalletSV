@@ -312,12 +312,19 @@ export function mountScannerPage(root: HTMLElement): () => void {
       env.outputs.forEach((o, idx) => {
         lines.push(`outputs[${idx}]: ${o.sats} sats → ${o.scriptHex}`);
       });
+      const anchorHeights = [...env.headerAnchors.keys()].sort(
+        (a, b) => a - b,
+      );
+      const anchorRange =
+        anchorHeights.length === 0
+          ? "(none)"
+          : anchorHeights.length === 1
+            ? `(height ${anchorHeights[0]})`
+            : `(heights ${anchorHeights[0]}..${anchorHeights[anchorHeights.length - 1]})`;
       lines.push(
-        `checkpointHeight: ${env.checkpointHeight}`,
-        `headers:          ${env.headers.length} × 80B ` +
-          `(heights ${env.checkpointHeight + 1}..${
-            env.checkpointHeight + env.headers.length
-          })`,
+        `headerAnchors:    ${env.headerAnchors.size} entry${
+          env.headerAnchors.size === 1 ? "" : "s"
+        } ${anchorRange}`,
       );
     } else {
       // signed_tx envelope. The BRC-95 header carries the subject TXID

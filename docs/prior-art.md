@@ -69,11 +69,10 @@ anything.
 
 - BRC-62 BEEF carries the prior funding tx; the Pi re-extracts the
   value at `vout`.
-- BRC-74 BUMP path inside that BEEF is recomputed against a Merkle
-  root the Pi pulls from a header chain it just **PoW-validated
-  on-device** from a firmware-pinned checkpoint
-  ([Header chains](protocol/headers.md)).
-- 6-confirmation depth is enforced in `piwallet/core/verify.py`.
+- BRC-74 BUMP path inside that BEEF is recomputed and compared
+  byte-for-byte against the merkle root the proposal anchored at
+  the BUMP's claimed block height
+  ([SPV requirements](protocol/spv.md) §1 covers the trust model).
 - The change output's script is **re-derived** from the wallet's own
   xpub on the Pi; if the bytes don't match, it aborts.
 

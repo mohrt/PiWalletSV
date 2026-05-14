@@ -5,9 +5,10 @@ can route them to the right handler before decoding the rest:
 
 - `xpub_export`        Pi -> phone, on pairing. Contains the account xpub.
 - `unsigned_proposal`  phone -> Pi, on send. Contains the unsigned tx,
-                       per-input BEEF (BRC-62), the validated header chain
-                       walked from a firmware checkpoint to a tip, and the
-                       change derivation index.
+                       per-input BEEF (BRC-62), a small ``height -> merkle
+                       root`` map of header anchors (one entry per unique
+                       block referenced by the inputs' BUMP paths), and
+                       the change derivation index.
 - `signed_tx`          Pi -> phone, after successful sign. Contains the
                        signed transaction as Atomic BEEF (BRC-95) and its
                        txid for convenience.
@@ -18,11 +19,10 @@ intentionally separate from this codec.
 
 Schema versioning: every payload carries an integer ``v``. Bump on
 breaking changes; the receiver MUST refuse unknown versions. v2
-(this revision) replaces v1's ``headerAnchors`` (a trusted
-``height -> root`` map supplied by the companion) with a raw
-``headers`` chain that the Pi PoW-validates from a baked-in
-checkpoint, drops the redundant standalone per-input ``merklePath``
-field (the BEEF carries it), and uses Atomic BEEF (BRC-95) for the
+(this revision) keeps v1's ``headerAnchors`` (a trusted
+``height -> root`` map supplied by the companion), drops the
+redundant standalone per-input ``merklePath`` field (the BEEF
+already carries the BUMP), and uses Atomic BEEF (BRC-95) for the
 ``signed_tx`` payload.
 
 The CBOR shapes are deliberately flat dicts with short string keys to keep
@@ -41,13 +41,15 @@ ENVELOPE_VERSION: int = 2
 """Current envelope schema version. Bump for breaking changes.
 
 History:
-    v1 — initial release.
+    v1 — initial release. Carried per-input ``merklePath`` (redundant
+         with BEEF) and a hex-string + separate txid for ``signed_tx``.
     v2 — drop the redundant per-input ``merklePath`` field (the BEEF
          payload already carries it); switch the ``signed_tx`` payload
          from a hex-string + separate txid to a single ``atomicBeef``
-         bytes field (BRC-95). v1 envelopes are intentionally rejected
-         by this build; the schema bump is the documented signal that
-         a v1 producer should be upgraded.
+         bytes field (BRC-95). The ``header_anchors`` shape is
+         unchanged from v1. v1 envelopes are intentionally rejected by
+         this build; the schema bump is the documented signal that a
+         v1 producer should be upgraded.
 """
 
 KIND_XPUB_EXPORT: str = "xpub"
@@ -168,26 +170,22 @@ class UnsignedProposal:
     ``outputs[change_index]``, signing must abort. This is the plan's
     "verify, then sign" rule.
 
-    ``checkpoint_height`` and ``headers`` together carry the SPV
-    chain the Pi must independently validate before trusting any
-    Merkle proof in the BEEFs:
+    ``header_anchors`` is a ``height -> merkle_root`` map: one entry
+    for each unique block height referenced by an input's BUMP path.
+    The companion fetches each block's header from a trusted
+    block-explorer source (WhatsOnChain by default) and packs the
+    Merkle root in raw byte order (32 bytes). The Pi compares the
+    BUMP-derived root for each input against the anchored root; a
+    mismatch fails verification.
 
-    - ``checkpoint_height`` is the height of the firmware checkpoint
-      whose hash the first header's ``prev_hash`` must equal. The
-      companion picks the network's recent-checkpoint height from
-      :mod:`piwallet.core.checkpoints` so the Pi can refuse a stale
-      / wrong-network chain at the first comparison.
-    - ``headers`` is a contiguous list of 80-byte headers, in
-      ascending height order, starting at ``checkpoint_height + 1``.
-      Each header is independently PoW-validated by
-      :func:`piwallet.core.headers.verify_chain`; the resulting
-      ``height -> merkle_root`` map is what the SPV verifier uses.
-
-    The previous schema (envelope v1) carried a
-    ``header_anchors: dict[height, root]`` map directly. v2 replaces
-    it with the raw header chain so the Pi no longer has to *trust*
-    the companion's claimed roots — it derives them from headers it
-    has independently checked.
+    Trust model: the Pi trusts the companion (and by extension the
+    explorer the companion talked to) for the ``height -> root``
+    correspondence. A malicious companion can at most cause the Pi
+    to sign a transaction whose inputs do not exist on chain — the
+    broadcast then fails. The Pi's keys, change re-derivation, and
+    on-screen output review are unaffected. Strong on-device SPV
+    (PoW-validated header chain back to a firmware checkpoint) is a
+    documented future direction; see ``docs/protocol/spv.md``.
     """
 
     KIND: ClassVar[str] = KIND_UNSIGNED_PROPOSAL
@@ -198,11 +196,15 @@ class UnsignedProposal:
     change_index: int  # index in `outputs` that the Pi must re-derive
     change_derivation: tuple[int, int]  # (branch, index) for the change address
     fee_rate_satskb: int
-    checkpoint_height: int
-    headers: tuple[bytes, ...] = ()
+    header_anchors: dict[int, bytes]  # height -> merkle_root (32 bytes, raw byte order)
     locktime: int = 0
 
     def to_cbor(self) -> dict[str, Any]:
+        # CBOR allows int keys, but to keep multipart-QR text dumps
+        # easy on the eye and to match the companion's JSON-friendly
+        # encoder, we serialize anchors as a map of decimal-string
+        # keys to bytes values.
+        anchors = {str(h): root for h, root in sorted(self.header_anchors.items())}
         return {
             "v": ENVELOPE_VERSION,
             "kind": self.KIND,
@@ -222,8 +224,7 @@ class UnsignedProposal:
             "changeDerivation": list(self.change_derivation),
             "feeRate": self.fee_rate_satskb,
             "locktime": self.locktime,
-            "checkpointHeight": self.checkpoint_height,
-            "headers": list(self.headers),
+            "headerAnchors": anchors,
         }
 
     @classmethod
@@ -237,8 +238,7 @@ class UnsignedProposal:
                 "changeIndex",
                 "changeDerivation",
                 "feeRate",
-                "checkpointHeight",
-                "headers",
+                "headerAnchors",
             },
             cls.KIND,
         )
@@ -267,24 +267,30 @@ class UnsignedProposal:
             raise EnvelopeError("changeDerivation must be [branch, index]")
         change_derivation = (int(cd[0]), int(cd[1]))
 
-        checkpoint_height = int(body["checkpointHeight"])
-        if checkpoint_height < 0:
-            raise EnvelopeError(
-                f"checkpointHeight must be non-negative, got {checkpoint_height}"
-            )
-
-        headers_raw = body["headers"]
-        if not isinstance(headers_raw, list):
-            raise EnvelopeError("headers must be a list of 80-byte byte strings")
-        headers: list[bytes] = []
-        for i, hb in enumerate(headers_raw):
-            if not isinstance(hb, (bytes, bytearray)) or len(hb) != 80:
+        anchors_raw = body["headerAnchors"]
+        if not isinstance(anchors_raw, dict):
+            raise EnvelopeError("headerAnchors must be a map of height -> 32-byte root")
+        anchors: dict[int, bytes] = {}
+        for raw_height, raw_root in anchors_raw.items():
+            try:
+                height = int(raw_height)
+            except (TypeError, ValueError) as exc:
                 raise EnvelopeError(
-                    f"headers[{i}] must be 80 bytes, got "
-                    f"{type(hb).__name__} of length "
-                    f"{len(hb) if isinstance(hb, (bytes, bytearray)) else 'n/a'}"
+                    f"headerAnchors key {raw_height!r} is not an integer height"
+                ) from exc
+            if height < 0:
+                raise EnvelopeError(
+                    f"headerAnchors height {height} must be non-negative"
                 )
-            headers.append(bytes(hb))
+            if not isinstance(raw_root, (bytes, bytearray)) or len(raw_root) != 32:
+                raise EnvelopeError(
+                    f"headerAnchors[{height}] must be 32 bytes, got "
+                    f"{type(raw_root).__name__} of length "
+                    f"{len(raw_root) if isinstance(raw_root, (bytes, bytearray)) else 'n/a'}"
+                )
+            anchors[height] = bytes(raw_root)
+        if not anchors:
+            raise EnvelopeError("headerAnchors must contain at least one entry")
 
         return cls(
             wallet_fp=bytes(wallet_fp),
@@ -294,8 +300,7 @@ class UnsignedProposal:
             change_derivation=change_derivation,
             fee_rate_satskb=int(body["feeRate"]),
             locktime=int(body.get("locktime", 0)),
-            checkpoint_height=checkpoint_height,
-            headers=tuple(headers),
+            header_anchors=anchors,
         )
 
 

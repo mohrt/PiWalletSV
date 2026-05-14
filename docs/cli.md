@@ -274,11 +274,11 @@ envelope without modifying the vault.
 ## `piwallet decode <blob_path>`
 
 Decode any v2 envelope blob (`xpub_export`, `unsigned_proposal`,
-`signed_tx`) and print a human-readable summary — addresses, amounts,
-fee, the input BUMP heights and the bundled header chain
-(`checkpointHeight` + range), and for `signed_tx` the BRC-95
-Atomic BEEF subject TXID. Useful for debugging fixtures or scanned
-blobs.
+`signed_tx`) and print a human-readable summary — addresses,
+amounts, fee, the input BUMP heights, the proposal's
+`headerAnchors` map (count + height range), and for `signed_tx` the
+BRC-95 Atomic BEEF subject TXID. Useful for debugging fixtures or
+scanned blobs.
 
 ```bash
 piwallet decode /tmp/proposal_01.cbor
@@ -373,16 +373,13 @@ What it does, in order:
 3. Prompts for the PIN.
 4. Confirms `--wallet-id`'s xpub fingerprint matches
    `proposal.wallet_fp`.
-5. Validates the bundled `headers` list against the firmware
-   checkpoint for the wallet's network: each header's PoW is
-   re-checked from `bits` and the chain is asserted contiguous
-   from `checkpointHeight + 1` upward. The resulting
-   `height → merkle_root` map is the only source of trust for the
-   subsequent BEEF checks.
+5. Validates that `headerAnchors` is non-empty and every value is a
+   32-byte raw merkle root.
 6. For each input, parses the BRC-62 BEEF, walks the embedded
-   BRC-74 BUMP path to a Merkle root the validated chain pins at
-   the BUMP's `block_height`, and rejects any input shallower than
-   `MIN_CONFIRMATION_DEPTH` (6) below the chain tip.
+   BRC-74 BUMP path, and confirms that the BUMP's computed Merkle
+   root equals the proposal's anchor for the BUMP's claimed
+   `block_height`. The trust model is documented in
+   [SPV requirements](protocol/spv.md) §1.
 7. Re-derives every claimed input address and confirms script
    match.
 8. Re-derives the change address and confirms script match.

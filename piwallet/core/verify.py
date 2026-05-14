@@ -1,38 +1,27 @@
 """SPV-level verification of incoming `unsigned_proposal` envelopes.
 
 The Pi MUST run this module's `verify_proposal()` on every proposal before
-asking sign.py to produce signatures. The plan's "trust nothing the phone
-says without a Merkle proof" rule is enforced here.
+asking sign.py to produce signatures. The plan's "verify, then sign" rule
+is enforced here.
 
 What `verify_proposal` checks:
 
-1. The proposal's ``checkpoint_height`` matches the firmware's baked-in
-   recent checkpoint for the wallet's network (see
-   :mod:`piwallet.core.checkpoints`). The header chain that follows must
-   start at ``checkpoint_height + 1`` and link back to the firmware
-   checkpoint's hash; if not, the chain is rejected before any input is
-   inspected.
-2. The header chain (``proposal.headers``) is independently
-   PoW-validated and linked into a contiguous ``height -> merkle_root``
-   map by :func:`piwallet.core.headers.verify_chain`. The companion's
-   claim that "block ``H`` had Merkle root ``R``" is no longer a leap of
-   faith — the Pi only believes ``R`` after walking real headers from a
-   firmware checkpoint and confirming the PoW under each one.
-3. Every input's BEEF parses and contains the prior funding transaction.
-4. The prior transaction's BUMP Merkle path resolves to a height covered
-   by the validated chain, and its computed root matches the validated
-   chain's root for that height.
-5. Each input is buried by at least :data:`MIN_CONFIRMATION_DEPTH`
-   confirmations relative to the chain's tip. This forces the companion
-   to ship enough headers to push every input out of the
-   reorg-vulnerable zone before the Pi will sign it.
-6. The input references the prior tx's correct vout, the script is P2PKH,
+1. Every input's BEEF parses and contains the prior funding transaction.
+2. The prior transaction's BUMP Merkle path is internally consistent and
+   computes to the merkle root the proposal asserts via
+   ``proposal.header_anchors[bump.block_height]``. The companion supplies
+   that root from a trusted block-explorer source (WhatsOnChain by
+   default); the Pi takes it on the companion's word, with the
+   understanding that a lying anchor at most produces a transaction
+   whose broadcast will fail. See ``docs/protocol/spv.md`` for the
+   trust model.
+3. The input references the prior tx's correct vout, the script is P2PKH,
    and pays to the address derived from ``account_xpub`` at the input's
    declared ``derivation``.
-7. The change output's script equals the address re-derived from
+4. The change output's script equals the address re-derived from
    ``account_xpub`` at ``proposal.change_derivation``.
-8. Sum(input.sats) >= Sum(output.sats); fee is non-negative.
-9. Fee rate is within the bounds the user has approved
+5. Sum(input.sats) >= Sum(output.sats); fee is non-negative.
+6. Fee rate is within the bounds the user has approved
    (caller-supplied).
 
 If any check fails, ``ProposalVerificationError`` is raised with an
@@ -51,21 +40,8 @@ from dataclasses import dataclass, field
 from bsv import P2PKH, ChainTracker, MerklePath, Transaction
 from bsv.script.script import Script
 
-from piwallet.core import checkpoints as cp
 from piwallet.core import derivation as deriv
-from piwallet.core import headers as hdr
 from piwallet.core.envelope import UnsignedProposal
-
-MIN_CONFIRMATION_DEPTH: int = 6
-"""Required burial of every spent input.
-
-Six confirmations is the canonical "out of normal reorg range"
-threshold (chosen to be conservative even against double-digit-block
-reorgs that have happened on BTC; BSV reorgs are typically far
-shallower). The companion is responsible for shipping at least this
-many headers past the deepest input — if it doesn't, the Pi rejects
-the proposal at verification time rather than producing a signature
-the operator couldn't broadcast safely."""
 
 
 class ProposalVerificationError(Exception):
@@ -79,16 +55,14 @@ class ProposalVerificationError(Exception):
 
 class OfflineChainTracker(ChainTracker):
     """A ``ChainTracker`` that resolves heights against a fixed in-memory
-    map of validated Merkle roots.
+    map of trusted Merkle roots.
 
-    The map is built by feeding ``proposal.headers`` through
-    :func:`piwallet.core.headers.verify_chain`, which independently
-    PoW-validates every header before exposing its Merkle root. A
-    malicious companion that hands the Pi a forged chain would have to
-    either (a) re-mine real PoW for every forged header, or (b) split
-    its forged chain off the canonical chain at a height before the
-    firmware checkpoint — both prevented by the per-firmware
-    checkpoint pinning + per-header PoW comparison.
+    The map comes straight from ``proposal.header_anchors`` — the Pi
+    trusts the companion (and by extension whichever block-explorer
+    source the companion talked to, typically WhatsOnChain) for the
+    ``height -> root`` correspondence. The bsv-sdk's ``MerklePath.verify``
+    drives this tracker to confirm each input's BUMP-derived root
+    matches the anchored value before signing proceeds.
     """
 
     def __init__(self, anchors_hex: dict[int, str]) -> None:
@@ -97,10 +71,6 @@ class OfflineChainTracker(ChainTracker):
     @property
     def heights(self) -> set[int]:
         return set(self._anchors.keys())
-
-    @property
-    def tip_height(self) -> int:
-        return max(self._anchors) if self._anchors else 0
 
     async def is_valid_root_for_height(self, root: str, height: int) -> bool:
         return self._anchors.get(int(height)) == root.lower()
@@ -192,42 +162,22 @@ def verify_proposal(
     :returns: `VerifiedProposal` ready for sign.py.
     :raises ProposalVerificationError: with a short, user-displayable reason.
     """
-    if not proposal.headers:
-        raise ProposalVerificationError("no headers supplied")
+    if not proposal.header_anchors:
+        raise ProposalVerificationError("no header anchors supplied")
 
     if max_fee_rate_satskb is not None and proposal.fee_rate_satskb > max_fee_rate_satskb:
         raise ProposalVerificationError(
             f"fee rate {proposal.fee_rate_satskb} > cap {max_fee_rate_satskb}"
         )
 
-    # ---- header chain validation ------------------------------------------
-    # The proposal's headers must descend from the firmware's recent
-    # checkpoint for the wallet's network. A wrong-network or stale
-    # checkpoint claim is rejected here, before any input is inspected.
-    expected_checkpoint = cp.for_network(network)
-    if proposal.checkpoint_height != expected_checkpoint.height:
-        raise ProposalVerificationError(
-            f"checkpointHeight {proposal.checkpoint_height} does not match "
-            f"firmware checkpoint at {expected_checkpoint.height}"
-        )
-    cp_hash = bytes.fromhex(expected_checkpoint.hash_hex)[::-1]
-    chain_anchor = hdr.CheckpointHeader(
-        height=expected_checkpoint.height, hash=cp_hash
-    )
-    try:
-        anchors_bytes = hdr.verify_chain(proposal.headers, chain_anchor)
-    except hdr.HeaderError as exc:
-        raise ProposalVerificationError(f"header chain invalid: {exc}") from exc
-
     account_xpub = deriv.parse_xpub(account_xpub_str)
 
-    # ---- per-input SPV verification --------------------------------------
-    # ``anchors_bytes`` maps height -> raw 32-byte merkle root. The bsv-sdk
-    # MerklePath.verify path expects displayed-hex roots, so we render the
-    # validated bytes once and feed the tracker that table.
-    anchors_hex = {h: r[::-1].hex() for h, r in anchors_bytes.items()}
+    # ---- per-input verification -----------------------------------------
+    # ``proposal.header_anchors`` maps height -> raw 32-byte merkle root.
+    # bsv-sdk's MerklePath.verify expects displayed-hex roots, so we
+    # render the bytes once and feed the tracker that table.
+    anchors_hex = {h: r[::-1].hex() for h, r in proposal.header_anchors.items()}
     tracker = OfflineChainTracker(anchors_hex)
-    tip_height = tracker.tip_height
     verified_inputs: list[VerifiedInput] = []
     source_txs: dict[str, Transaction] = {}
 
@@ -255,17 +205,7 @@ def verify_proposal(
         block_height = int(prior.merkle_path.block_height)
         if block_height not in tracker.heights:
             raise ProposalVerificationError(
-                f"{ctx}: validated chain does not cover height {block_height}"
-            )
-        # 6-confirmation depth: tip_height - block_height + 1 >= MIN_CONFIRMATION_DEPTH.
-        # The "+1" counts the input's block itself as the first confirmation,
-        # matching how WoC and most explorers report confirmations.
-        confirmations = tip_height - block_height + 1
-        if confirmations < MIN_CONFIRMATION_DEPTH:
-            raise ProposalVerificationError(
-                f"{ctx}: only {confirmations} confirmation(s) at height "
-                f"{block_height} (chain tip {tip_height}); need "
-                f"{MIN_CONFIRMATION_DEPTH}"
+                f"{ctx}: no header anchor for height {block_height}"
             )
 
         if not _merkle_path_anchored(prior.merkle_path, prior.txid(), tracker):

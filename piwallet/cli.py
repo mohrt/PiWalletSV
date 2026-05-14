@@ -666,7 +666,17 @@ def _read_hex_blob(hex_input: str) -> bytes:
 def _summarize_proposal(p: env.UnsignedProposal) -> str:
     total_in = sum(i.sats for i in p.inputs)
     total_out = sum(o.sats for o in p.outputs)
-    tip_height = p.checkpoint_height + len(p.headers)
+    if p.header_anchors:
+        anchor_heights = sorted(p.header_anchors)
+        if len(anchor_heights) == 1:
+            anchor_summary = f"1 (height {anchor_heights[0]})"
+        else:
+            anchor_summary = (
+                f"{len(anchor_heights)} "
+                f"(heights {anchor_heights[0]}–{anchor_heights[-1]})"
+            )
+    else:
+        anchor_summary = "0"
     lines = [
         f"kind: unsigned_proposal v={env.ENVELOPE_VERSION}",
         f"walletFp: {p.wallet_fp.hex()}",
@@ -674,8 +684,7 @@ def _summarize_proposal(p: env.UnsignedProposal) -> str:
         f"outputs: {len(p.outputs)} (total {total_out} sat)",
         f"changeIndex: {p.change_index}  changeDerivation: {p.change_derivation}",
         f"feeRate: {p.fee_rate_satskb} sat/kb  locktime: {p.locktime}",
-        f"checkpointHeight: {p.checkpoint_height}  headers: {len(p.headers)} "
-        f"(tip {tip_height})",
+        f"headerAnchors: {anchor_summary}",
     ]
     return "\n".join(lines)
 

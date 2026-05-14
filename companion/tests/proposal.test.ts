@@ -33,7 +33,13 @@ const CHANGE = "125GFsvYsDtyzGkExfsX8DoHuXu2UsMUEZ"; // m/1/0 for canonical xpub
 function fakeProof(seed: number, height: number): InputProof {
   const root = new Uint8Array(32);
   for (let i = 0; i < 32; i++) root[i] = (seed + i) & 0xff;
+  // ``InputProof.merkleRoot`` is the displayed (big-endian) hex form.
+  // The proposal builder reverses it to raw byte order before
+  // anchoring — we mirror that convention in tests so anchor lookups
+  // line up with the encoded envelope.
   const merkleRoot = Array.from(root)
+    .slice()
+    .reverse()
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
   return {
@@ -44,28 +50,7 @@ function fakeProof(seed: number, height: number): InputProof {
   };
 }
 
-/**
- * Make a synthetic header chain `[fromHeight..fromHeight+count-1]`
- * suitable for the codec round-trip. The bytes do NOT pass PoW; the
- * proposal builder's contract is to ship whatever headers the caller
- * gives it (the Pi does the validation), so this is the right level
- * to fake at for unit-testing the builder in isolation.
- */
-function makeHeaders(count: number): Uint8Array[] {
-  const out: Uint8Array[] = [];
-  for (let i = 0; i < count; i++) {
-    const h = new Uint8Array(80);
-    h[0] = 0x01;
-    // Bake the index into the merkleroot slot so duplicates are
-    // unequal at the byte level.
-    h[36] = i & 0xff;
-    h[37] = (i >>> 8) & 0xff;
-    out.push(h);
-  }
-  return out;
-}
-
-const CHECKPOINT_HEIGHT = 800_000;
+const ANCHOR_HEIGHT = 800_001;
 
 describe("buildUnsignedProposal", () => {
   it("builds a 1-in/2-out proposal that round-trips through encode/decode", async () => {
@@ -77,7 +62,7 @@ describe("buildUnsignedProposal", () => {
           vout: 0,
           sats: 50_000,
           derivation: [0, 0],
-          proof: fakeProof(1, CHECKPOINT_HEIGHT + 1),
+          proof: fakeProof(1, ANCHOR_HEIGHT),
         },
       ],
       recipientAddress: RECIPIENT,
@@ -87,8 +72,6 @@ describe("buildUnsignedProposal", () => {
       changeDerivation: [1, 0],
       feeRateSatskb: 500,
       locktime: 0,
-      checkpointHeight: CHECKPOINT_HEIGHT,
-      headers: makeHeaders(10),
     });
 
     expect(env.kind).toBe(KIND_PROPOSAL);
@@ -97,9 +80,10 @@ describe("buildUnsignedProposal", () => {
     expect(env.outputs).toHaveLength(2);
     expect(env.changeIndex).toBe(1);
     expect(env.changeDerivation).toEqual([1, 0]);
-    expect(env.checkpointHeight).toBe(CHECKPOINT_HEIGHT);
-    expect(env.headers).toHaveLength(10);
-    for (const h of env.headers) expect(h.byteLength).toBe(80);
+    expect(env.headerAnchors.size).toBe(1);
+    const anchorRoot = env.headerAnchors.get(ANCHOR_HEIGHT);
+    expect(anchorRoot).toBeInstanceOf(Uint8Array);
+    expect(anchorRoot?.byteLength).toBe(32);
     expect(env.outputs[0].scriptHex).toMatch(/^76a914[0-9a-f]{40}88ac$/);
     expect(env.outputs[1].scriptHex).toMatch(/^76a914[0-9a-f]{40}88ac$/);
 
@@ -114,8 +98,8 @@ describe("buildUnsignedProposal", () => {
     expect(decoded.outputs[0].sats).toBe(30_000);
     expect(decoded.outputs[1].sats).toBe(19_500);
     expect(decoded.feeRate).toBe(500);
-    expect(decoded.checkpointHeight).toBe(CHECKPOINT_HEIGHT);
-    expect(decoded.headers).toHaveLength(10);
+    expect(decoded.headerAnchors.size).toBe(1);
+    expect(decoded.headerAnchors.get(ANCHOR_HEIGHT)).toEqual(anchorRoot);
   });
 
   it("refuses to build a no-change proposal (v1 spec mandates change)", () => {
@@ -128,14 +112,12 @@ describe("buildUnsignedProposal", () => {
             vout: 0,
             sats: 10_000,
             derivation: [0, 0],
-            proof: fakeProof(1, CHECKPOINT_HEIGHT + 1),
+            proof: fakeProof(1, ANCHOR_HEIGHT),
           },
         ],
         recipientAddress: RECIPIENT,
         recipientSats: 9_700,
         feeRateSatskb: 500,
-        checkpointHeight: CHECKPOINT_HEIGHT,
-        headers: makeHeaders(10),
         // changeAddress / changeSats / changeDerivation deliberately omitted
         // to assert the type / runtime guards reject the call.
       } as unknown as Parameters<typeof buildUnsignedProposal>[0]),
@@ -151,7 +133,7 @@ describe("buildUnsignedProposal", () => {
           vout: 0,
           sats: 60_000,
           derivation: [0, 0],
-          proof: fakeProof(1, CHECKPOINT_HEIGHT + 1),
+          proof: fakeProof(1, ANCHOR_HEIGHT),
         },
       ],
       recipientAddress: RECIPIENT,
@@ -160,8 +142,6 @@ describe("buildUnsignedProposal", () => {
       changeSats: 9_500,
       changeDerivation: [1, 0],
       feeRateSatskb: 500,
-      checkpointHeight: CHECKPOINT_HEIGHT,
-      headers: makeHeaders(10),
     });
     expect(env.outputs.length).toBeGreaterThanOrEqual(2);
     expect(env.changeIndex).toBe(env.outputs.length - 1);
@@ -171,7 +151,7 @@ describe("buildUnsignedProposal", () => {
     expect(env.changeDerivation).toEqual([1, 0]);
   });
 
-  it("rejects an input whose height is older than the firmware checkpoint", () => {
+  it("rejects an input without a confirmed height", () => {
     expect(() =>
       buildUnsignedProposal({
         walletFingerprintHex: FIXTURE.fingerprint,
@@ -181,7 +161,7 @@ describe("buildUnsignedProposal", () => {
             vout: 0,
             sats: 30_000,
             derivation: [0, 0],
-            proof: fakeProof(1, CHECKPOINT_HEIGHT - 5),
+            proof: fakeProof(1, 0),
           },
         ],
         recipientAddress: RECIPIENT,
@@ -190,40 +170,43 @@ describe("buildUnsignedProposal", () => {
         changeSats: 4_700,
         changeDerivation: [1, 0],
         feeRateSatskb: 500,
-        checkpointHeight: CHECKPOINT_HEIGHT,
-        headers: makeHeaders(10),
       }),
-    ).toThrow(/older than the firmware checkpoint/);
+    ).toThrow(/no confirmed height/);
   });
 
-  it("rejects an input whose height is past the chain tip we are shipping", () => {
-    // Headers cover heights checkpoint+1 .. checkpoint+10; the input
-    // claims height checkpoint+999, far past the chain tip.
-    expect(() =>
-      buildUnsignedProposal({
-        walletFingerprintHex: FIXTURE.fingerprint,
-        inputs: [
-          {
-            txid: "aa".repeat(32),
-            vout: 0,
-            sats: 30_000,
-            derivation: [0, 0],
-            proof: fakeProof(1, CHECKPOINT_HEIGHT + 999),
-          },
-        ],
-        recipientAddress: RECIPIENT,
-        recipientSats: 25_000,
-        changeAddress: CHANGE,
-        changeSats: 4_700,
-        changeDerivation: [1, 0],
-        feeRateSatskb: 500,
-        checkpointHeight: CHECKPOINT_HEIGHT,
-        headers: makeHeaders(10),
-      }),
-    ).toThrow(/exceeds chain tip/);
+  it("collapses inputs in the same block to a single anchor entry", () => {
+    // Two inputs at the same height — the proof's merkleRoot must
+    // therefore agree, since a real WoC fetch would return the same
+    // header for both. The builder should emit exactly one anchor.
+    const env = buildUnsignedProposal({
+      walletFingerprintHex: FIXTURE.fingerprint,
+      inputs: [
+        {
+          txid: "aa".repeat(32),
+          vout: 0,
+          sats: 30_000,
+          derivation: [0, 0],
+          proof: fakeProof(1, ANCHOR_HEIGHT),
+        },
+        {
+          txid: "bb".repeat(32),
+          vout: 1,
+          sats: 30_000,
+          derivation: [0, 1],
+          proof: fakeProof(1, ANCHOR_HEIGHT),
+        },
+      ],
+      recipientAddress: RECIPIENT,
+      recipientSats: 50_000,
+      changeAddress: CHANGE,
+      changeSats: 9_500,
+      changeDerivation: [1, 0],
+      feeRateSatskb: 500,
+    });
+    expect(env.headerAnchors.size).toBe(1);
   });
 
-  it("rejects an empty headers list", () => {
+  it("refuses to ship inputs in the same block with disagreeing roots", () => {
     expect(() =>
       buildUnsignedProposal({
         walletFingerprintHex: FIXTURE.fingerprint,
@@ -233,46 +216,25 @@ describe("buildUnsignedProposal", () => {
             vout: 0,
             sats: 30_000,
             derivation: [0, 0],
-            proof: fakeProof(1, CHECKPOINT_HEIGHT + 1),
+            proof: fakeProof(1, ANCHOR_HEIGHT),
           },
-        ],
-        recipientAddress: RECIPIENT,
-        recipientSats: 25_000,
-        changeAddress: CHANGE,
-        changeSats: 4_700,
-        changeDerivation: [1, 0],
-        feeRateSatskb: 500,
-        checkpointHeight: CHECKPOINT_HEIGHT,
-        headers: [],
-      }),
-    ).toThrow(/headers must be a non-empty list/);
-  });
-
-  it("rejects a non-80-byte header in the chain", () => {
-    const bad = makeHeaders(3);
-    bad[1] = new Uint8Array(79); // wrong length
-    expect(() =>
-      buildUnsignedProposal({
-        walletFingerprintHex: FIXTURE.fingerprint,
-        inputs: [
           {
-            txid: "aa".repeat(32),
-            vout: 0,
+            txid: "bb".repeat(32),
+            vout: 1,
             sats: 30_000,
-            derivation: [0, 0],
-            proof: fakeProof(1, CHECKPOINT_HEIGHT + 1),
+            derivation: [0, 1],
+            // Same height, different seed → different merkle root.
+            proof: fakeProof(2, ANCHOR_HEIGHT),
           },
         ],
         recipientAddress: RECIPIENT,
-        recipientSats: 25_000,
+        recipientSats: 50_000,
         changeAddress: CHANGE,
-        changeSats: 4_700,
+        changeSats: 9_500,
         changeDerivation: [1, 0],
         feeRateSatskb: 500,
-        checkpointHeight: CHECKPOINT_HEIGHT,
-        headers: bad,
       }),
-    ).toThrow(/headers\[1\] must be 80 bytes/);
+    ).toThrow(/disagree on merkle root/);
   });
 
   it("rejects malformed fingerprint", () => {
@@ -285,7 +247,7 @@ describe("buildUnsignedProposal", () => {
             vout: 0,
             sats: 50_000,
             derivation: [0, 0],
-            proof: fakeProof(1, CHECKPOINT_HEIGHT + 1),
+            proof: fakeProof(1, ANCHOR_HEIGHT),
           },
         ],
         recipientAddress: RECIPIENT,
@@ -294,8 +256,6 @@ describe("buildUnsignedProposal", () => {
         changeSats: 48_700,
         changeDerivation: [1, 0],
         feeRateSatskb: 500,
-        checkpointHeight: CHECKPOINT_HEIGHT,
-        headers: makeHeaders(10),
       }),
     ).toThrow(/walletFingerprintHex/);
   });
@@ -311,8 +271,6 @@ describe("buildUnsignedProposal", () => {
         changeSats: 100,
         changeDerivation: [1, 0],
         feeRateSatskb: 500,
-        checkpointHeight: CHECKPOINT_HEIGHT,
-        headers: makeHeaders(10),
       }),
     ).toThrow(ProposalBuilderError);
   });
@@ -339,7 +297,9 @@ describe("buildUnsignedProposal + coin selection integration", () => {
       walletFingerprintHex: FIXTURE.fingerprint,
       inputs: sel.inputs.map((i, n) => ({
         ...i,
-        proof: fakeProof(n + 1, CHECKPOINT_HEIGHT + 1),
+        // Different heights per input so each contributes a distinct
+        // anchor, exercising the multi-anchor path through the codec.
+        proof: fakeProof(n + 1, ANCHOR_HEIGHT + n),
       })),
       recipientAddress: RECIPIENT,
       recipientSats: 25_000,
@@ -347,14 +307,14 @@ describe("buildUnsignedProposal + coin selection integration", () => {
       changeSats: sel.changeSats,
       changeDerivation: [1, 0],
       feeRateSatskb: 500,
-      checkpointHeight: CHECKPOINT_HEIGHT,
-      headers: makeHeaders(10),
     });
     expect(env.outputs[0].sats).toBe(25_000);
     expect(env.outputs[1].sats).toBe(sel.changeSats);
+    expect(env.headerAnchors.size).toBe(sel.inputs.length);
     const blob = await encodeEnvelope(env);
     const back = await decodeEnvelope(blob);
     if (back.kind !== KIND_PROPOSAL) throw new Error("kind drift");
     expect(back.inputs).toHaveLength(sel.inputs.length);
+    expect(back.headerAnchors.size).toBe(sel.inputs.length);
   });
 });

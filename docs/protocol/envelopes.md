@@ -6,20 +6,21 @@ each is a CBOR map, gzip-compressed, and then carried across the
 air gap via the multipart QR transport described in
 [`qr-transport.md`](qr-transport.md).
 
-> **v2 schema highlights** (cumulative changes from v1):
+> **v2 schema highlights** (changes from v1):
 >
 > - Per-input `merklePath` field removed — the BRC-62 BEEF blob
 >   already carries the BRC-74 BUMP path attached to the prior tx,
 >   so the standalone field was redundant.
-> - `unsigned_proposal.headerAnchors` (a trusted `height → root`
->   map) replaced with `checkpointHeight` + `headers` (a raw,
->   PoW-validated header chain). See [`headers.md`](headers.md).
 > - `signed_tx.rawHex` + `signed_tx.txid` replaced with a single
 >   `atomicBeef` field carrying BRC-95 Atomic BEEF. The TXID is
 >   declared inside the Atomic BEEF wrapper itself.
 > - `v` bumped from `1` to `2`. v1 envelopes are intentionally
 >   rejected by v2 implementations so out-of-sync producers fail
 >   loudly.
+> - `headerAnchors` (the v1 `height → merkle_root` map the
+>   signer trusts) is **retained** in v2. PiWalletSV deliberately
+>   does not require strong on-device SPV; see
+>   [`spv.md`](spv.md) §1 for the trust-model discussion.
 
 ## 1. Outer framing
 
@@ -174,8 +175,7 @@ then sign it.
     "changeDerivation": [ <uint>, <uint> ],   // [branch, index] for change re-derivation
     "feeRate":          <uint>,               // sats per 1000 bytes (advisory)
     "locktime":         <uint>,               // optional; default 0
-    "checkpointHeight": <uint>,               // height of headers[0]'s parent (see §4.4)
-    "headers":          [ <bytes, length 80>, ... ]   // contiguous BSV headers above the checkpoint
+    "headerAnchors":    { <uint-as-string>: <bytes, length 32>, ... }  // height → merkle root (raw byte order)
 }
 ```
 
@@ -229,35 +229,30 @@ output the signer will accept it. A future protocol revision may
 introduce an explicit no-change marker; until then, build with
 change.
 
-### 4.4 `checkpointHeight` + `headers`
+### 4.4 `headerAnchors`
 
-`headers` is a CBOR array of raw 80-byte BSV block headers (BRC-67
-§3 "Block Header Format"). The chain MUST be:
+`headerAnchors` is a CBOR map of `block_height` (encoded as a
+decimal-string key) → 32-byte raw-byte-order Merkle root. The map
+MUST contain exactly one entry per **unique** block height
+referenced by an input's BUMP path inside `beef`. The signer
+verifies that for every input:
 
-- non-empty,
-- contiguous (each header's `prevHash` equals the double-SHA256 of
-  the previous element),
-- linked back to a checkpoint the **signer** trusts: `headers[0]`'s
-  `prevHash` MUST equal the double-SHA256 of the firmware-pinned
-  header at `checkpointHeight`,
-- proof-of-work valid (each header's double-SHA256 ≤ the target
-  encoded by its `bits` field).
+`merklePath.computeRoot(input.txid)` == displayed-hex form of
+`headerAnchors[merklePath.blockHeight]`
 
-`checkpointHeight` is the height of that pinned predecessor (so
-`headers[0]` is at height `checkpointHeight + 1`).
+The signer takes the entries on faith from the companion (and, by
+extension, the block-explorer source the companion talked to). See
+[`spv.md`](spv.md) §1 for the trust-model rationale and what kind
+of attacks this verification does and does not defend against.
 
-Every input's BUMP path inside `beef` MUST resolve to a Merkle root
-that exists in this chain at the BUMP's declared `block_height`,
-*and* the input's height must be at least `MIN_CONFIRMATION_DEPTH`
-blocks below the chain tip (6 in v2). The signer is responsible for
-this enforcement; see [`headers.md`](headers.md) and
-[`spv.md`](spv.md). The companion never tells the signer "trust this
-root" — it ships raw headers and the signer re-runs the PoW math on
-device.
+A v2 signer MUST reject a proposal whose `headerAnchors` map is
+empty, omits a height referenced by any input's BUMP, or contains
+a value that is not exactly 32 bytes long.
 
-The signer's user-facing summary SHOULD render the header chain's
-height range and tip hash before prompting to sign so the human
-operator can spot a wildly stale or malformed chain.
+The signer's user-facing summary SHOULD render each input's
+confirmation height and a short prefix of the anchored Merkle root
+before prompting to sign, so the human operator can sanity-check
+the path the companion took to obtain it.
 
 ## 5. `signed_tx` (`kind = "signed"`)
 
@@ -300,14 +295,14 @@ calling its broadcast endpoint:
 `unsigned_proposal` envelope for the BIP39 mnemonic in
 [`derivation.md`](derivation.md) §6. The companion metadata file
 `tests/fixtures/proposal_01.json` reports the addresses, amounts,
-checkpoint height, and tip-block hash involved; the embedded BUMP
-inside each input's `beef` is what the verifier actually checks
-against the bundled header chain.
+and anchored block height involved; the embedded BUMP inside each
+input's `beef` is what the verifier actually checks against the
+anchored merkle root.
 
 `tests/fixtures/proposal_01_decoded.json` (generated by
 `scripts/dump_decoded_envelope.py`) lists every CBOR field, its
-type, length, and either its scalar value or a hex-encoded sample of
-the first/last bytes of binary fields, including the new
-`checkpointHeight` integer and the `headers` array. Use it as a
-structural reference when implementing a decoder. See
-[`conformance.md`](conformance.md) for details.
+type, length, and either its scalar value or a hex-encoded sample
+of the first/last bytes of binary fields, including the
+`headerAnchors` map. Use it as a structural reference when
+implementing a decoder. See [`conformance.md`](conformance.md) for
+details.

@@ -13,10 +13,11 @@ from piwallet.core import envelope as e
 DUMMY_FP = b"\xab\xcd\xef\x01"
 DUMMY_TXID = "a" * 64
 DUMMY_BEEF = b"\xde\xad\xbe\xef" * 32
-# Header bytes are unconstrained at the codec layer (PoW + linkage are
-# enforced by ``piwallet.core.headers.verify_chain``, not by the envelope
-# decoder), so the codec round-trip suite uses a sentinel 80-byte string.
-DUMMY_HEADER = b"\x42" * 80
+# The Pi takes ``header_anchors`` on faith from the companion at the
+# codec layer, so the round-trip suite just uses a sentinel 32-byte
+# value. ``verify_proposal`` is what compares this against the BUMP-
+# computed root.
+DUMMY_ANCHOR_ROOT = b"\x42" * 32
 
 
 def make_xpub_export() -> e.XpubExport:
@@ -47,8 +48,7 @@ def make_unsigned_proposal(*, change_index: int = 1) -> e.UnsignedProposal:
         change_derivation=(1, 0),
         fee_rate_satskb=500,
         locktime=0,
-        checkpoint_height=812340,
-        headers=(DUMMY_HEADER,),
+        header_anchors={812_340: DUMMY_ANCHOR_ROOT},
     )
 
 
@@ -206,28 +206,37 @@ def test_unsigned_proposal_empty_outputs() -> None:
         e.decode(gzip.compress(cbor2.dumps(body)))
 
 
-def test_unsigned_proposal_rejects_short_header() -> None:
-    """v2 carries the SPV chain as a list of 80-byte headers. A
-    truncated entry must surface a clear, height-tagged error so the
-    bonnet can show a diagnosable message without having to walk
-    every header before refusing."""
+def test_unsigned_proposal_rejects_short_anchor_root() -> None:
+    """v2 carries header anchors as a ``height -> 32-byte root`` map.
+    A truncated entry must surface a clear, height-tagged error."""
     body = make_unsigned_proposal().to_cbor()
-    body["headers"] = [b"\x00" * 79]  # not 80 bytes
-    with pytest.raises(e.EnvelopeError, match=r"headers\[0\]"):
+    body["headerAnchors"] = {"100": b"\x00" * 31}  # not 32 bytes
+    with pytest.raises(e.EnvelopeError, match=r"headerAnchors\[100\]"):
         e.decode(gzip.compress(cbor2.dumps(body)))
 
 
-def test_unsigned_proposal_rejects_non_list_headers() -> None:
+def test_unsigned_proposal_rejects_non_dict_header_anchors() -> None:
     body = make_unsigned_proposal().to_cbor()
-    body["headers"] = {0: b"\x00" * 80}  # mistakenly wrote a map, not a list
-    with pytest.raises(e.EnvelopeError, match="headers must be a list"):
+    body["headerAnchors"] = [(100, b"\x00" * 32)]  # list of tuples, not a map
+    with pytest.raises(e.EnvelopeError, match="headerAnchors must be a map"):
         e.decode(gzip.compress(cbor2.dumps(body)))
 
 
-def test_unsigned_proposal_rejects_negative_checkpoint_height() -> None:
+def test_unsigned_proposal_rejects_negative_anchor_height() -> None:
     body = make_unsigned_proposal().to_cbor()
-    body["checkpointHeight"] = -1
-    with pytest.raises(e.EnvelopeError, match="checkpointHeight"):
+    body["headerAnchors"] = {"-1": b"\x00" * 32}
+    with pytest.raises(e.EnvelopeError, match="headerAnchors height"):
+        e.decode(gzip.compress(cbor2.dumps(body)))
+
+
+def test_unsigned_proposal_rejects_empty_header_anchors() -> None:
+    """An empty anchor map is structurally illegal: a proposal must
+    name at least one input, and every input contributes one anchor.
+    Pinning this at the codec surface gives the operator a clear
+    error before the per-input verification loop starts."""
+    body = make_unsigned_proposal().to_cbor()
+    body["headerAnchors"] = {}
+    with pytest.raises(e.EnvelopeError, match="at least one entry"):
         e.decode(gzip.compress(cbor2.dumps(body)))
 
 
@@ -259,18 +268,6 @@ def test_unsigned_proposal_default_locktime() -> None:
     decoded = e.decode(gzip.compress(cbor2.dumps(body)))
     assert isinstance(decoded, e.UnsignedProposal)
     assert decoded.locktime == 0
-
-
-def test_unsigned_proposal_empty_headers_decode_but_will_fail_verify() -> None:
-    """An empty ``headers`` list is structurally legal at the codec
-    layer (the SPV chain validator in ``verify_proposal`` is what
-    refuses it). We pin this so a future tightening of the codec
-    surface is a deliberate, test-visible decision."""
-    body = make_unsigned_proposal().to_cbor()
-    body["headers"] = []
-    decoded = e.decode(gzip.compress(cbor2.dumps(body)))
-    assert isinstance(decoded, e.UnsignedProposal)
-    assert decoded.headers == ()
 
 
 # ---- signed_tx -----------------------------------------------------------

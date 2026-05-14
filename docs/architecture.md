@@ -19,7 +19,7 @@ flowchart TB
     direction TB
     seed[("BIP39 seed<br/>encrypted vault")]
     decrypt["unlock_vault<br/>(PIN → scrypt → KEK → DEK → xprv)"]
-    verify["verify_proposal()<br/>BEEF + BUMP path<br/>+ PoW-valid header chain<br/>+ 6-conf depth<br/>+ derivation match<br/>+ change re-derive<br/>+ value conservation"]
+    verify["verify_proposal()<br/>BEEF + BUMP path<br/>+ anchored merkle root match<br/>+ derivation match<br/>+ change re-derive<br/>+ value conservation"]
     sign["sign_transaction()<br/>→ Atomic BEEF (BRC-95)"]
     seed --> decrypt --> verify --> sign
   end
@@ -27,14 +27,12 @@ flowchart TB
   subgraph online["Online companion (PWA)"]
     direction TB
     backend[("WhatsOnChain<br/>or alternative<br/>block explorer")]
-    scan["UTXO scan<br/>(gap-limit 20)<br/>+ receive-side SPV"]
+    scan["UTXO scan<br/>(gap-limit 20)"]
     select["greedy coin selection"]
-    proof["proof fetcher<br/>(TSC + headers)"]
-    chain["validated header chain<br/>(IndexedDB cache)"]
-    build["build unsigned_proposal<br/>(+ checkpointHeight + headers)"]
+    proof["proof fetcher<br/>(TSC + per-block header)"]
+    build["build unsigned_proposal<br/>(+ headerAnchors map)"]
     bcast["broadcast (Atomic BEEF)"]
     backend --> scan --> select --> proof --> build
-    backend --> chain --> build
     bcast --> backend
   end
 
@@ -77,16 +75,17 @@ to a tampered backend. So the cold piece can't just believe what
 the online piece tells it. It has to verify every claim against
 something the user has confirmed.
 
-That "something the user has confirmed" is, ultimately, a chain of
-proof-of-work the **Pi itself** validates from a firmware-pinned
-checkpoint up through every header the companion ships. Every other
-check (BEEF parse, Merkle root recomputation, 6-confirmation depth,
-derivation match, change re-derivation, value conservation) chains
-off that on-device verdict. See
-[SPV requirements](protocol/spv.md) §1 for the exact rules,
-[Header chains](protocol/headers.md) for the PoW + checkpoint logic,
-and [SPV §"Threat model"](protocol/spv.md#8-threat-model-summary)
-for the threat model.
+That "something the user has confirmed" is, ultimately, the BUMP
+Merkle path inside each input's BEEF resolving to a Merkle root the
+companion explicitly anchored at the path's claimed height. The Pi
+takes the anchor map on faith from the companion (which sourced it
+from a block-explorer); every other check (BEEF parse, BUMP root
+recomputation, derivation match, change re-derivation, value
+conservation) chains off that match. See
+[SPV requirements](protocol/spv.md) §1 for the trust-model
+discussion and §2 for the exact verification rules,
+[SPV §"Threat model"](protocol/spv.md#8-threat-model-summary) for
+what kind of attacks this defeats and what it does not.
 
 ## 3. The data flow, walked through
 
@@ -111,50 +110,44 @@ A real send looks like this:
 3. **Send.**
     - User taps "Send" on the wallet detail page, enters a
       recipient address and amount.
-    - Companion runs a gap-limit UTXO scan and immediately runs
-      **receive-side SPV** on every confirmed UTXO: it pulls the
-      relevant header range from the backend, validates the chain's
-      PoW from a recent firmware checkpoint, fetches each UTXO's
-      TSC Merkle proof, and folds it against the validated chain's
-      Merkle roots. UTXOs with a passing proof get an
-      `SPV ✓` badge in the balance view; UTXOs that fail are
-      excluded from spendable totals.
-    - Greedy coin selection picks from the SPV-verified UTXOs and
+    - Companion runs a gap-limit UTXO scan to refresh balances.
+      Confirmation status comes straight from the block-explorer's
+      response; PiWalletSV trusts the explorer for "this UTXO is
+      in block N at merkle root R" rather than independently
+      validating a header chain (see
+      [SPV requirements](protocol/spv.md) §1).
+    - Greedy coin selection picks from the confirmed UTXOs and
       computes the fee under a P2PKH byte model.
     - For each selected UTXO, the proof fetcher calls
       `/tx/<txid>/proof/tsc` on the backend, translates the TSC
-      proof into a `MerklePath` (`@bsv/sdk` format), and assembles
-      a BRC-62 BEEF blob whose embedded BRC-74 BUMP path covers
-      the prior tx.
-    - In parallel, the companion's header library
-      (`companion/src/lib/headers.ts`) builds a contiguous chain
-      from the network's recent firmware checkpoint up to at least
-      6 blocks past the deepest input, validating PoW per header
-      and caching results in IndexedDB to amortise the cost.
+      proof into a `MerklePath` (`@bsv/sdk` format), pulls the
+      block's header (and merkle root) by hash, self-checks that
+      the path computes to the declared root, and assembles a
+      BRC-62 BEEF blob whose embedded BRC-74 BUMP path covers the
+      prior tx.
     - The proposal builder packages `{walletFp, inputs, outputs,
       changeIndex, changeDerivation, feeRate, locktime,
-      checkpointHeight, headers}` into an `unsigned_proposal`
-      envelope, gzips + CBORs it, frames it as PW1, and animates
-      it on a canvas.
+      headerAnchors}` into an `unsigned_proposal` envelope. The
+      `headerAnchors` map is built directly from the per-input
+      proofs above (one entry per unique block height); no extra
+      header fetches are needed. The envelope is gzipped + CBORed,
+      framed as PW1, and animated on a canvas.
 
 4. **Verify and sign (Pi).**
     - User points the Pi's camera at the animated QR canvas.
     - `piwallet qr scan-camera` collects frames until the PW1
       assembler completes.
     - `verify_proposal()` runs the rules from
-      [SPV requirements](protocol/spv.md) §1: parse + validate the
-      bundled header chain via
-      `piwallet.core.headers.verify_chain` against the network's
-      firmware checkpoint, then for every input parse the BEEF,
-      walk the BUMP path to a Merkle root that the **validated**
-      chain pins at the BUMP's declared height, enforce the 6-
-      confirmation depth rule, re-derive the signing key, check
+      [SPV requirements](protocol/spv.md) §2: for every input,
+      parse the BEEF, recompute the BUMP path's Merkle root, look
+      up the matching anchor in `headerAnchors[block_height]`, and
+      reject any mismatch; then re-derive the signing key, check
       value conservation, and re-derive the change script.
     - If anything fails, the bonnet shows a one-line reason and
       the signing path exits. No partial state is kept.
     - If everything passes, the bonnet shows the recipient
-      address, amount, fee, the chain's height range and tip-hash
-      prefix, and per-input depth. The user holds A to confirm.
+      address, amount, fee, and per-input height + anchored-root
+      prefix. The user holds A to confirm.
     - `sign_transaction()` derives the per-input signing keys from
       the (still-unlocked) account xprv, signs each input, builds
       the raw tx, then wraps the tx + each input's BEEF as a
@@ -190,9 +183,8 @@ A useful way to summarise:
 | Account xpub                   | disk (Pi) + IndexedDB (companion) | yes |
 | Receive / change addresses     | derived on demand | derived on demand |
 | UTXO snapshot                  | derived per proposal | cached in IndexedDB |
-| Firmware header checkpoints    | hard-coded in Pi binary, network-keyed | hard-coded mirror in PWA bundle |
-| Block headers (raw 80-byte)    | per-proposal, validated against checkpoint | fetched + cached, validated before use |
-| Merkle proofs (BUMP, embedded in BEEF) | per-proposal, validated against on-device chain | fetched, cross-checked vs. validated chain |
+| Block-header merkle roots      | per-proposal, supplied by companion as `headerAnchors` | fetched per BUMP block from the explorer |
+| Merkle proofs (BUMP, embedded in BEEF) | per-proposal, BUMP root compared to anchor | fetched + self-checked against the explorer's stated root |
 | Signed transactions (Atomic BEEF) | yes (after sign) | yes (received via QR) |
 
 The companion holds **public data only**. Its IndexedDB can be
@@ -210,10 +202,8 @@ device is the recovery channel.
 │   │   ├── derivation.py         # BIP32 + BIP44 + P2PKH addresses
 │   │   ├── envelope.py           # CBOR + gzip codec (3 message kinds, v2)
 │   │   ├── vault.py              # scrypt → KEK → DEK → AES-GCM xprv
-│   │   ├── headers.py            # parse, hash, bits→target, verify_chain
-│   │   ├── checkpoints.py        # hardcoded mainnet+testnet checkpoints
 │   │   ├── atomic_beef.py        # BRC-95 Atomic BEEF wrap / split
-│   │   ├── verify.py             # chain validate + BUMP + depth + derivation
+│   │   ├── verify.py             # BEEF + BUMP-root ↔ anchor check + derivation
 │   │   └── sign.py               # change re-derive + sign + Atomic BEEF
 │   ├── qr/multipart.py           # PW1 framing + assembler
 │   ├── ui/                       # bonnet display + joystick (phase 2)
@@ -226,12 +216,10 @@ device is the recovery channel.
 │       │   ├── pw1.ts            # PW1 framing
 │       │   ├── derive.ts         # BIP32 + P2PKH (scure + noble)
 │       │   ├── woc.ts            # block-explorer client (injectable fetch)
-│       │   ├── headers.ts        # PoW rules + IndexedDB header cache
-│       │   ├── spv.ts            # receive-side SPV for UTXOs
 │       │   ├── utxo.ts           # gap-limit scanner
 │       │   ├── coin-select.ts    # greedy P2PKH coin selection + dust
-│       │   ├── proof-fetcher.ts  # TSC → MerklePath + BEEF assembly
-│       │   ├── proposal.ts       # build_unsigned_proposal (+ headers)
+│       │   ├── proof-fetcher.ts  # TSC → MerklePath + per-block header lookup + BEEF
+│       │   ├── proposal.ts       # build_unsigned_proposal (+ headerAnchors map)
 │       │   ├── wallets.ts        # IndexedDB store
 │       │   └── terms.ts          # disclaimer acceptance state
 │       └── app/                  # UI pages: scan / wallets / detail / loop
@@ -254,7 +242,7 @@ device is the recovery channel.
     ├── user-manual.md develop.md security.md disclaimer.md
     ├── brc-alignment.md          # which BRCs we conform to (and don't)
     └── protocol/                 # interop spec (v2)
-        ├── envelopes.md spv.md headers.md
+        ├── envelopes.md spv.md
         └── ...
 ```
 
@@ -328,9 +316,15 @@ and not yet shipped.
 ## 9. What this architecture does not solve
 
 - **A user who confirms a transaction without reading the bonnet
-  screen.** The Pi displays the recipient, amount, fee, header
-  chain range, and tip-hash prefix for exactly this reason — they
-  are only useful if the human looks.
+  screen.** The Pi displays the recipient, amount, fee, and
+  per-input height + anchored-root prefix for exactly this reason
+  — they are only useful if the human looks.
+- **A malicious or compromised block-explorer that fabricates a
+  `(height, merkle_root)` anchor.** The Pi will sign such a
+  proposal; the broadcast then fails (the input doesn't exist on
+  chain). Funds and keys remain safe, but the user wastes the
+  click. See [SPV requirements](protocol/spv.md) §1 for the
+  trust-model rationale.
 - **A user who entered a wrong address on the companion in the
   first place** (e.g., the companion got phished into displaying a
   swap-replaced address during a copy-paste). The signer can only

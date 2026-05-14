@@ -108,7 +108,6 @@ nav:
       - Envelopes: protocol/envelopes.md
       - QR transport: protocol/qr-transport.md
       - SPV requirements: protocol/spv.md
-      - Header chains: protocol/headers.md
       - Conformance: protocol/conformance.md
   - Hardware tests:
       - Checkpoint 1 (bonnet boot path): hardware/checkpoint-1.md

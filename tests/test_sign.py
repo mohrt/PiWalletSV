@@ -116,7 +116,7 @@ def test_sign_aborts_when_verify_fails(fixture) -> None:
     import dataclasses
 
     proposal, xprv, xpub = fixture
-    bad_proposal = dataclasses.replace(proposal, headers=())
+    bad_proposal = dataclasses.replace(proposal, header_anchors={})
     with pytest.raises(v.ProposalVerificationError):
         s.verify_then_sign(bad_proposal, xpub, make_deriver(xprv))
 

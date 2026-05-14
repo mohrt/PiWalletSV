@@ -51,12 +51,11 @@ function makeXpub(): XpubExportT {
 }
 
 function makeProposal(): UnsignedProposalT {
-  // Synthetic single-header chain. The bytes here do NOT pass PoW;
-  // the loop page exercises the codec round-trip only and never
+  // The loop page exercises the codec round-trip only and never
   // ships this envelope to a Pi. The production proposal builder
-  // assembles the chain via `ensureChain` from validated WoC headers.
-  const fakeHeader = new Uint8Array(80);
-  fakeHeader[0] = 0x01; // version
+  // pulls each anchor's merkle root from a confirmed WoC header
+  // lookup; here we use a sentinel byte string.
+  const sentinelRoot = new Uint8Array(32).fill(0x42);
   return {
     kind: KIND_PROPOSAL,
     walletFp: hexToBytes("cf987d8c"),
@@ -77,8 +76,7 @@ function makeProposal(): UnsignedProposalT {
     changeDerivation: [1, 0],
     feeRate: 500,
     locktime: 0,
-    checkpointHeight: 0,
-    headers: [fakeHeader],
+    headerAnchors: new Map([[812345, sentinelRoot]]),
   };
 }
 
@@ -164,11 +162,18 @@ function summarize(env: Envelope): string {
     return `walletFp ${bytesToHex(env.fingerprint)}, ${env.xpub.slice(0, 12)}…`;
   }
   if (env.kind === KIND_PROPOSAL) {
+    const anchorHeights = [...env.headerAnchors.keys()].sort((a, b) => a - b);
+    const anchorSummary =
+      anchorHeights.length === 0
+        ? "no anchors"
+        : anchorHeights.length === 1
+          ? `1 anchor @ height ${anchorHeights[0]}`
+          : `${anchorHeights.length} anchors (` +
+            `${anchorHeights[0]}–${anchorHeights[anchorHeights.length - 1]})`;
     return (
       `walletFp ${bytesToHex(env.walletFp)}, ` +
       `${env.inputs.length} input → ${env.outputs.length} output, ` +
-      `change@${env.changeIndex}, ` +
-      `${env.headers.length} header(s) from cp@${env.checkpointHeight}`
+      `change@${env.changeIndex}, ${anchorSummary}`
     );
   }
   // signed_tx envelopes carry the txid in the BRC-95 Atomic BEEF

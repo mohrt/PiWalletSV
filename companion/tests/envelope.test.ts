@@ -33,15 +33,6 @@ interface FixtureMeta {
   merkle_root_hex: string;
 }
 
-// NOTE on Phase-2 transition state: the Python fixture now emits the
-// new SPV schema (`checkpointHeight` + raw `headers` list) and no
-// longer carries the legacy per-height `headerAnchors` map. The
-// companion codec on this branch still consumes the legacy field, so
-// the decoded `headerAnchors` is just empty here. Phase 3 of the SPV
-// alignment plan rewires the companion codec to read `headers`
-// directly; once that lands, this test will assert chain-validation
-// rather than the legacy anchor map.
-
 function makeXpub(): XpubExportT {
   return {
     kind: KIND_XPUB,
@@ -56,10 +47,9 @@ function makeXpub(): XpubExportT {
 }
 
 function makeProposal(): UnsignedProposalT {
-  // Synthetic single-header chain. The bytes below do not pass PoW;
-  // the codec round-trip test exercises field shape only.
-  const stubHeader = new Uint8Array(80);
-  stubHeader[0] = 0x01;
+  // The codec round-trip test exercises field shape only; the
+  // anchor's bytes are sentinel.
+  const anchorRoot = new Uint8Array(32).fill(0x42);
   return {
     kind: KIND_PROPOSAL,
     walletFp: hexToBytes("cf987d8c"),
@@ -80,8 +70,7 @@ function makeProposal(): UnsignedProposalT {
     changeDerivation: [1, 0],
     feeRate: 500,
     locktime: 0,
-    checkpointHeight: 812345,
-    headers: [stubHeader],
+    headerAnchors: new Map([[812345, anchorRoot]]),
   };
 }
 
@@ -124,17 +113,17 @@ describe("envelope codec", () => {
     const totalOut = env.outputs.reduce((acc, o) => acc + o.sats, 0);
     expect(totalOut).toBe(meta.pay_amount_sats + meta.change_amount_sats);
 
-    // v2 envelopes carry a raw header chain rooted at a known
-    // checkpoint height; the legacy `headerAnchors` map is gone.
-    expect(env.checkpointHeight).toBeGreaterThanOrEqual(0);
-    expect(env.headers.length).toBeGreaterThanOrEqual(1);
-    for (const h of env.headers) expect(h.byteLength).toBe(80);
-    // Sanity: the deepest input height must fit within the chain
-    // window the proposal ships, so the Pi-side verifier does not
-    // reject before even running PoW.
-    const tip = env.checkpointHeight + env.headers.length;
-    expect(tip).toBeGreaterThanOrEqual(meta.block_height);
-    expect(meta.merkle_root_hex).toMatch(/^[0-9a-f]{64}$/);
+    // v2 envelopes carry a `height -> merkle_root` anchor map; one
+    // entry per unique block referenced by the inputs' BUMP paths.
+    // The fixture pins a single confirmed input.
+    expect(env.headerAnchors.size).toBeGreaterThanOrEqual(1);
+    const anchorRoot = env.headerAnchors.get(meta.block_height);
+    expect(anchorRoot).toBeInstanceOf(Uint8Array);
+    expect(anchorRoot?.byteLength).toBe(32);
+    // The fixture's metadata records the displayed-hex root; the
+    // envelope encodes it byte-reversed (raw byte order).
+    const expectedRaw = Array.from(hexToBytes(meta.merkle_root_hex)).reverse();
+    expect(Array.from(anchorRoot!)).toEqual(expectedRaw);
   });
 
   it("round-trips an xpub_export", async () => {
@@ -213,7 +202,7 @@ describe("envelope codec", () => {
     await expect(decodeEnvelope(blob)).rejects.toThrow(/net|main|test/i);
   });
 
-  it("round-trips an unsigned_proposal (incl. checkpoint + headers chain)", async () => {
+  it("round-trips an unsigned_proposal (incl. headerAnchors map)", async () => {
     const src = makeProposal();
     const blob = await encodeEnvelope(src);
     const round = await decodeEnvelope(blob);
@@ -231,12 +220,11 @@ describe("envelope codec", () => {
     expect(round.changeDerivation).toEqual(src.changeDerivation);
     expect(round.feeRate).toBe(src.feeRate);
     expect(round.locktime).toBe(src.locktime);
-    expect(round.checkpointHeight).toBe(src.checkpointHeight);
-    expect(round.headers).toHaveLength(src.headers.length);
-    for (let i = 0; i < src.headers.length; i++) {
-      expect(Array.from(round.headers[i])).toEqual(
-        Array.from(src.headers[i]),
-      );
+    expect(round.headerAnchors.size).toBe(src.headerAnchors.size);
+    for (const [height, root] of src.headerAnchors) {
+      const back = round.headerAnchors.get(height);
+      expect(back).toBeInstanceOf(Uint8Array);
+      expect(Array.from(back!)).toEqual(Array.from(root));
     }
   });
 

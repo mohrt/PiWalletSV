@@ -25,11 +25,13 @@ import { Decoder, Encoder } from "cbor-x";
  * `piwallet.core.envelope.ENVELOPE_VERSION`.
  *
  * History:
- *   v1 — initial release.
+ *   v1 — initial release. Carried per-input `merklePath` (redundant
+ *        with BEEF) and a hex-string + separate txid for `signed_tx`.
  *   v2 — drop the redundant per-input `merklePath` field (BEEF carries
- *        it once), switch `signed_tx` to a single `atomicBeef`
- *        Uint8Array (BRC-95). v1 envelopes are intentionally rejected
- *        so an out-of-sync producer surfaces clearly.
+ *        the BUMP), switch `signed_tx` to a single `atomicBeef`
+ *        Uint8Array (BRC-95). The `headerAnchors` shape is unchanged
+ *        from v1. v1 envelopes are intentionally rejected so an
+ *        out-of-sync producer surfaces clearly.
  */
 export const ENVELOPE_VERSION = 2;
 export const KIND_XPUB = "xpub" as const;
@@ -116,20 +118,19 @@ export interface UnsignedProposalT {
   feeRate: number;
   locktime: number;
   /**
-   * Height of the firmware checkpoint the ``headers`` chain links
-   * back to. The first entry in ``headers`` MUST live at
-   * ``checkpointHeight + 1``; the Pi rejects the proposal otherwise.
-   * The companion picks this height from
-   * {@link "./headers.js".checkpointFor}.
+   * Map of `block_height -> merkle_root` (32-byte raw byte order),
+   * one entry per unique block referenced by the inputs' BUMP paths.
+   * The companion fetches each header from a trusted block-explorer
+   * source (WhatsOnChain by default). The Pi verifies that every
+   * input's BUMP-derived root matches the anchored value at its
+   * declared height.
+   *
+   * Trust model: the Pi takes the anchor map on faith. A malicious
+   * companion can at most cause the Pi to sign a transaction whose
+   * inputs do not exist on chain — broadcast then fails. See
+   * `docs/protocol/spv.md` for the full discussion.
    */
-  checkpointHeight: number;
-  /**
-   * Contiguous list of 80-byte headers in ascending height order,
-   * starting at ``checkpointHeight + 1``. The Pi PoW-validates this
-   * chain on receipt and uses the resulting per-height merkle roots
-   * to verify each input's BEEF Merkle path.
-   */
-  headers: Uint8Array[];
+  headerAnchors: Map<number, Uint8Array>;
 }
 
 export interface SignedTxT {
@@ -234,8 +235,17 @@ function envelopeToCborBody(env: Envelope): Map<string, unknown> {
     m.set("changeDerivation", [...env.changeDerivation]);
     m.set("feeRate", env.feeRate);
     m.set("locktime", env.locktime);
-    m.set("checkpointHeight", env.checkpointHeight);
-    m.set("headers", env.headers);
+    // Anchors are encoded as a map of decimal-string keys to 32-byte
+    // root values, in ascending-height order. This mirrors the
+    // Python encoder so cross-runtime byte equivalence holds for
+    // typical input orderings.
+    const anchors = new Map<string, Uint8Array>();
+    const heights = [...env.headerAnchors.keys()].sort((a, b) => a - b);
+    for (const h of heights) {
+      const root = env.headerAnchors.get(h);
+      if (root) anchors.set(String(h), root);
+    }
+    m.set("headerAnchors", anchors);
     return m;
   }
   // KIND_SIGNED
@@ -385,8 +395,7 @@ function parseProposal(body: CborMap): UnsignedProposalT {
       "changeIndex",
       "changeDerivation",
       "feeRate",
-      "checkpointHeight",
-      "headers",
+      "headerAnchors",
     ],
     "unsigned_proposal",
   );
@@ -425,32 +434,48 @@ function parseProposal(body: CborMap): UnsignedProposalT {
     ? requireNumber(body, "locktime", "unsigned_proposal")
     : 0;
 
-  const checkpointHeight = requireNumber(
-    body,
-    "checkpointHeight",
-    "unsigned_proposal",
-  );
-  if (!Number.isInteger(checkpointHeight) || checkpointHeight < 0) {
+  const anchorsRaw = body.get("headerAnchors");
+  if (!isCborMap(anchorsRaw)) {
     throw new EnvelopeError(
-      `unsigned_proposal: checkpointHeight ${checkpointHeight} must be a non-negative integer`,
+      "unsigned_proposal: 'headerAnchors' must be a map of height -> 32-byte root",
     );
   }
-
-  const headersRaw = body.get("headers");
-  if (!Array.isArray(headersRaw)) {
-    throw new EnvelopeError(
-      "unsigned_proposal: 'headers' must be a list of 80-byte byte strings",
-    );
-  }
-  const headers: Uint8Array[] = headersRaw.map((h, idx) => {
-    if (!(h instanceof Uint8Array) || h.length !== 80) {
-      const len = h instanceof Uint8Array ? h.length : "n/a";
+  const headerAnchors = new Map<number, Uint8Array>();
+  for (const [rawKey, rawRoot] of anchorsRaw.entries()) {
+    let height: number;
+    if (typeof rawKey === "string") {
+      const parsed = Number(rawKey);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+        throw new EnvelopeError(
+          `unsigned_proposal: headerAnchors key ${JSON.stringify(rawKey)} is not an integer height`,
+        );
+      }
+      height = parsed;
+    } else if (typeof rawKey === "number") {
+      height = rawKey;
+    } else {
       throw new EnvelopeError(
-        `unsigned_proposal: headers[${idx}] must be 80 bytes, got ${len}`,
+        `unsigned_proposal: headerAnchors key has unsupported type ${typeof rawKey}`,
       );
     }
-    return new Uint8Array(h);
-  });
+    if (!Number.isInteger(height) || height < 0) {
+      throw new EnvelopeError(
+        `unsigned_proposal: headerAnchors height ${height} must be non-negative`,
+      );
+    }
+    if (!(rawRoot instanceof Uint8Array) || rawRoot.length !== 32) {
+      const len = rawRoot instanceof Uint8Array ? rawRoot.length : "n/a";
+      throw new EnvelopeError(
+        `unsigned_proposal: headerAnchors[${height}] must be 32 bytes, got ${len}`,
+      );
+    }
+    headerAnchors.set(height, new Uint8Array(rawRoot));
+  }
+  if (headerAnchors.size === 0) {
+    throw new EnvelopeError(
+      "unsigned_proposal: 'headerAnchors' must contain at least one entry",
+    );
+  }
 
   return {
     kind: KIND_PROPOSAL,
@@ -461,8 +486,7 @@ function parseProposal(body: CborMap): UnsignedProposalT {
     changeDerivation,
     feeRate,
     locktime,
-    checkpointHeight,
-    headers,
+    headerAnchors,
   };
 }
 
