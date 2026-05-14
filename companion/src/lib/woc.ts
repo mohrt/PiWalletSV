@@ -55,6 +55,43 @@ export function wocBaseForNetwork(network: NetworkT): string {
   return network === "test" ? WOC_TESTNET_BASE : WOC_MAINNET_BASE;
 }
 
+/**
+ * Same-origin path used by {@link effectiveWocBase} when the page is
+ * served from the Vite dev server. The dev server proxies these prefixes
+ * to {@link WOC_MAINNET_BASE} / {@link WOC_TESTNET_BASE} (see
+ * `companion/vite.config.ts`).
+ */
+export const WOC_DEV_PROXY_MAINNET_PATH = "/woc-main";
+export const WOC_DEV_PROXY_TESTNET_PATH = "/woc-test";
+
+/**
+ * Resolve the WoC base URL the companion should *actually* fetch from.
+ *
+ * In dev (Vite dev server) the page is loaded over a self-signed
+ * HTTPS cert and mobile WebKit refuses cross-origin `fetch()` from
+ * such a page — the request fails with status 0 and Safari's generic
+ * "Load failed" message even when CORS on the target is wide open.
+ * To dodge that, the WoC client uses a *same-origin* path
+ * (`/woc-main` / `/woc-test`) and the dev server proxies it to the
+ * real WoC base. Production builds (`vite build`, served from a
+ * real-cert origin) talk directly to `api.whatsonchain.com`.
+ *
+ * Tests can pin the branch by passing `options.dev` explicitly;
+ * call sites in app code never pass it.
+ */
+export function effectiveWocBase(
+  network: NetworkT,
+  options: { dev?: boolean } = {},
+): string {
+  const dev = options.dev ?? import.meta.env.DEV;
+  if (dev) {
+    return network === "test"
+      ? WOC_DEV_PROXY_TESTNET_PATH
+      : WOC_DEV_PROXY_MAINNET_PATH;
+  }
+  return wocBaseForNetwork(network);
+}
+
 export interface WocUnspentEntry {
   txid: string;
   vout: number;
@@ -63,6 +100,20 @@ export interface WocUnspentEntry {
   /** Confirmation block height (0 if mempool). */
   height: number;
 }
+
+/** One row of a {@link WocClient.getUnspentBatch} response. */
+export interface WocBulkUnspentResult {
+  address: string;
+  utxos: WocUnspentEntry[];
+}
+
+/**
+ * Max addresses per `POST /addresses/unspent` call. WoC documents
+ * this as 20 across both mainnet and testnet. Going over yields an
+ * HTTP 4xx; the {@link WocClient.getUnspentBatch} method enforces
+ * the cap client-side so the error is loud and local.
+ */
+export const WOC_BULK_BATCH_MAX = 20;
 
 export interface WocTxProof {
   /** Position of the tx within the block's transaction tree. */
@@ -112,6 +163,22 @@ export type FetchFn = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+/**
+ * Default minimum interval between WoC requests, in milliseconds.
+ *
+ * WoC's documented unauthenticated rate limit is ~3 req/s. We pace at
+ * 350 ms (~2.85 req/s) — comfortably under the cap so a single client
+ * doing a gap-limit scan + proof-fetch + broadcast doesn't trip the
+ * limiter even when the LAN router or another tab is also using WoC.
+ *
+ * Callers with an `apiKey` can pass a smaller value to use the higher
+ * authenticated quota.
+ */
+export const WOC_DEFAULT_MIN_INTERVAL_MS = 350;
+
+/** Default cap on automatic 429 retries. */
+export const WOC_DEFAULT_MAX_RETRIES = 4;
+
 export interface WocClientOptions {
   /** Override base URL (default mainnet). */
   baseUrl?: string;
@@ -119,17 +186,83 @@ export interface WocClientOptions {
   fetch?: FetchFn;
   /** Optional WoC API key sent as `woc-api-key` header. */
   apiKey?: string;
+  /**
+   * Minimum interval between requests, in milliseconds. Defaults to
+   * {@link WOC_DEFAULT_MIN_INTERVAL_MS}. Pass `0` to disable pacing
+   * (useful in tests with a stubbed fetch).
+   */
+  minIntervalMs?: number;
+  /**
+   * Max automatic retries on HTTP 429 (Too Many Requests). Each retry
+   * honours the server's `Retry-After` header if present, otherwise
+   * uses an exponential backoff capped at 8 s. Defaults to
+   * {@link WOC_DEFAULT_MAX_RETRIES}; set to `0` to surface 429 to the
+   * caller immediately.
+   */
+  maxRetries?: number;
+  /** Override `Date.now` for tests. */
+  now?: () => number;
+  /**
+   * Override the sleep primitive for tests. Default uses
+   * `setTimeout`. The pacer + 429 backoff both go through this so a
+   * test stub of `() => Promise.resolve()` makes both effectively
+   * instantaneous.
+   */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export class WocClient {
   readonly baseUrl: string;
   private readonly _fetch: FetchFn;
   private readonly _apiKey: string | undefined;
+  private readonly _minIntervalMs: number;
+  private readonly _maxRetries: number;
+  private readonly _now: () => number;
+  private readonly _sleep: (ms: number) => Promise<void>;
+
+  /**
+   * Promise chain used to serialize concurrent callers through the
+   * pacer. Each `_paced` call snapshots the current value, appends
+   * its own release point, and stores that as the new gate — JS's
+   * single-threaded model guarantees the snapshot+assign pair is
+   * atomic relative to other callers.
+   */
+  private _gate: Promise<void> = Promise.resolve();
+  /** Wall-clock time of the last *issued* fetch. */
+  private _lastRequestAt: number = -Infinity;
 
   constructor(opts: WocClientOptions = {}) {
     this.baseUrl = (opts.baseUrl ?? WOC_DEFAULT_BASE).replace(/\/+$/, "");
     this._fetch = opts.fetch ?? defaultFetch;
     this._apiKey = opts.apiKey;
+    this._minIntervalMs = opts.minIntervalMs ?? WOC_DEFAULT_MIN_INTERVAL_MS;
+    this._maxRetries = opts.maxRetries ?? WOC_DEFAULT_MAX_RETRIES;
+    this._now = opts.now ?? Date.now;
+    this._sleep = opts.sleep ?? defaultSleep;
+  }
+
+  /**
+   * Serialize a network call behind the pacer. All concurrent
+   * callers share the same `_gate` chain so a `Promise.all` of N
+   * requests trickles out one-per-`_minIntervalMs` rather than
+   * stampeding the API.
+   */
+  private async _paced<T>(fn: () => Promise<T>): Promise<T> {
+    const previous = this._gate;
+    const release = previous.then(async () => {
+      if (this._minIntervalMs > 0) {
+        const elapsed = this._now() - this._lastRequestAt;
+        const wait = this._minIntervalMs - elapsed;
+        if (wait > 0) await this._sleep(wait);
+      }
+      this._lastRequestAt = this._now();
+    });
+    // Swallow errors on the gate so a rejected predecessor doesn't
+    // wedge the queue forever; the actual error still surfaces via
+    // the `await release` below.
+    this._gate = release.catch(() => {});
+    await release;
+    return fn();
   }
 
   private async request<T>(
@@ -149,22 +282,48 @@ export class WocClient {
     } else {
       init = { method, headers };
     }
-    let res: Response;
-    try {
-      res = await this._fetch(url, init);
-    } catch (e) {
-      throw new WocError(path, 0, `network: ${(e as Error).message}`);
+
+    // Retry loop for HTTP 429. Other non-2xx statuses are surfaced
+    // immediately (4xx ≠ 429 means the request is malformed, not
+    // rate-limited; 5xx could be retried but WoC's 5xx pattern is
+    // mostly long outages where a quick retry won't help).
+    let attempt = 0;
+    while (true) {
+      let res: Response;
+      try {
+        res = await this._paced(() => this._fetch(url, init));
+      } catch (e) {
+        throw new WocError(path, 0, `network: ${(e as Error).message}`);
+      }
+      if (res.status === 429 && attempt < this._maxRetries) {
+        const wait =
+          parseRetryAfter(res, this._now) ??
+          Math.min(8000, 500 * 2 ** attempt);
+        await this._sleep(wait);
+        attempt += 1;
+        continue;
+      }
+      if (!res.ok) {
+        const snippet = await safeReadText(res, 240);
+        // For 429 specifically, surface a friendlier message so the
+        // UI doesn't show a bare "Too Many Requests" string.
+        if (res.status === 429) {
+          throw new WocError(
+            path,
+            429,
+            `rate limited (gave up after ${attempt} retries)`,
+            snippet,
+          );
+        }
+        throw new WocError(path, res.status, res.statusText, snippet);
+      }
+      const ct = res.headers.get("content-type") ?? "";
+      if (ct.includes("application/json")) {
+        return (await res.json()) as T;
+      }
+      // Some endpoints return text/plain (e.g. /tx/{txid}/hex).
+      return (await res.text()) as unknown as T;
     }
-    if (!res.ok) {
-      const snippet = await safeReadText(res, 240);
-      throw new WocError(path, res.status, res.statusText, snippet);
-    }
-    const ct = res.headers.get("content-type") ?? "";
-    if (ct.includes("application/json")) {
-      return (await res.json()) as T;
-    }
-    // Some endpoints return text/plain (e.g. /tx/{txid}/hex).
-    return (await res.text()) as unknown as T;
   }
 
   /** `GET /address/{address}/unspent`. */
@@ -195,6 +354,127 @@ export class WocClient {
       vout: r.tx_pos,
       sats: r.value,
       height: r.height,
+    }));
+  }
+
+  /**
+   * Bulk UTXO lookup — confirmed *and* mempool, merged.
+   *
+   * Calls both `POST /addresses/confirmed/unspent` and
+   * `POST /addresses/unconfirmed/unspent` in parallel and merges
+   * results per-address. WoC's older `POST /addresses/unspent`
+   * (singular) silently excludes mempool UTXOs, which surfaces as a
+   * "balance is 0" bug right after a fresh broadcast — the recipient
+   * scan can't see the inbound tx until it confirms, sometimes
+   * minutes later. The split endpoints expose mempool entries
+   * explicitly; mempool entries get `height = 0` to match the
+   * single-address `GET /address/{addr}/unspent` convention the rest
+   * of the pipeline already speaks.
+   *
+   * Accepts up to {@link WOC_BULK_BATCH_MAX} addresses per call and
+   * returns one entry per address (in the same order as the input)
+   * carrying its merged UTXO list. WoC's per-address `error` field
+   * surfaces things like "unable to convert address to scripthash";
+   * a non-empty error from either sub-call makes this method throw a
+   * {@link WocError} so the caller sees the failure rather than
+   * treating an unparseable address as "empty" (which would silently
+   * inflate the gap-limit counter).
+   *
+   * UTXOs flagged `isSpentInMempoolTx` are filtered out — they're
+   * already being spent by an in-flight transaction and reusing them
+   * would guarantee a double-spend.
+   *
+   * Used by the gap-limit scanner so a fresh-wallet scan turns 40
+   * paced GETs into ~2 paced POST pairs — see {@link scanWalletUtxos}.
+   * The two POSTs flow through {@link _paced} so they still respect
+   * `_minIntervalMs` against WoC's rate limiter.
+   */
+  async getUnspentBatch(addresses: string[]): Promise<WocBulkUnspentResult[]> {
+    if (addresses.length === 0) return [];
+    if (addresses.length > WOC_BULK_BATCH_MAX) {
+      throw new WocError(
+        "/addresses/unspent",
+        0,
+        `bulk size ${addresses.length} exceeds max ${WOC_BULK_BATCH_MAX}`,
+      );
+    }
+    interface RawUtxoEntry {
+      tx_hash: string;
+      tx_pos: number;
+      value: number;
+      /** Confirmed entries always have a positive height; the
+       * unconfirmed endpoint omits this field — we synthesize 0. */
+      height?: number;
+      isSpentInMempoolTx?: boolean;
+    }
+    interface RawAddressRow {
+      address?: string;
+      script?: string;
+      result?: RawUtxoEntry[];
+      error?: string;
+    }
+    const fetchOne = async (path: string): Promise<RawAddressRow[]> => {
+      const raw = await this.request<RawAddressRow[] | { error?: string }>(
+        "POST",
+        path,
+        { addresses },
+      );
+      if (!Array.isArray(raw)) {
+        const msg =
+          raw && typeof raw === "object" && "error" in raw
+            ? String(raw.error)
+            : "unexpected shape";
+        throw new WocError(path, 200, `unexpected payload: ${msg}`);
+      }
+      const failed = raw.find(
+        (e) => typeof e.error === "string" && e.error.length > 0,
+      );
+      if (failed) {
+        throw new WocError(
+          path,
+          200,
+          `address ${failed.address ?? "?"} failed: ${failed.error}`,
+        );
+      }
+      return raw;
+    };
+
+    const [confirmedRows, unconfirmedRows] = await Promise.all([
+      fetchOne("/addresses/confirmed/unspent"),
+      fetchOne("/addresses/unconfirmed/unspent"),
+    ]);
+
+    // Merge per-address. Map keyed by address, seeded with empty
+    // lists so addresses with no UTXOs still get a row in the
+    // output (preserves the contract: one output row per input
+    // address, in input order).
+    const byAddress = new Map<string, WocUnspentEntry[]>();
+    for (const a of addresses) byAddress.set(a, []);
+    const merge = (rows: RawAddressRow[]): void => {
+      for (const row of rows) {
+        if (!row.address) continue;
+        const list = byAddress.get(row.address);
+        if (!list) continue;
+        for (const u of row.result ?? []) {
+          // Already-being-spent UTXOs are unsafe to count: balance
+          // would be inflated and any selector that picks them would
+          // produce a double-spend the moment it's broadcast.
+          if (u.isSpentInMempoolTx) continue;
+          list.push({
+            txid: u.tx_hash,
+            vout: u.tx_pos,
+            sats: u.value,
+            height: u.height ?? 0,
+          });
+        }
+      }
+    };
+    merge(confirmedRows);
+    merge(unconfirmedRows);
+
+    return addresses.map((address) => ({
+      address,
+      utxos: byAddress.get(address) ?? [],
     }));
   }
 
@@ -345,4 +625,37 @@ async function safeReadText(res: Response, max: number): Promise<string> {
   } catch {
     return "";
   }
+}
+
+/**
+ * Parse an HTTP `Retry-After` header into a wait duration in
+ * milliseconds. Per RFC 7231 the header may be either an integer
+ * number of seconds or an HTTP-date; we support both. A missing,
+ * malformed, or non-positive value returns `null` so the caller can
+ * fall back to its own backoff schedule.
+ *
+ * The result is capped at 60 s — Cloudflare in particular sometimes
+ * sets a very long `Retry-After` on extended outages, and we'd
+ * rather give up after our `maxRetries` budget than block the UI for
+ * minutes.
+ */
+function parseRetryAfter(res: Response, now: () => number): number | null {
+  const raw = res.headers.get("retry-after");
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const seconds = Number(trimmed);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.min(60_000, Math.round(seconds * 1000));
+  }
+  const dateMs = Date.parse(trimmed);
+  if (!Number.isNaN(dateMs)) {
+    const wait = dateMs - now();
+    if (wait > 0) return Math.min(60_000, wait);
+  }
+  return null;
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

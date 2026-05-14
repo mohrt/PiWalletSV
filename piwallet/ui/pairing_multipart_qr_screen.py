@@ -4,6 +4,15 @@ Each frame encodes one ``PW1|...`` barcode string (:mod:`piwallet.qr.multipart`)
 The companion app scans an animated sequence; this screen advances
 automatically and allows manual L/R to jump frames.
 
+Layout note
+-----------
+Title bar and footer are kept intentionally tiny so the QR ink can fill
+~196 px of the 240 x 240 panel. With the default 120-char chunking from
+:mod:`piwallet.bonnet.companion_pairing` this puts each frame at QR
+version 6 (41 modules) rendered at ~4 px per module — comfortably
+above the threshold a phone camera needs to autofocus through the
+TFT's backlight glow.
+
 Controls
 --------
 =========  ==================================================
@@ -27,7 +36,6 @@ from piwallet.ui.display import (
     COLOR_ACCENT,
     COLOR_BG,
     COLOR_DIM,
-    COLOR_FG,
     DISPLAY_HEIGHT,
     DISPLAY_WIDTH,
     FrameBuffer,
@@ -57,8 +65,13 @@ def _max_qr_px_for_footer(*, qr_top_y: int, first_footer_center_y: int, gap_px: 
 class PairingMultipartQrScreen:
     """Show ``pw1_frames`` as QR tiles with timed auto-advance.
 
-    ``qr_target_px`` defaults large enough for phone cameras at arm's length on a
-    240 px panel; layout stays a compact single-line header + foot hints.
+    ``qr_target_px`` is large by design: phone cameras have to
+    autofocus through the bonnet's TFT glow, and the difference
+    between a v6 QR rendered at 3 px/module vs 4 px/module is the
+    difference between "scans on every frame" and "doesn't scan at
+    all" at arm's length. The screen squeezes the title bar and
+    collapses the three control hints into a single footer line so
+    the QR ink can fill ~196 px of the 240 px panel.
     """
 
     pw1_frames: list[str]
@@ -68,7 +81,7 @@ class PairingMultipartQrScreen:
     # before the panel rotates. The earlier 420 ms default produced
     # cycles too fast for arm's-length scanning under indoor light.
     auto_advance_ms: int = 700
-    qr_target_px: int = 176
+    qr_target_px: int = 200
     idx: int = 0
     done: bool = False
     result: PairingMultipartQrResult | None = None
@@ -116,30 +129,32 @@ class PairingMultipartQrScreen:
             self._next_advance_after_ms = now + self.auto_advance_ms
 
         fb.clear(COLOR_BG)
-        title_h = 22
+        title_h = 18
         fb.draw.rectangle((0, 0, DISPLAY_WIDTH, title_h), fill=(20, 20, 32))
-        # Single header line so more vertical space goes to the QR.
+        # Single header line so most vertical space goes to the QR.
         head = f"{self.title}   {self.idx + 1} / {n}"
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
             title_h // 2,
             head,
-            size=12,
+            size=11,
             color=COLOR_ACCENT,
             anchor="mm",
         )
-        qr_y = title_h + 6
-        # Three footer lines (fixed centers); first must sit fully below the QR.
-        y_footer_scan = DISPLAY_HEIGHT - 38
-        y_footer_lr = DISPLAY_HEIGHT - 26
-        y_footer_done = DISPLAY_HEIGHT - 12
+        qr_y = title_h + 4
+        # Single, compact footer line. Three lines used to live here but
+        # they ate enough vertical space that the QR could only render at
+        # 3 px per module on a 240 x 240 panel; phones struggled to lock
+        # autofocus through the TFT glow at that density. One line at
+        # size=10 yields ~196 px for the QR (4 px per module on a v6).
+        y_footer = DISPLAY_HEIGHT - 10
         eff_px = min(
             self.qr_target_px,
             _max_qr_px_for_footer(
                 qr_top_y=qr_y,
-                first_footer_center_y=y_footer_scan,
-                gap_px=8,
+                first_footer_center_y=y_footer,
+                gap_px=6,
             ),
         )
         line = self.pw1_frames[self.idx]
@@ -166,26 +181,8 @@ class PairingMultipartQrScreen:
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
-            y_footer_scan,
-            "Scan all frames",
-            size=10,
-            color=COLOR_FG,
-            anchor="mm",
-        )
-        draw_text(
-            fb,
-            DISPLAY_WIDTH // 2,
-            y_footer_lr,
-            "L/R slide frame",
-            size=10,
-            color=COLOR_DIM,
-            anchor="mm",
-        )
-        draw_text(
-            fb,
-            DISPLAY_WIDTH // 2,
-            y_footer_done,
-            "A / SEL / B  back   hold B quit app",
+            y_footer,
+            "L/R frame · A/B back · hold B quit",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

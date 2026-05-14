@@ -14,6 +14,15 @@
  * Output: a flat list of `WalletUtxo` entries each tagged with the BIP32
  * derivation `[change, index]` so the Pi can re-derive the signing key.
  * Sorted by descending value (greedy-friendly).
+ *
+ * Backend calls
+ * -------------
+ * The scanner uses WoC's bulk endpoint via
+ * {@link WocClient.getUnspentBatch} — up to
+ * {@link WOC_BULK_BATCH_MAX} addresses per HTTP request. A typical
+ * empty-wallet scan therefore costs **2 API calls** (one bulk per
+ * branch), not 40 individual GETs, which sails comfortably under
+ * WoC's ~3 req/s unauthenticated rate limit.
  */
 import {
   CHANGE_BRANCH,
@@ -21,10 +30,15 @@ import {
   deriveAddress,
 } from "./derive.js";
 import type { NetworkT } from "./envelope.js";
-import type { WocClient, WocUnspentEntry } from "./woc.js";
+import {
+  WOC_BULK_BATCH_MAX,
+  type WocBulkUnspentResult,
+  type WocClient,
+} from "./woc.js";
 
 export const DEFAULT_GAP_LIMIT = 20;
-export const DEFAULT_BATCH = 5;
+/** Default addresses derived per bulk WoC call. Capped at the WoC bulk max. */
+export const DEFAULT_BATCH = WOC_BULK_BATCH_MAX;
 
 export interface WalletUtxo {
   txid: string;
@@ -53,7 +67,12 @@ export interface ScanResult {
 
 export interface ScanOptions {
   gapLimit?: number;
-  /** How many addresses to derive at a time (one fetch per address). */
+  /**
+   * How many addresses to bundle into a single bulk WoC call. Capped
+   * at {@link WOC_BULK_BATCH_MAX}; values higher than that are
+   * silently clamped so callers can pass a "natural" gap-sized
+   * batch without worrying about the WoC limit.
+   */
   batch?: number;
   /** Skip addresses below this index (resume hint). */
   startReceive?: number;
@@ -73,8 +92,14 @@ export interface ScanOptions {
     address: string;
     found: number;
   }) => void;
-  /** Async fetch hook — defaults to woc.getUnspent. Useful for tests. */
-  fetchUnspent?: (address: string) => Promise<WocUnspentEntry[]>;
+  /**
+   * Async fetch hook for one bulk window — defaults to
+   * {@link WocClient.getUnspentBatch}. Tests stub this with an
+   * in-memory address→UTXOs map.
+   */
+  fetchUnspentBatch?: (
+    addresses: string[],
+  ) => Promise<WocBulkUnspentResult[]>;
 }
 
 export async function scanWalletUtxos(
@@ -83,10 +108,11 @@ export async function scanWalletUtxos(
   opts: ScanOptions = {},
 ): Promise<ScanResult> {
   const gap = opts.gapLimit ?? DEFAULT_GAP_LIMIT;
-  const batch = opts.batch ?? DEFAULT_BATCH;
+  const rawBatch = opts.batch ?? DEFAULT_BATCH;
+  const batch = Math.min(rawBatch, WOC_BULK_BATCH_MAX);
   const network: NetworkT = opts.network ?? "main";
-  const fetchUnspent =
-    opts.fetchUnspent ?? ((addr: string) => woc.getUnspent(addr));
+  const fetchBatch =
+    opts.fetchUnspentBatch ?? ((addrs: string[]) => woc.getUnspentBatch(addrs));
 
   const utxos: WalletUtxo[] = [];
   let total = 0;
@@ -96,24 +122,31 @@ export async function scanWalletUtxos(
   const stoppedAt = { receive: 0, change: 0 };
 
   for (const branch of [RECEIVE_BRANCH, CHANGE_BRANCH]) {
-    let index = branch === RECEIVE_BRANCH
-      ? opts.startReceive ?? 0
-      : opts.startChange ?? 0;
+    let index =
+      branch === RECEIVE_BRANCH
+        ? (opts.startReceive ?? 0)
+        : (opts.startChange ?? 0);
     let consecutiveEmpty = 0;
     while (consecutiveEmpty < gap) {
-      const probeStart = index;
-      const probeEnd = Math.min(index + batch, index + (gap - consecutiveEmpty));
+      // Window size shrinks as we approach the gap limit so we don't
+      // burn a full WoC bulk call probing addresses we're going to
+      // discard once `consecutiveEmpty === gap`.
+      const remainingBeforeGap = gap - consecutiveEmpty;
+      const windowSize = Math.min(batch, remainingBeforeGap);
       const probes: { index: number; address: string }[] = [];
-      for (let i = probeStart; i < probeEnd; i++) {
-        const d = deriveAddress(accountXpub, branch, i, network);
-        probes.push({ index: i, address: d.address });
+      for (let i = 0; i < windowSize; i++) {
+        const idx = index + i;
+        const d = deriveAddress(accountXpub, branch, idx, network);
+        probes.push({ index: idx, address: d.address });
       }
-      const results = await Promise.all(
-        probes.map((p) => fetchUnspent(p.address)),
-      );
-      for (let j = 0; j < probes.length; j++) {
-        const p = probes[j];
-        const found = results[j];
+      const results = await fetchBatch(probes.map((p) => p.address));
+      // Map results back by address. WoC returns them in input order
+      // but we don't rely on that; an address-keyed map is robust to
+      // future server changes.
+      const byAddress = new Map<string, WocBulkUnspentResult>();
+      for (const r of results) byAddress.set(r.address, r);
+      for (const p of probes) {
+        const found = byAddress.get(p.address)?.utxos ?? [];
         addressesScanned += 1;
         opts.onProgress?.({
           branch,
@@ -141,7 +174,7 @@ export async function scanWalletUtxos(
           }
         }
       }
-      index = probeEnd;
+      index += windowSize;
     }
     if (branch === RECEIVE_BRANCH) stoppedAt.receive = index;
     else stoppedAt.change = index;

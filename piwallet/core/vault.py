@@ -410,6 +410,70 @@ class Vault:
                 return
         raise WalletNotFoundError(wallet_id)
 
+    def change_pin(self, old_pin: str, new_pin: str) -> None:
+        """Re-encrypt every wallet's DEK under a new PIN.
+
+        Verifies ``old_pin`` by unwrapping the first wallet's DEK (the
+        attempt-counter / wipe-on-N-failures contract is exactly the
+        same as a normal unlock). On success a *fresh* scrypt salt is
+        generated and every wallet's wrapped DEK is re-encrypted under
+        ``scrypt(new_pin, new_salt)``. Salt rotation matters because
+        the ciphertext binds the *combination* of (salt, PIN) — if an
+        attacker has an old snapshot of ``vault.bin`` they can't reuse
+        the old ciphertext as a brute-force oracle against the new
+        PIN.
+
+        The rewrap loop is staged: every new wrapped-DEK blob is
+        computed in memory first, then committed in one ``_save()``.
+        A mid-loop crash leaves the on-disk vault untouched, so the
+        operator can retry with the still-valid old PIN.
+
+        :raises VaultError: vault not initialized / PIN format invalid.
+        :raises WrongPinError: ``old_pin`` did not decrypt the first
+            wallet's DEK; attempt counter has already been bumped.
+        :raises VaultWipedError: too many failed attempts; vault wiped.
+        """
+        if self._state is None:
+            raise VaultError("vault not initialized")
+        _validate_pin(old_pin)
+        _validate_pin(new_pin)
+        if old_pin == new_pin:
+            # Pure no-op. The UI normally guards against this, but if
+            # it slips through we want a stable success without
+            # touching the salt — rotating the salt for an unchanged
+            # PIN is wasted work and adds nothing to the threat model.
+            return
+
+        if not self._state.wallets:
+            # No ciphertext exists to verify ``old_pin`` against — same
+            # limitation as :meth:`remove_wallet` / :meth:`rename_wallet`
+            # on an empty vault. Rotate the salt anyway so the next
+            # wallet added will be wrapped under the new PIN's KEK.
+            self._state.scrypt_salt = secrets.token_bytes(SALT_LEN)
+            self._save()
+            return
+
+        # Verify old PIN. Raises WrongPinError / VaultWipedError on the
+        # usual conditions and bumps the attempt counter exactly once.
+        first_dek = self._unwrap_dek(old_pin, self._state.wallets[0])
+
+        old_kek = _derive_kek(old_pin, self._state.scrypt_salt)
+        new_salt = secrets.token_bytes(SALT_LEN)
+        new_kek = _derive_kek(new_pin, new_salt)
+
+        # Re-wrap every DEK *before* mutating any state, so a failure
+        # in the middle of the loop leaves the vault file intact.
+        re_wrapped: list[bytes] = []
+        for i, w in enumerate(self._state.wallets):
+            dek = first_dek if i == 0 else _aesgcm_decrypt(old_kek, w["wrappedDek"])
+            re_wrapped.append(_aesgcm_encrypt(new_kek, dek))
+
+        # All wrappings succeeded — commit.
+        self._state.scrypt_salt = new_salt
+        for w, blob in zip(self._state.wallets, re_wrapped, strict=True):
+            w["wrappedDek"] = blob
+        self._save()
+
     def derive_signing_key(self, pin: str, wallet_id: str, change: int, index: int):
         """Decrypt the wallet's xprv and derive a leaf signing key.
 

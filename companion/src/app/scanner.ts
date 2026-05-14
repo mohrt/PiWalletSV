@@ -21,6 +21,7 @@ import {
   bytesToHex,
   decodeEnvelope,
 } from "../lib/envelope.js";
+import { extractHexFromPaste } from "../lib/hex-paste.js";
 import { MultipartAssembler, MultipartQrError } from "../pw1.js";
 import {
   type WalletRecord,
@@ -30,7 +31,7 @@ import {
   listWallets,
 } from "../lib/wallets.js";
 import type { NetworkT } from "../lib/envelope.js";
-import { WocClient, WocError, wocBaseForNetwork } from "../lib/woc.js";
+import { WocClient, WocError, effectiveWocBase } from "../lib/woc.js";
 
 const SCAN_INTERVAL_MS = 80; // ~12.5 fps; plenty for animated QR
 const TEXT_DISPLAY_CAP = 64 * 1024; // truncate displayed body for huge payloads
@@ -47,6 +48,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
           <a href="#/scan" class="active">Scan</a>
           <a href="#/loop">Loop</a>
           <a href="#/wallets">Wallets</a>
+          <a href="#/security">Security</a>
         </nav>
       </header>
 
@@ -61,6 +63,32 @@ export function mountScannerPage(root: HTMLElement): () => void {
             <button id="reset" type="button">Reset</button>
           </div>
         </div>
+      </section>
+
+      <section class="card paste-hex-card">
+        <details>
+          <summary>Or paste hex (signed_tx from SSH bridge)</summary>
+          <p class="muted-line">
+            Paste the hex output from
+            <code>piwallet sign --hex - …</code> on the Pi to broadcast
+            without a camera. Whitespace, newlines and a leading
+            <code>signed_tx:</code> prefix are tolerated, and you can
+            paste the whole three-line CLI summary
+            (<code>verified:</code> / <code>txid:</code> /
+            <code>signed_tx:</code>) — the non-hex lines are ignored.
+            xpub_export and unsigned_proposal blobs work here too.
+          </p>
+          <textarea id="pasteHex" class="hex-blob" rows="6"
+            placeholder="paste envelope hex here…"
+            spellcheck="false" autocorrect="off"></textarea>
+          <div class="actions">
+            <button id="pasteHexDecode" class="primary" type="button">
+              Decode hex
+            </button>
+            <button id="pasteHexClear" type="button">Clear</button>
+          </div>
+          <p id="pasteHexStatus" class="muted-line"></p>
+        </details>
       </section>
 
       <section id="pairCard" class="card pair-card" hidden>
@@ -434,8 +462,10 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $broadcastStatus.classList.remove("error");
     $broadcastStatus.textContent = "Submitting to WhatsOnChain…";
     // Build (or rebuild, if the network changed) a WocClient pointing
-    // at the right BSV main/test base for this signed_tx.
-    const baseUrl = wocBaseForNetwork(signedTxNetwork);
+    // at the right BSV main/test base for this signed_tx. In dev this
+    // resolves to a same-origin proxy path (see effectiveWocBase) so
+    // self-signed-cert phones don't choke on cross-origin fetch.
+    const baseUrl = effectiveWocBase(signedTxNetwork);
     if (!woc || woc.baseUrl !== baseUrl.replace(/\/+$/, "")) {
       woc = new WocClient({ baseUrl });
     }
@@ -720,6 +750,90 @@ export function mountScannerPage(root: HTMLElement): () => void {
   });
   $broadcastBtn.addEventListener("click", () => {
     void onBroadcast();
+  });
+
+  // ---- Paste-hex bridge ----------------------------------------------
+  // Lets the operator skip the camera entirely when they have the
+  // envelope as text — typically a signed_tx blob piped over SSH from
+  // `piwallet sign --hex -` on the Pi (the "Sign over SSH" example in
+  // docs/cli.md). Reuses showResult() so xpub_export / proposal blobs
+  // work too — useful for debugging without ever opening the camera.
+  const $pasteHex = root.querySelector<HTMLTextAreaElement>("#pasteHex")!;
+  const $pasteHexDecode = root.querySelector<HTMLButtonElement>(
+    "#pasteHexDecode",
+  )!;
+  const $pasteHexClear = root.querySelector<HTMLButtonElement>(
+    "#pasteHexClear",
+  )!;
+  const $pasteHexStatus = root.querySelector<HTMLElement>("#pasteHexStatus")!;
+
+  function setPasteStatus(msg: string, isError = false): void {
+    $pasteHexStatus.textContent = msg;
+    $pasteHexStatus.classList.toggle("error", isError);
+  }
+
+  function onPasteHexDecode(): void {
+    // extractHexFromPaste() tolerates the labelled SSH-terminal output
+    // shape — lines like `verified: ...` and `txid: ...` are dropped,
+    // and a `signed_tx:` (or any `label:`) prefix is stripped from the
+    // hex line so the operator can paste the entire CLI summary.
+    const parsed = extractHexFromPaste($pasteHex.value);
+    const cleaned = parsed.hex;
+    if (cleaned.length === 0) {
+      setPasteStatus("paste an envelope hex string first", true);
+      return;
+    }
+    if (cleaned.length % 2 !== 0) {
+      setPasteStatus(
+        `hex has odd length ${cleaned.length}; check the paste was complete`,
+        true,
+      );
+      return;
+    }
+    if (!/^[0-9a-f]+$/.test(cleaned)) {
+      setPasteStatus(
+        "hex contains non-[0-9a-f] characters after stripping whitespace",
+        true,
+      );
+      return;
+    }
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(cleaned.length / 2);
+      for (let i = 0; i < bytes.length; i++) {
+        bytes[i] = parseInt(cleaned.slice(i * 2, i * 2 + 2), 16);
+      }
+    } catch (e) {
+      setPasteStatus(`hex decode failed: ${(e as Error).message}`, true);
+      return;
+    }
+    setPasteStatus(`decoding ${bytes.length} bytes…`);
+    // Reset the multipart assembler so a previous half-finished camera
+    // session doesn't bleed into this paste-driven session.
+    asm = new MultipartAssembler();
+    void showResult(bytes).then(() => {
+      // showResult() already updates the main #status banner; the
+      // textarea's own status echoes "decoded" so the operator
+      // doesn't have to scan up the page to find feedback. If we
+      // dropped any prefix-labelled summary lines (e.g. `verified:`,
+      // `txid:`) call that out so the operator knows the parse was
+      // generous on purpose, not by accident.
+      const droppedCount =
+        parsed.droppedLabeled.length + parsed.droppedOther.length;
+      const noteParts: string[] = [`decoded ${bytes.length} bytes`];
+      if (droppedCount > 0) {
+        noteParts.push(`ignored ${droppedCount} non-hex line(s)`);
+      }
+      noteParts.push("see the result card below");
+      setPasteStatus(noteParts.join(" — "));
+    });
+  }
+
+  $pasteHexDecode.addEventListener("click", onPasteHexDecode);
+  $pasteHexClear.addEventListener("click", () => {
+    $pasteHex.value = "";
+    setPasteStatus("");
+    $pasteHex.focus();
   });
 
   return () => {

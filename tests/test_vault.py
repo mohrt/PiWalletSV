@@ -384,6 +384,116 @@ def test_rename_wallet(vault_path: Path) -> None:
     assert v.list_wallets()[0].label == "savings"
 
 
+# ---- change_pin --------------------------------------------------------
+
+
+def test_change_pin_unlocks_with_new_and_rejects_old(vault_path: Path) -> None:
+    """The new PIN unlocks every wallet; the old PIN no longer works."""
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    rec = v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
+    v.change_pin(GOOD_PIN, "111111")
+    # New PIN works.
+    xpub_str = v.get_account_xpub("111111", rec.id)
+    assert xpub_str.startswith("xpub")
+    # Old PIN fails (and bumps counter).
+    with pytest.raises(vlt.WrongPinError):
+        v.get_account_xpub(GOOD_PIN, rec.id)
+
+
+def test_change_pin_rotates_scrypt_salt(vault_path: Path) -> None:
+    """Salt rotation is essential — guarantees a snapshot of the old vault
+    file isn't a brute-force oracle against the new PIN."""
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
+    salt_before = bytes(v._state.scrypt_salt)  # type: ignore[union-attr]
+    v.change_pin(GOOD_PIN, "111111")
+    salt_after = bytes(v._state.scrypt_salt)  # type: ignore[union-attr]
+    assert salt_before != salt_after
+
+
+def test_change_pin_persists_across_reload(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    rec = v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
+    v.change_pin(GOOD_PIN, "111111")
+    # Re-open from disk and confirm the new PIN still unlocks.
+    v2 = vlt.Vault(vault_path)
+    xpub_str = v2.get_account_xpub("111111", rec.id)
+    assert xpub_str.startswith("xpub")
+
+
+def test_change_pin_rewraps_every_wallet(vault_path: Path) -> None:
+    """Multi-wallet vaults must re-wrap *every* DEK, not just the first."""
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    rec_a = v.add_wallet(
+        pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="a", account_index=0
+    )
+    rec_b = v.add_wallet(
+        pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="b", account_index=1
+    )
+    v.change_pin(GOOD_PIN, "111111")
+    # Both wallets unlock under the new PIN.
+    assert v.get_account_xpub("111111", rec_a.id).startswith("xpub")
+    assert v.get_account_xpub("111111", rec_b.id).startswith("xpub")
+
+
+def test_change_pin_wrong_old_pin(vault_path: Path) -> None:
+    """A wrong old PIN raises and leaves the vault on the original PIN."""
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    rec = v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
+    with pytest.raises(vlt.WrongPinError):
+        v.change_pin("999999", "111111")
+    # Old PIN still valid (and the new PIN should *not* work).
+    assert v.get_account_xpub(GOOD_PIN, rec.id).startswith("xpub")
+    with pytest.raises(vlt.WrongPinError):
+        v.get_account_xpub("111111", rec.id)
+
+
+def test_change_pin_validates_new_pin(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
+    with pytest.raises(ValueError, match="PIN"):
+        v.change_pin(GOOD_PIN, "12345")  # too short
+
+
+def test_change_pin_no_op_when_old_equals_new(vault_path: Path) -> None:
+    """Same-PIN change must not rotate the salt or touch disk semantics."""
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    rec = v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
+    salt_before = bytes(v._state.scrypt_salt)  # type: ignore[union-attr]
+    v.change_pin(GOOD_PIN, GOOD_PIN)
+    salt_after = bytes(v._state.scrypt_salt)  # type: ignore[union-attr]
+    assert salt_before == salt_after
+    # And the PIN still works after the no-op.
+    assert v.get_account_xpub(GOOD_PIN, rec.id).startswith("xpub")
+
+
+def test_change_pin_on_empty_vault_rotates_salt(vault_path: Path) -> None:
+    """Empty vault has no ciphertext to verify against — should still
+    rotate the salt so the next add_wallet uses the new KEK."""
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    salt_before = bytes(v._state.scrypt_salt)  # type: ignore[union-attr]
+    v.change_pin(GOOD_PIN, "111111")
+    salt_after = bytes(v._state.scrypt_salt)  # type: ignore[union-attr]
+    assert salt_before != salt_after
+    # And a new wallet added under the new PIN unlocks with the new PIN.
+    rec = v.add_wallet(pin="111111", mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
+    assert v.get_account_xpub("111111", rec.id).startswith("xpub")
+
+
+def test_change_pin_uninitialized_raises(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    with pytest.raises(vlt.VaultError, match="not initialized"):
+        v.change_pin(GOOD_PIN, "111111")
+
+
 # ---- terms acknowledgment for first-boot UX ----------------------------
 
 

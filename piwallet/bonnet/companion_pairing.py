@@ -17,7 +17,7 @@ def pairing_pw1_lines(
     pin: str,
     wallet: WalletRecord,
     *,
-    chunk_chars: int = 240,
+    chunk_chars: int = 120,
 ) -> list[str]:
     """Return PW1 multipart lines for the gzip+CBOR ``xpub_export`` envelope.
 
@@ -25,15 +25,24 @@ def pairing_pw1_lines(
     can route the paired wallet to the correct base58check prefix and
     WhatsOnChain endpoint.
 
-    ``chunk_chars`` is deliberately small (240) so each rendered QR
-    stays at a low module count even on the bonnet's 240x240 panel:
-    at 720 chars the encoded payload pushed the QR to version ~25
-    with each module ~1.5 px wide, which sat right at the edge of
-    what a phone camera can autofocus and decode at arm's length.
-    240 chars puts each frame around version 10 (~57 modules square,
-    ~3 px per module at the 176 px QR target) and the multipart
-    animation cycles through 2-4 frames so the scanner has multiple
-    decode attempts per envelope.
+    ``chunk_chars`` is deliberately small (120) so each rendered QR
+    stays at a low module count on the bonnet's 240x240 panel. We
+    arrived at 120 empirically:
+
+    * 720 chars: a single ~version-25 QR, ~1.5 px per module — phone
+      cameras could not autofocus on it through the TFT glow.
+    * 240 chars: 2 frames around version 8 (~3 px per module at a
+      147 px QR ink area) — the autofocus could lock but module-size
+      headroom was thin and phones at typical arm's length still
+      sometimes rejected frames.
+    * **120 chars** (current): 2-4 frames around version 6 (41
+      modules square). At the new ~196 px QR target (see
+      :class:`PairingMultipartQrScreen`) each module renders at
+      ~4 px which is comfortably above phone-scanner minimums and
+      survives glare from the TFT backlight.
+
+    The multipart animation cycles through 2-4 frames so the scanner
+    has multiple decode attempts per envelope.
     """
     xpub_str = vault.get_account_xpub(pin, wallet.id)
     payload = env.XpubExport(
@@ -71,7 +80,10 @@ class OfferCompanionPairingScreen:
     def on_event(self, event: Event) -> None:
         if self.done:
             return
-        if event.button == Button.B and event.kind == EventKind.LONG:
+        # Either short tap or long hold of B treats the prompt as a
+        # decline (= "Not now"), matching the rest of the app where
+        # B is always "back".
+        if event.button == Button.B and event.kind in (EventKind.PRESS, EventKind.LONG):
             self.done = True
             self.result = False
             return

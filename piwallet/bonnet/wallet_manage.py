@@ -88,7 +88,10 @@ class WalletManageMenuScreen:
     def on_event(self, event: Event) -> None:
         if self.done:
             return
-        if event.button == Button.B and event.kind == EventKind.LONG:
+        # Either a short tap or a long hold of B drops back to the
+        # wallet list — the operator should not have to remember which
+        # press length is the "back" gesture.
+        if event.button == Button.B and event.kind in (EventKind.PRESS, EventKind.LONG):
             self.done = True
             self.result = WalletManageAction.BACK
             return

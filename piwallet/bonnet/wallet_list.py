@@ -2,17 +2,20 @@
 
 Renders a :class:`piwallet.ui.widgets.ListView` of :class:`WalletRecord`
 entries from an unlocked vault, plus two CTA rows ("+ New wallet" and
-"+ Restore wallet"). ``A`` confirms the highlighted row; long-press B
-exits the bonnet app; long-press SELECT (joystick centre) opens the
-global Settings screen so it doesn't take up a list row alongside the
-operator's actual wallets.
+"+ Restore wallet"). ``A`` confirms the highlighted row; long-press
+B (the only otherwise-unused gesture at this top level) opens the
+global Settings screen, keeping it out of the row list so it doesn't
+masquerade as a wallet.
+
+There is intentionally no "quit the app" gesture here — the bonnet is
+a service the operator just powers down; an in-UI exit was a usability
+trap (it competed with the long-press SELECT we used for Settings, and
+operators kept hitting it by accident).
 
 ``result`` semantics:
 
 * ``str``                    — a wallet id (operator drilled into a wallet).
-* :class:`WalletListAction`  — operator picked New, Restore, or Settings
-                               (the latter via SELECT long-press).
-* ``None``                   — long-press B exit.
+* :class:`WalletListAction`  — operator picked New, Restore, or Settings.
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ class WalletListAction(Enum):
 
     NEW = "new"
     RESTORE = "restore"
-    #: Reached via long-press SELECT, *not* a list row. The enum stays
+    #: Reached via long-press B, *not* a list row. The enum stays
     #: in case future UX surfaces it as an item again, and to keep the
     #: bonnet boot loop's dispatch type stable.
     SETTINGS = "settings"
@@ -43,16 +46,22 @@ class WalletListScreen:
     """Bonnet ``Screen`` that picks a wallet (or an action) from the vault.
 
     Settings is *not* a list row — it would visually masquerade as a
-    wallet next to real wallet labels. Instead, long-pressing the
-    joystick centre (SELECT) jumps to the Settings screen. This keeps
-    the wallet list unambiguous and uses an otherwise-idle gesture
-    (regular SELECT already confirms the highlighted row).
+    wallet next to real wallet labels. Instead, **long-press B** jumps
+    to the Settings screen. We picked B-long because:
+
+    * Short-press SELECT must keep its existing semantics ("confirm the
+      highlighted row → open this wallet"). On an STK1 joystick the
+      input layer fires PRESS first and LONG only on hold; if SELECT
+      were the settings gesture the screen would commit to opening the
+      highlighted wallet before LONG ever fired.
+    * B has nowhere to "go back" to from the top level, so a long-press
+      B is otherwise idle here.
     """
 
     wallets: Sequence[WalletRecord]
     title: str = "Wallets"
     done: bool = False
-    # Wallet id (str), WalletListAction, or None on long-B exit.
+    # Wallet id (str) or :class:`WalletListAction`.
     result: object | None = None
     _list: ListView = field(init=False)
 
@@ -81,10 +90,6 @@ class WalletListScreen:
             return
         if event.button == Button.B and event.kind == EventKind.LONG:
             self.done = True
-            self.result = None
-            return
-        if event.button == Button.SELECT and event.kind == EventKind.LONG:
-            self.done = True
             self.result = WalletListAction.SETTINGS
             return
         self._list.on_event(event)
@@ -94,14 +99,12 @@ class WalletListScreen:
 
     def draw(self, fb: FrameBuffer) -> None:
         self._list.draw(fb)
-        # Two muted footer hints: top one is the ambient gestures
-        # (settings + quit) so they're discoverable without crowding
-        # the row labels; bottom one keeps the existing fp legend.
+        # Two muted footer hints: settings gesture + fingerprint legend.
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 22,
-            "hold SEL settings   hold B quit",
+            "hold B  settings",
             size=9,
             color=COLOR_DIM,
             anchor="mm",

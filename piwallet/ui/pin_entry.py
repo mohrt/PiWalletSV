@@ -30,6 +30,17 @@ Empty slots render as ``_``. Filled slots render their digit while
 the screen is live; if ``masked=True`` is set, non-active filled
 slots render as ``*`` so a shoulder-surfer only sees the cell the
 user is currently editing.
+
+Repeat throttling
+-----------------
+The default :class:`InputManager` repeat cadence (120 ms) cycles
+digits at ~8/sec when UP/DOWN is held — fast enough that operators
+overshoot the digit they wanted. Digit cycling on this screen
+throttles ``REPEAT`` events to :data:`_DIGIT_REPEAT_THROTTLE_MS`
+(~3 cycles/sec), giving each digit step a deliberate visual beat.
+``PRESS`` always cycles immediately so single taps stay snappy. Cell
+movement (LEFT/RIGHT) is not throttled — it's clamped at ``length``
+slots and benefits from quick scrolling.
 """
 
 from __future__ import annotations
@@ -54,6 +65,14 @@ _CELL_WIDTH = 30
 _CELL_HEIGHT = 44
 _CELL_GAP = 6
 
+#: Minimum interval between digit cycles when UP/DOWN is held. The
+#: input layer fires REPEAT events at ~120 ms cadence (8/sec); at that
+#: rate a 0..9 digit reel blurs past faster than operators can react.
+#: 320 ms (~3/sec) gives each digit a clearly-readable beat without
+#: making intentional cycling tedious. PRESS bypasses this throttle so
+#: single taps still feel instantaneous.
+_DIGIT_REPEAT_THROTTLE_MS: int = 320
+
 
 @dataclass
 class PinEntryScreen:
@@ -69,6 +88,12 @@ class PinEntryScreen:
     done: bool = False
     result: object | None = None  # str pin on confirm; None while editing
     digits: list[int | None] = field(default_factory=list)
+    # Wall time of the last accepted UP/DOWN cycle. Used to throttle
+    # REPEAT events so held-joystick scrolling lands on the right digit
+    # (see :data:`_DIGIT_REPEAT_THROTTLE_MS`). The very-negative default
+    # makes the first PRESS / first REPEAT after construction always
+    # accept regardless of clock skew.
+    _last_cycle_at_ms: int = field(default=-(10**9), repr=False)
 
     def __post_init__(self) -> None:
         if self.length < 4 or self.length > 12:
@@ -90,10 +115,12 @@ class PinEntryScreen:
         b = event.button
         k = event.kind
 
-        if b == Button.UP and k in (EventKind.PRESS, EventKind.REPEAT):
+        if b == Button.UP and self._should_cycle(k, event.at_ms):
             self._cycle(+1)
-        elif b == Button.DOWN and k in (EventKind.PRESS, EventKind.REPEAT):
+            self._last_cycle_at_ms = event.at_ms
+        elif b == Button.DOWN and self._should_cycle(k, event.at_ms):
             self._cycle(-1)
+            self._last_cycle_at_ms = event.at_ms
         elif b == Button.LEFT and k in (EventKind.PRESS, EventKind.REPEAT):
             self._move_cursor(-1)
         elif b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
@@ -102,6 +129,18 @@ class PinEntryScreen:
             self._confirm_or_advance()
         elif b == Button.B and k == EventKind.PRESS:
             self._backspace()
+
+    def _should_cycle(self, kind: EventKind, at_ms: int) -> bool:
+        """Decide whether an UP/DOWN event should advance the current digit.
+
+        Always honours ``PRESS``; throttles ``REPEAT`` to the configured
+        digit cadence so held-joystick scrolling is controllable.
+        """
+        if kind == EventKind.PRESS:
+            return True
+        if kind != EventKind.REPEAT:
+            return False
+        return at_ms - self._last_cycle_at_ms >= _DIGIT_REPEAT_THROTTLE_MS
 
     def _cycle(self, delta: int) -> None:
         cur = self.digits[self.cursor]
@@ -144,6 +183,9 @@ class PinEntryScreen:
             self.cursor = 0
         self.done = False
         self.result = None
+        # Treat the next UP/DOWN as the first one again so the throttle
+        # doesn't reject an immediate re-entry attempt after a reset.
+        self._last_cycle_at_ms = -(10**9)
 
     # -- rendering ----------------------------------------------------
 

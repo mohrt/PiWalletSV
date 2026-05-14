@@ -43,20 +43,25 @@ def test_pairing_pw1_lines_default_chunk_keeps_qr_low_density(
 ) -> None:
     """Default chunk size produces multiple low-density frames.
 
-    A regression toward a single >700-char frame would push each QR
-    to ~120 modules square at 176 px (1.5 px/module), which sits at
-    the edge of phone-camera autofocus on a glowing TFT — the
-    hardware checkpoint #3 round-trip on 2026-05-13 found that this
-    failed to scan reliably. Keep each frame at 240 chars so the QR
-    rendered on the panel stays comfortably scannable.
+    Regression history:
+
+    * 720 chars/frame produced a single ~v25 QR at ~1.5 px/module —
+      phones could not autofocus through the TFT glow.
+    * 240 chars/frame produced 2 frames at v8 / 3 px/module — still
+      sat at the edge of arm's-length scanning during the
+      hardware checkpoint #3 round-trip on 2026-05-13.
+    * **120 chars/frame** (current) produces 2-4 frames at v6 /
+      ~4 px/module on the new ~196 px QR area, comfortably above
+      phone-scanner minimums.
+
+    Keep each frame under ~140 chars (120 fragment + ~10-char PW1
+    header) so the default doesn't silently drift back into the
+    too-dense regime.
     """
     vault, pin, rec = vault_pin_wallet
     lines = pairing_pw1_lines(vault, pin, rec)
-    # 240-char base64 fragment + the PW1|N|i| header (<=10 chars). Cap
-    # at 256 to leave a small margin for the header without letting the
-    # default drift back into single-frame "version-25" territory.
-    assert all(len(line) <= 256 for line in lines), (
-        f"PW1 frame exceeded 256-char ceiling: {[len(line) for line in lines]}"
+    assert all(len(line) <= 140 for line in lines), (
+        f"PW1 frame exceeded 140-char ceiling: {[len(line) for line in lines]}"
     )
     blob = join_multipart_lines(lines)
     assert isinstance(env.decode(blob), env.XpubExport)
@@ -73,4 +78,11 @@ def test_offer_companion_pairing_screen_confirms_true() -> None:
 def test_offer_companion_pairing_long_b_skips() -> None:
     s = OfferCompanionPairingScreen("x")
     s.on_event(Event(button=Button.B, kind=EventKind.LONG, at_ms=0))
+    assert s.done and s.result is False
+
+
+def test_offer_companion_pairing_short_b_press_also_skips() -> None:
+    """Short tap of B is treated as decline so B is universally 'back'."""
+    s = OfferCompanionPairingScreen("x")
+    s.on_event(Event(button=Button.B, kind=EventKind.PRESS, at_ms=0))
     assert s.done and s.result is False

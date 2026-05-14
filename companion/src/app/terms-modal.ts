@@ -65,6 +65,10 @@ export async function ensureTermsAccepted(): Promise<void> {
             wallet for material amounts.
           </li>
         </ul>
+        <p class="terms-version" style="margin-top: 0.25rem;">
+          Want the plain-English trust model first? See the
+          <a href="#/security">Security briefing</a>.
+        </p>
         <label class="terms-accept">
           <input type="checkbox" id="termsAccept" />
           <span>

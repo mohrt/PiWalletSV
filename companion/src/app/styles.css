@@ -543,6 +543,41 @@ button:hover:not(:disabled) {
   color: var(--text);
 }
 
+.balance-sats-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.balance-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Amber pending pill — distinct from the blue accent so it reads as
+ * informational ("this includes in-flight value") without looking
+ * alarming. Soft fill + crisper border keeps it legible on the dark
+ * surface.
+ */
+.balance-badge.pending {
+  background: rgba(212, 158, 63, 0.15);
+  border: 1px solid rgba(212, 158, 63, 0.5);
+  color: #e3b86c;
+}
+
+.balance-split {
+  font-size: 0.85rem;
+  margin: 0.1rem 0 0;
+}
+
 .balance-bsv {
   font-size: 0.95rem;
   color: var(--accent);
@@ -577,6 +612,18 @@ button:hover:not(:disabled) {
   padding: 0.5rem 0.65rem;
   font-size: 0.8rem;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Amber accent on the left edge for mempool UTXOs — picks up the same
+ * hue as the pending pill so the "this row contributes to the pending
+ * total" link is visually obvious when the UTXO list is expanded. */
+.utxo-row.pending {
+  border-left: 3px solid rgba(212, 158, 63, 0.7);
+}
+
+.utxo-pending-tag {
+  color: #e3b86c;
+  font-weight: 600;
 }
 
 .utxo-top {
@@ -636,6 +683,44 @@ button:hover:not(:disabled) {
   font-size: 0.85rem;
   padding: 0.25rem 0;
   user-select: none;
+}
+
+/* SSH-paste bridge: hex blob textarea on the Send card and the
+ * matching paste-target on the Scan page. Monospace so wrapped
+ * lines align cleanly; word-break: break-all so the textarea
+ * width drives the wrap instead of the hex string overflowing. */
+.hex-blob {
+  width: 100%;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  word-break: break-all;
+  resize: vertical;
+  margin: 0.4rem 0 0.3rem;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--fg);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 0.5rem;
+}
+
+.proposal-hex-details {
+  margin-top: 0.6rem;
+}
+
+/* SSH command snippet under the SSH-paste bridge — distinct from the
+ * hex-blob textarea so the operator's eye separates "the command to
+ * run" from "the payload to paste". Same monospace family for visual
+ * consistency. */
+.ssh-snippet {
+  background: rgba(0, 0, 0, 0.35);
+  border-left: 2px solid var(--accent);
+  padding: 0.4rem 0.6rem;
+  margin: 0.3rem 0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 #proposalQr {
@@ -718,6 +803,33 @@ body.terms-locked {
 .terms-accept input[type="checkbox"] {
   margin-top: 0.2rem;
   flex: 0 0 auto;
+}
+
+/* Security briefing page (#/security). Each section is a card with a
+   plain-language heading and a short bullet list. Visually a touch
+   denser than the rest of the app so all three sections fit together
+   without endless scrolling on phones. */
+.security-section h2 {
+  margin: 0 0 0.6rem 0;
+  font-size: 1rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.security-bullets {
+  list-style: disc;
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.security-bullets li {
+  margin-bottom: 0.55rem;
+}
+
+.security-bullets li:last-child {
+  margin-bottom: 0;
 }
 
 @media (max-width: 600px) {

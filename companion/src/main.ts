@@ -2,6 +2,7 @@ import "./app/styles.css";
 import { mountEncoderPage } from "./app/encoder.js";
 import { mountLoopPage } from "./app/loop.js";
 import { mountScannerPage } from "./app/scanner.js";
+import { mountSecurityPage } from "./app/security-page.js";
 import { ensureTermsAccepted } from "./app/terms-modal.js";
 import { mountWalletDetailPage } from "./app/wallet-detail.js";
 import { mountWalletsPage } from "./app/wallets-page.js";
@@ -42,6 +43,8 @@ function render(): void {
   } else if (route.startsWith("#/wallets/")) {
     const id = route.slice("#/wallets/".length);
     mounted = mountWalletDetailPage(app, id);
+  } else if (route === "#/security") {
+    mounted = mountSecurityPage(app);
   } else {
     app.innerHTML = `
       <main class="page">

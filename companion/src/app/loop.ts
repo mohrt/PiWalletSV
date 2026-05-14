@@ -171,6 +171,7 @@ export function mountLoopPage(root: HTMLElement): () => void {
           <a href="#/scan">Scan</a>
           <a href="#/loop" class="active">Loop</a>
           <a href="#/wallets">Wallets</a>
+          <a href="#/security">Security</a>
         </nav>
       </header>
 

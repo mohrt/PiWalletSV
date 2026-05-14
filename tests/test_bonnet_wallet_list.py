@@ -34,12 +34,53 @@ def test_list_navigates_and_confirms() -> None:
     assert s.result == "wallet-1"
 
 
-def test_list_long_b_exits_with_none() -> None:
+def test_list_long_b_opens_settings() -> None:
+    """Long-press B is the gesture for the global Settings screen.
+
+    There is intentionally no "quit the bonnet app" gesture from the
+    wallet list — the device is a service, not an interactive app the
+    operator launches and quits. Repurposing long-B for Settings frees
+    up SELECT-PRESS for its natural "open the highlighted wallet" use
+    (the previous SELECT-LONG=Settings was unreachable in practice
+    because PRESS fires first and commits the row).
+    """
     wallets = [_wallet("daily")]
     s = WalletListScreen(wallets=wallets)
     s.on_event(_evt(Button.B, EventKind.LONG))
     assert s.done is True
+    assert s.result is WalletListAction.SETTINGS
+
+
+def test_list_short_b_press_is_inert() -> None:
+    """A brief tap of B at the top level does nothing.
+
+    There's nowhere to go "back" to from the wallet list, so B-press
+    must not accidentally exit or commit anything.
+    """
+    wallets = [_wallet("daily")]
+    s = WalletListScreen(wallets=wallets)
+    s.on_event(_evt(Button.B, EventKind.PRESS))
+    assert s.done is False
     assert s.result is None
+
+
+def test_list_long_select_no_longer_opens_settings() -> None:
+    """The old SELECT-long gesture is removed.
+
+    SELECT-PRESS commits the highlighted row; the input layer fires
+    PRESS *before* LONG, so the screen had already finished by the
+    time SELECT-LONG used to fire. Confirming the row is the correct
+    short-SELECT behaviour; long-SELECT is now intentionally inert.
+    """
+    wallets = [_wallet("daily")]
+    s = WalletListScreen(wallets=wallets)
+    # Simulate the natural ordering: PRESS commits, LONG arrives later.
+    s.on_event(_evt(Button.SELECT, EventKind.PRESS))
+    assert s.done is True
+    assert s.result == "wallet-0"
+    s.on_event(_evt(Button.SELECT, EventKind.LONG))
+    # Ignored once done; result must not flip to SETTINGS.
+    assert s.result == "wallet-0"
 
 
 def test_list_empty_still_offers_actions() -> None:
@@ -83,17 +124,8 @@ def test_list_no_settings_row_among_items() -> None:
     assert "Settings" not in labels
 
 
-def test_list_long_select_opens_settings() -> None:
-    """Long-press SELECT (joystick centre) confirms to SETTINGS without a row."""
-    wallets = [_wallet("daily")]
-    s = WalletListScreen(wallets=wallets)
-    s.on_event(_evt(Button.SELECT, EventKind.LONG))
-    assert s.done is True
-    assert s.result is WalletListAction.SETTINGS
-
-
-def test_list_short_select_still_confirms_highlighted_row() -> None:
-    """Quick SELECT press must keep its existing "confirm" semantics."""
+def test_list_short_select_confirms_highlighted_row() -> None:
+    """Quick SELECT press confirms the highlighted row (open wallet)."""
     wallets = [_wallet("daily")]
     s = WalletListScreen(wallets=wallets)
     # Highlight the first wallet by default; SELECT confirms it.
@@ -102,10 +134,10 @@ def test_list_short_select_still_confirms_highlighted_row() -> None:
     assert s.result == "wallet-0"
 
 
-def test_list_long_select_works_on_empty_vault() -> None:
+def test_list_long_b_works_on_empty_vault() -> None:
     """Settings must be reachable even when there are no wallets yet."""
     s = WalletListScreen(wallets=[])
-    s.on_event(_evt(Button.SELECT, EventKind.LONG))
+    s.on_event(_evt(Button.B, EventKind.LONG))
     assert s.done is True
     assert s.result is WalletListAction.SETTINGS
 

@@ -56,6 +56,14 @@ def test_preset_chooser_long_b_returns_back() -> None:
     assert s.result == "back"
 
 
+def test_preset_chooser_short_b_press_also_returns_back() -> None:
+    """Short tap of B is also a back gesture, matching the rest of the app."""
+    s = HdPathPresetChooser()
+    s.on_event(_evt(Button.B, EventKind.PRESS))
+    assert s.done
+    assert s.result == "back"
+
+
 def test_preset_chooser_draw_smoke() -> None:
     fb = FrameBuffer()
     HdPathPresetChooser().draw(fb)

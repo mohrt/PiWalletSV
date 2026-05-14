@@ -39,6 +39,23 @@ from PIL import Image
 #: peak memory at roughly ``64 * 240 * 240 * 3 ≈ 11 MB`` worst case.
 _QR_CACHE_MAX: int = 64
 
+#: "Light" pixel value used for the QR background and the on-modules'
+#: complement. Deliberately *not* pure ``(255, 255, 255)``.
+#:
+#: Rationale: the bonnet's 240x240 ST7789 LCD at full backlight emits
+#: enough light through pure-white pixels that a phone camera's auto
+#: exposure clips them and can't lock a clean binarisation threshold —
+#: especially for the dense multipart xpub frames (v6, ~4 px/module).
+#: Symptoms reported on hardware: "brightness all the way up, won't
+#: scan; turn brightness down, scans fine."
+#:
+#: Dropping the light channel to ~80% luminance keeps the contrast
+#: ratio against pure black overwhelmingly high (the QR spec only
+#: needs 3:1) but eliminates the bloom that wipes out edge sharpness.
+#: Tune downward if a particular panel still blooms; tune *up* and
+#: things get worse, never better.
+QR_LIGHT_BG: tuple[int, int, int] = (208, 208, 208)
+
 #: Module-private LRU cache keyed on ``(data, target_px, border, fg, bg, error)``.
 #: ``OrderedDict`` gives O(1) insertion + ``move_to_end`` for cache hits.
 _qr_cache: OrderedDict[tuple, Image.Image] = OrderedDict()
@@ -50,7 +67,7 @@ def render_qr(
     target_px: int,
     border: int = 2,
     fg: tuple[int, int, int] = (0, 0, 0),
-    bg: tuple[int, int, int] = (255, 255, 255),
+    bg: tuple[int, int, int] = QR_LIGHT_BG,
     error: str = "L",
 ) -> Image.Image:
     """Encode ``data`` as a QR code and scale it to ``target_px`` pixels.
@@ -61,7 +78,14 @@ def render_qr(
 
     ``border`` is the QR quiet-zone width in modules (the QR spec
     recommends 4 but 2 is fine on a small panel where every pixel
-    counts).
+    counts). Do *not* drop below 2 — phone scanners need the quiet
+    zone to find the finder patterns.
+
+    ``bg`` defaults to :data:`QR_LIGHT_BG` rather than pure white to
+    avoid camera-sensor saturation on the bright ST7789 panel; pass
+    ``(255, 255, 255)`` explicitly only when you really want pure
+    white (e.g. to render to a host-side PNG that will be printed
+    rather than displayed).
 
     ``error`` is the QR error-correction level: ``"L"``, ``"M"``,
     ``"Q"``, or ``"H"``.

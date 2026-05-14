@@ -48,6 +48,25 @@ def test_menu_long_b_is_back() -> None:
     assert m.done and m.result is WalletManageAction.BACK
 
 
+def test_menu_short_b_is_also_back() -> None:
+    """Short tap of B from the manage menu drops back to the wallet list.
+
+    Operators should not have to hold B; the menu has an explicit ``< Back``
+    row, so a brief press of B is the natural shortcut.
+    """
+    w = WalletRecord(
+        id="id1",
+        label="w",
+        fingerprint=b"\x01\x02\x03\x04",
+        derivation_path="m/44'/236'/0'",
+        word_count=12,
+        created_at="2026-01-01T00:00:00+00:00",
+    )
+    m = WalletManageMenuScreen(wallet=w)
+    m.on_event(Event(button=Button.B, kind=EventKind.PRESS, at_ms=0))
+    assert m.done and m.result is WalletManageAction.BACK
+
+
 def test_menu_draw_smoke() -> None:
     w = WalletRecord(
         id="id1",

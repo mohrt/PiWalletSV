@@ -455,9 +455,29 @@ def qr_scan_camera(
 
 @main.command(
     "sign",
-    help="Verify and sign an unsigned_proposal blob, emitting a SignedTx blob.",
+    help=(
+        "Verify and sign an unsigned_proposal blob, emitting a signed_tx blob. "
+        "Input may be a file (positional) or hex via --hex (or --hex - to read "
+        "hex from stdin). Output defaults to hex on stdout for safe copy-paste; "
+        "use -o to write the raw envelope bytes to a file instead."
+    ),
 )
-@click.argument("proposal_path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument(
+    "proposal_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=False,
+)
+@click.option(
+    "--hex",
+    "hex_input",
+    type=str,
+    default=None,
+    help=(
+        "Read the unsigned_proposal as hex instead of from a file. "
+        "Use --hex - to read hex from stdin. Mutually exclusive with the "
+        "positional proposal_path argument."
+    ),
+)
 @click.option(
     "--vault-path",
     type=click.Path(dir_okay=False, path_type=Path),
@@ -469,7 +489,12 @@ def qr_scan_camera(
     "-o",
     "--output",
     type=click.Path(dir_okay=False, path_type=Path),
-    help="Where to write the signed_tx envelope (default: stdout, hex-encoded).",
+    help=(
+        "Write the raw signed_tx envelope bytes to this file. "
+        "When omitted, the envelope is printed as hex on stdout (the safe "
+        "default for SSH paste-bridges; binary-on-stdout would garble the "
+        "terminal)."
+    ),
 )
 @click.option(
     "--max-fee-rate-satskb",
@@ -479,13 +504,32 @@ def qr_scan_camera(
     help="Reject proposals whose feeRate exceeds this cap.",
 )
 def sign_cmd(
-    proposal_path: Path,
+    proposal_path: Path | None,
+    hex_input: str | None,
     vault_path: Path,
     wallet_id: str,
     output: Path | None,
     max_fee_rate_satskb: int,
 ) -> None:
-    blob = proposal_path.read_bytes()
+    if (proposal_path is None) == (hex_input is None):
+        # Either both were provided (ambiguous) or neither was (nothing to
+        # sign). Emit a help-shaped error so the SSH-paste workflow has
+        # an obvious error path when the user forgets either form.
+        click.echo(
+            "must provide exactly one of: a positional proposal_path file "
+            "OR --hex <HEX> (or --hex - to read hex from stdin)",
+            err=True,
+        )
+        sys.exit(1)
+
+    if hex_input is not None:
+        blob = _read_hex_blob(hex_input)
+    else:
+        # ``proposal_path is None`` is impossible here (validated above);
+        # the explicit check is for the type-checker / future readers.
+        assert proposal_path is not None
+        blob = proposal_path.read_bytes()
+
     try:
         proposal = env.decode(blob)
     except env.EnvelopeError as exc:
@@ -552,10 +596,68 @@ def sign_cmd(
     signed_envelope = sgn.to_signed_envelope(result, wallet_fp=fp)
     signed_blob = env.encode(signed_envelope)
     if output is None:
-        sys.stdout.buffer.write(signed_blob)
+        # Hex on stdout (terminal-safe, copy-paste friendly).
+        # Stderr already carries the human-readable summary (`verified:`
+        # / `txid:`); when stdout is a TTY we prefix the hex with
+        # `signed_tx: ` so all three lines visually parallel each other
+        # in an SSH terminal, removing the ambiguity that operators hit
+        # when copy-pasting (the txid line and the bare hex used to
+        # look like a single blob). Pipelines (`... | xclip`,
+        # `... > tx.hex`) get bare hex so machine-readable consumers
+        # don't need to strip a label.
+        hex_line = signed_blob.hex()
+        if _stdout_is_tty():
+            click.echo(f"signed_tx: {hex_line}")
+        else:
+            click.echo(hex_line)
     else:
         output.write_bytes(signed_blob)
         click.echo(f"wrote signed envelope to {output}", err=True)
+
+
+def _stdout_is_tty() -> bool:
+    """Return whether stdout is connected to an interactive terminal.
+
+    Pulled out as a helper so tests can monkeypatch it: ``io.StringIO``
+    is a C-implemented immutable type and its ``isatty`` cannot be
+    replaced via ``monkeypatch.setattr``, but a module-level wrapper
+    can be swapped in a one-liner. The production behaviour is a thin
+    wrapper around ``sys.stdout.isatty()``.
+    """
+    return sys.stdout.isatty()
+
+
+def _read_hex_blob(hex_input: str) -> bytes:
+    """Decode a hex string from a CLI flag value.
+
+    Accepts the literal ``"-"`` to mean "read hex from stdin" — the
+    intended SSH-paste workflow is::
+
+        cat <<EOF | piwallet sign --hex - --wallet-id ...
+        <paste hex from companion here>
+        EOF
+
+    Whitespace inside the hex string (newlines from a wrapped paste,
+    spaces from the operator's terminal) is stripped before decoding so
+    a multi-line copy-paste from the companion textarea works as-is.
+    Errors are surfaced as ``ClickException`` so the user sees a clean
+    one-line error rather than a stack trace.
+    """
+    raw = sys.stdin.read() if hex_input == "-" else hex_input
+    cleaned = "".join(raw.split())  # drops any whitespace, including newlines
+    if not cleaned:
+        raise click.ClickException(
+            "no hex data on stdin / in --hex (read 0 chars after stripping whitespace)"
+        )
+    if len(cleaned) % 2 != 0:
+        raise click.ClickException(
+            f"hex input has odd length {len(cleaned)}; refusing to decode "
+            "(check the paste was complete)"
+        )
+    try:
+        return bytes.fromhex(cleaned)
+    except ValueError as exc:
+        raise click.ClickException(f"invalid hex: {exc}") from exc
 
 
 # ---- summary helpers ---------------------------------------------------

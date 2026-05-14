@@ -6,6 +6,7 @@ from piwallet.bonnet.wallet_detail import WalletDetailScreen
 from piwallet.core.vault import WalletRecord
 from piwallet.ui.display import FrameBuffer
 from piwallet.ui.input import Button, Event, EventKind
+from piwallet.ui.qr_render import QR_LIGHT_BG
 
 
 def _evt(b: Button, k: EventKind = EventKind.PRESS, at_ms: int = 0) -> Event:
@@ -103,10 +104,17 @@ def test_draw_renders_qr_without_exception() -> None:
     fb = FrameBuffer()
     s = WalletDetailScreen(wallet=_wallet(), derive_address=_derive_stub)
     s.draw(fb)
-    # The drawing should have produced *some* white pixels (QR background).
-    saw_white = any(
-        fb.image.getpixel((x, y)) == (255, 255, 255)
+    # The QR background is `QR_LIGHT_BG` rather than pure white so the
+    # ST7789's full-bright backlight doesn't saturate phone cameras
+    # (see the constant's docstring). The test pins that contract:
+    # if someone "fixes" the QR background back to pure white the
+    # bloom regression returns silently, so we assert against the
+    # named constant.
+    saw_light_bg = any(
+        fb.image.getpixel((x, y)) == QR_LIGHT_BG
         for x in range(40, 200, 8)
         for y in range(60, 200, 8)
     )
-    assert saw_white, "expected white pixels somewhere from the QR background"
+    assert saw_light_bg, (
+        f"expected QR_LIGHT_BG={QR_LIGHT_BG} pixels from the QR background"
+    )

@@ -83,12 +83,54 @@ def test_down_starts_from_none_at_zero_then_wraps() -> None:
 
 
 def test_up_repeat_advances_digit_in_repeat_mode() -> None:
-    """Holding UP should also cycle the digit via REPEAT events."""
+    """Holding UP cycles the digit via REPEAT events (when paced)."""
     s = PinEntryScreen()
-    s.on_event(_evt(Button.UP, EventKind.PRESS))
-    s.on_event(_evt(Button.UP, EventKind.REPEAT))
-    s.on_event(_evt(Button.UP, EventKind.REPEAT))
+    # PRESS always cycles. Subsequent REPEATs cycle once the digit-
+    # repeat throttle has elapsed (320 ms by default).
+    s.on_event(_evt(Button.UP, EventKind.PRESS, at_ms=0))
+    s.on_event(_evt(Button.UP, EventKind.REPEAT, at_ms=400))
+    s.on_event(_evt(Button.UP, EventKind.REPEAT, at_ms=800))
     assert s.digits[0] == 2
+
+
+def test_up_repeat_below_throttle_is_ignored() -> None:
+    """Fast-cadence REPEATs (every 120 ms) must NOT all advance the digit.
+
+    The InputManager fires REPEAT at ~120 ms cadence under hold; a 1:1
+    mapping would scroll digits at ~8/sec, which is too fast to land
+    on a target. The screen throttles cycling to ~3/sec.
+    """
+    s = PinEntryScreen()
+    s.on_event(_evt(Button.UP, EventKind.PRESS, at_ms=0))
+    assert s.digits[0] == 0
+    # Three successive REPEATs at the input layer's natural 120 ms
+    # cadence — none of them are old enough to bypass the digit
+    # throttle, so the digit should NOT advance further.
+    for at in (120, 240, 360):
+        s.on_event(_evt(Button.UP, EventKind.REPEAT, at_ms=at))
+    # 360 - 0 = 360 >= 320 throttle, so the third REPEAT *does* fire.
+    assert s.digits[0] == 1
+
+
+def test_press_always_cycles_regardless_of_throttle() -> None:
+    """Distinct PRESS events must never be throttled — single-tap cycling."""
+    s = PinEntryScreen()
+    # Three taps in quick succession (e.g. operator pressing UP three
+    # times in 100 ms each) should land on digit 3.
+    s.on_event(_evt(Button.UP, EventKind.PRESS, at_ms=0))
+    s.on_event(_evt(Button.UP, EventKind.PRESS, at_ms=100))
+    s.on_event(_evt(Button.UP, EventKind.PRESS, at_ms=200))
+    assert s.digits[0] == 2
+
+
+def test_left_right_repeat_not_throttled() -> None:
+    """Cell movement uses the input layer's natural cadence, no throttle."""
+    s = PinEntryScreen(length=6)
+    s.on_event(_evt(Button.RIGHT, EventKind.PRESS, at_ms=0))
+    s.on_event(_evt(Button.RIGHT, EventKind.REPEAT, at_ms=120))
+    s.on_event(_evt(Button.RIGHT, EventKind.REPEAT, at_ms=240))
+    # Three motions at 120 ms cadence should advance three cells.
+    assert s.cursor == 3
 
 
 # ---------------------------------------------------------------------------

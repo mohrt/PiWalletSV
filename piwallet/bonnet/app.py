@@ -8,7 +8,11 @@ startup. It performs, in order:
    :class:`piwallet.firstboot.DisclaimerScreen`. Persist acceptance
    on success; exit on cancel.
 
-2. **Unlock.** If a vault exists, present the
+2. **Vault setup or unlock.** If no vault exists on disk, run
+   :func:`piwallet.bonnet.vault_setup.run_vault_setup` to walk the
+   operator through picking a PIN twice and create the empty vault
+   on the spot — first-boot devices never see the legacy "use the
+   CLI" dead-end. If a vault already exists, present the
    :class:`piwallet.bonnet.UnlockScreen` and let the user type their
    PIN. The screen verifies against ``Vault.derive_signing_key``
    via a dummy derivation (or, if there are no wallets yet, a
@@ -34,6 +38,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from piwallet.bonnet.change_pin import run_change_pin
 from piwallet.bonnet.companion_pairing import (
     OfferCompanionPairingScreen,
     pairing_pw1_lines,
@@ -41,6 +46,7 @@ from piwallet.bonnet.companion_pairing import (
 from piwallet.bonnet.create_wallet import CreateWalletOutcome, run_create_wallet
 from piwallet.bonnet.restore_wallet import RestoreWalletOutcome, run_restore_wallet
 from piwallet.bonnet.unlock import UnlockOutcome, UnlockScreen, VerifyFn
+from piwallet.bonnet.vault_setup import run_vault_setup
 from piwallet.bonnet.wallet_list import WalletListAction, WalletListScreen
 from piwallet.bonnet.wallet_manage import run_wallet_manage
 from piwallet.core import derivation as deriv
@@ -243,21 +249,35 @@ def _run_settings_loop(
     input_mgr: InputManager,
     settings: BonnetSettings,
     *,
+    vault: Vault,
+    pin: str,
     settings_path: Path | None,
     target_fps: int,
     idle_wake: IdleWakeTracker,
-) -> tuple[BonnetSettings, bool]:
-    """Open the Settings screen, persist on save, return ``(settings, exit_requested)``.
+) -> tuple[BonnetSettings, str, bool, str]:
+    """Open the Settings screen and dispatch on its result.
 
-    Live brightness preview is wired to ``display.set_brightness`` so the
-    panel reflects the in-progress draft. The screen itself restores the
-    preview on cancel; we re-apply the persisted brightness on save so
-    the active panel state matches what we just wrote to disk.
+    Returns ``(settings, status, exit_requested, pin)`` where:
 
-    The ``exit_requested`` flag mirrors long-B semantics from the rest
-    of the bonnet UI: long-pressing B inside Settings should quit the
-    whole app (consistent with the wallet list / manage menu behaviour),
-    so the caller checks the flag and returns from ``run_bonnet``.
+    * ``settings`` is the (possibly edited) settings record. Value-row
+      drafts are persisted to disk on save; on cancel the disk file
+      is left untouched and the live brightness preview is reverted.
+    * ``status`` is one of:
+
+        - ``"saved"``     value-row edits were saved.
+        - ``"back"``      operator cancelled.
+        - ``"exit"``      operator long-pressed B (caller must quit).
+        - ``"changed_pin"`` PIN was rotated; ``pin`` reflects the new
+          value and the caller must reuse it for subsequent
+          vault-gated operations.
+        - ``"wiped"``     vault was wiped while verifying the current
+          PIN; caller must propagate as exit code 3.
+    * ``exit_requested`` is the legacy long-B flag, retained for
+      callers that still treat it specially.
+    * ``pin`` is the active PIN to use after this call returns.
+
+    Live brightness preview is wired to ``display.set_brightness`` so
+    the panel reflects the in-progress draft.
     """
     screen = SettingsScreen(
         settings=settings,
@@ -273,11 +293,32 @@ def _run_settings_loop(
     if screen.result == "saved":
         save_settings(screen.settings, settings_path)
         display.set_brightness(screen.settings.brightness)
-        return screen.settings, False
-    # "back": SettingsScreen has already reverted the live preview.
+        return screen.settings, "saved", False, pin
     if screen.result == "exit":
-        return settings, True
-    return settings, False
+        return settings, "exit", True, pin
+    if screen.result == "change_pin":
+        # The screen saved any value-row drafts on its own (A on an
+        # action row commits the draft so a half-adjusted brightness
+        # slider isn't lost while the sub-flow runs). Persist now,
+        # then drive the change-PIN sub-flow.
+        save_settings(screen.settings, settings_path)
+        display.set_brightness(screen.settings.brightness)
+        result, new_pin = run_change_pin(
+            display,
+            input_mgr,
+            vault,
+            pin,
+            target_fps=target_fps,
+            idle_wake=idle_wake,
+        )
+        if result == "wiped":
+            return screen.settings, "wiped", False, pin
+        if result == "changed" and new_pin is not None:
+            return screen.settings, "changed_pin", False, new_pin
+        # "cancelled" - keep the saved settings, original PIN.
+        return screen.settings, "saved", False, pin
+    # "back": SettingsScreen has already reverted the live preview.
+    return settings, "back", False, pin
 
 
 def run_bonnet(
@@ -294,10 +335,14 @@ def run_bonnet(
     Returns a Unix-style exit code. Useful exits:
 
     * 0   -- normal exit (operator long-pressed B from wallet list).
-    * 1   -- vault is missing or empty *and* the operator hasn't created
-             one via the CLI yet.
+    * 1   -- in-bonnet vault setup itself failed (rare: an on-disk
+             race between ``vault.exists`` at boot and the
+             ``vault.create`` call inside the setup flow). The
+             operator is shown a "Vault setup failed" modal and
+             pointed at the CLI.
     * 2   -- the disclaimer was cancelled.
-    * 3   -- the vault wiped itself during unlock.
+    * 3   -- the vault wiped itself during unlock or during a PIN
+             change attempt.
 
     ``settings_path`` overrides the location of the persistent global
     settings JSON file (default: ``~/.piwallet-dev/settings.json``).
@@ -335,33 +380,49 @@ def run_bonnet(
                 return 2
             mark_accepted(terms_path)
 
-        # ---- 2. Unlock ------------------------------------------
+        # ---- 2. Vault setup (first boot) or Unlock --------------
         vault = Vault(vault_path)
         if not vault.exists or not vault.is_initialized:
-            _show_message(
+            # First boot on this device. Walk the operator through
+            # picking a PIN twice, then drop into the wallet-list
+            # loop without an extra unlock prompt — they just typed
+            # the PIN twice, asking again would be hostile.
+            setup_result = run_vault_setup(
                 display,
-                title="No vault",
-                body=(
-                    "No vault on this device. Initialize with: "
-                    "`piwallet vault init` from the CLI."
-                ),
+                input_mgr,
+                vault_path,
+                target_fps=target_fps,
+                idle_wake=idle_wake,
             )
-            return 1
-
-        verify = _make_verify_fn(vault)
-        unlock = UnlockScreen(
-            verify=verify,
-            attempts_remaining=vault.attempts_remaining,
-        )
-        outcome: UnlockOutcome | None = run_screen(
-            display, input_mgr, unlock, target_fps=target_fps, idle_wake=idle_wake
-        )
-        if outcome is None:
-            return 2
-        if outcome.kind == "wiped":
-            return 3
-        assert outcome.kind == "ok" and outcome.pin is not None
-        pin = outcome.pin
+            if setup_result is None:
+                # Vault.create() failed (e.g. on-disk race). Fall
+                # back to the legacy "No vault" exit so the operator
+                # can investigate via the CLI.
+                _show_message(
+                    display,
+                    title="No vault",
+                    body=(
+                        "Vault setup failed. Try `piwallet vault init` "
+                        "from the CLI."
+                    ),
+                )
+                return 1
+            vault, pin = setup_result
+        else:
+            verify = _make_verify_fn(vault)
+            unlock = UnlockScreen(
+                verify=verify,
+                attempts_remaining=vault.attempts_remaining,
+            )
+            outcome: UnlockOutcome | None = run_screen(
+                display, input_mgr, unlock, target_fps=target_fps, idle_wake=idle_wake
+            )
+            if outcome is None:
+                return 2
+            if outcome.kind == "wiped":
+                return 3
+            assert outcome.kind == "ok" and outcome.pin is not None
+            pin = outcome.pin
 
         # ---- 3. List + detail loop ------------------------------
         while True:
@@ -371,8 +432,11 @@ def run_bonnet(
                 display, input_mgr, wlist, target_fps=target_fps, idle_wake=idle_wake
             )
             if chosen is None:
-                # Long-press B exits the loop and the app.
-                return 0
+                # WalletListScreen never sets ``result=None`` in normal
+                # operation (there is no "quit the app" gesture from the
+                # top level — operators just power off). Treat it as a
+                # defensive no-op and re-show the list.
+                continue
             if chosen is WalletListAction.NEW:
                 outcome3 = run_create_wallet(
                     display,
@@ -420,10 +484,12 @@ def run_bonnet(
                         return 0
                 continue
             if chosen is WalletListAction.SETTINGS:
-                settings, exit_requested = _run_settings_loop(
+                settings, status, exit_requested, pin = _run_settings_loop(
                     display,
                     input_mgr,
                     settings,
+                    vault=vault,
+                    pin=pin,
                     settings_path=settings_path,
                     target_fps=target_fps,
                     idle_wake=idle_wake,
@@ -432,6 +498,8 @@ def run_bonnet(
                 # so the next idle window honours the operator's choice
                 # without needing a bonnet restart.
                 idle_wake.timeout_ms = settings.sleep_timeout_ms
+                if status == "wiped":
+                    return 3
                 if exit_requested:
                     return 0
                 continue

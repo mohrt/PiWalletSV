@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from piwallet.cli import main
@@ -75,6 +76,278 @@ def test_full_sign_pipeline(tmp_path: Path) -> None:
     assert isinstance(decoded, env.SignedTx)
     assert decoded.wallet_fp.hex() == "cf987d8c"
     assert decoded.txid
+
+
+def test_sign_hex_in_hex_out_round_trip(tmp_path: Path) -> None:
+    """Hex-bridge SSH workflow: --hex input + hex on stdout decode cleanly.
+
+    The wallet-detail card on the companion will surface the unsigned
+    proposal as a hex string for copy-paste over SSH, and the operator
+    will paste the resulting hex from `piwallet sign` back into the
+    companion's broadcast page. This test pins both ends of that
+    contract:
+
+    * `--hex <hex>` decodes a hex-encoded proposal correctly,
+    * stdout (no `-o`) is a single hex line that round-trips through
+      ``bytes.fromhex`` and ``env.decode`` to a valid `SignedTx`.
+
+    Whitespace tolerance (the companion textarea wraps every 64 chars)
+    is exercised with a synthetic newline mid-payload — the CLI should
+    strip it before decoding.
+    """
+    runner = CliRunner()
+    vault_path = tmp_path / "vault.bin"
+
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "init"],
+        input=f"{PIN}\n{PIN}\n",
+    )
+    assert res.exit_code == 0
+
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "add", "--label", "hex-bridge"],
+        input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
+    )
+    assert res.exit_code == 0
+
+    res = runner.invoke(main, ["vault", "--vault-path", str(vault_path), "list"])
+    wallet_id = res.output.split()[0]
+
+    proposal_hex = PROPOSAL_PATH.read_bytes().hex()
+    # Inject a newline halfway through to mimic the line-wrapped paste a
+    # 64-col copy-paste would produce; the CLI must tolerate this.
+    mid = len(proposal_hex) // 2
+    wrapped_hex = proposal_hex[:mid] + "\n" + proposal_hex[mid:]
+
+    res = runner.invoke(
+        main,
+        [
+            "sign",
+            "--vault-path",
+            str(vault_path),
+            "--wallet-id",
+            wallet_id,
+            "--hex",
+            wrapped_hex,
+        ],
+        input=f"{PIN}\n",
+    )
+    assert res.exit_code == 0, res.output
+    # stdout should now be a single hex line. The summary lines go to
+    # stderr; with CliRunner those are merged into `output`, so we look
+    # for the hex line specifically — the longest line consisting only
+    # of hex chars is the signed_tx blob.
+    candidates = [ln.strip() for ln in res.output.splitlines() if ln.strip()]
+    hex_lines = [
+        ln for ln in candidates if len(ln) >= 32 and all(c in "0123456789abcdef" for c in ln)
+    ]
+    assert hex_lines, f"no hex line in output: {res.output!r}"
+    signed_blob = bytes.fromhex(hex_lines[-1])
+    decoded = env.decode(signed_blob)
+    assert isinstance(decoded, env.SignedTx)
+    assert decoded.wallet_fp.hex() == "cf987d8c"
+    assert decoded.txid
+
+
+def test_sign_tty_stdout_is_label_prefixed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When stdout is a TTY, the signed_tx hex is prefixed `signed_tx: `.
+
+    Pipelines (`piwallet sign … | xclip`) still get bare hex — that's
+    pinned by `test_sign_hex_in_hex_out_round_trip` which runs under
+    CliRunner's default StringIO stdout (isatty == False). This test
+    forces the TTY branch by monkey-patching the
+    ``piwallet.cli._stdout_is_tty`` predicate, mirroring what an
+    interactive SSH session sees:
+
+        verified: in=99904 out=99791 fee=113
+        txid: f9c9f9229f...
+        signed_tx: 1f8b08...
+
+    Without a label the txid line and the hex blob visually run
+    together when copy-pasted, which is the bug this prefix fixes.
+    """
+    monkeypatch.setattr("piwallet.cli._stdout_is_tty", lambda: True)
+
+    runner = CliRunner()
+    vault_path = tmp_path / "vault.bin"
+
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "init"],
+        input=f"{PIN}\n{PIN}\n",
+    )
+    assert res.exit_code == 0, res.output
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "add", "--label", "tty"],
+        input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
+    )
+    assert res.exit_code == 0, res.output
+    res = runner.invoke(main, ["vault", "--vault-path", str(vault_path), "list"])
+    wallet_id = res.output.split()[0]
+
+    res = runner.invoke(
+        main,
+        [
+            "sign",
+            "--vault-path",
+            str(vault_path),
+            "--wallet-id",
+            wallet_id,
+            str(PROPOSAL_PATH),
+        ],
+        input=f"{PIN}\n",
+    )
+    assert res.exit_code == 0, res.output
+
+    label_lines = [
+        ln for ln in res.output.splitlines() if ln.startswith("signed_tx: ")
+    ]
+    assert label_lines, f"no labelled line in TTY-mode output: {res.output!r}"
+    hex_part = label_lines[-1].removeprefix("signed_tx: ").strip()
+    # The hex portion after the prefix must round-trip cleanly.
+    assert hex_part, "label was emitted but hex was empty"
+    assert all(c in "0123456789abcdef" for c in hex_part), (
+        f"non-hex chars after prefix: {hex_part!r}"
+    )
+    decoded = env.decode(bytes.fromhex(hex_part))
+    assert isinstance(decoded, env.SignedTx)
+    assert decoded.wallet_fp.hex() == "cf987d8c"
+    assert decoded.txid
+
+
+def test_sign_rejects_both_file_and_hex(tmp_path: Path) -> None:
+    """Providing *both* a positional file and --hex is ambiguous and should fail.
+
+    The check is a guard against operators who copy a `--hex` example
+    from docs but forget to remove the file path from a previous
+    invocation; without this branch, the file would silently win and
+    the hex paste would be ignored.
+    """
+    runner = CliRunner()
+    vault_path = tmp_path / "vault.bin"
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "init"],
+        input=f"{PIN}\n{PIN}\n",
+    )
+    assert res.exit_code == 0
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "add", "--label", "x"],
+        input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
+    )
+    assert res.exit_code == 0
+    wid = runner.invoke(
+        main, ["vault", "--vault-path", str(vault_path), "list"]
+    ).output.split()[0]
+
+    res = runner.invoke(
+        main,
+        [
+            "sign",
+            "--vault-path",
+            str(vault_path),
+            "--wallet-id",
+            wid,
+            "--hex",
+            "deadbeef",
+            str(PROPOSAL_PATH),
+        ],
+    )
+    assert res.exit_code != 0
+    assert "exactly one of" in res.output
+
+
+def test_sign_rejects_neither_file_nor_hex(tmp_path: Path) -> None:
+    """Calling sign with neither a file nor --hex must error cleanly."""
+    runner = CliRunner()
+    vault_path = tmp_path / "vault.bin"
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "init"],
+        input=f"{PIN}\n{PIN}\n",
+    )
+    assert res.exit_code == 0
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "add", "--label", "x"],
+        input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
+    )
+    assert res.exit_code == 0
+    wid = runner.invoke(
+        main, ["vault", "--vault-path", str(vault_path), "list"]
+    ).output.split()[0]
+
+    res = runner.invoke(
+        main,
+        [
+            "sign",
+            "--vault-path",
+            str(vault_path),
+            "--wallet-id",
+            wid,
+        ],
+    )
+    assert res.exit_code != 0
+    assert "exactly one of" in res.output
+
+
+def test_sign_rejects_invalid_hex(tmp_path: Path) -> None:
+    """An odd-length or non-hex --hex value must abort with a clear message."""
+    runner = CliRunner()
+    vault_path = tmp_path / "vault.bin"
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "init"],
+        input=f"{PIN}\n{PIN}\n",
+    )
+    assert res.exit_code == 0
+    res = runner.invoke(
+        main,
+        ["vault", "--vault-path", str(vault_path), "add", "--label", "x"],
+        input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
+    )
+    assert res.exit_code == 0
+    wid = runner.invoke(
+        main, ["vault", "--vault-path", str(vault_path), "list"]
+    ).output.split()[0]
+
+    # Odd length
+    res = runner.invoke(
+        main,
+        [
+            "sign",
+            "--vault-path",
+            str(vault_path),
+            "--wallet-id",
+            wid,
+            "--hex",
+            "abc",
+        ],
+    )
+    assert res.exit_code != 0
+    assert "odd length" in res.output
+
+    # Non-hex chars
+    res = runner.invoke(
+        main,
+        [
+            "sign",
+            "--vault-path",
+            str(vault_path),
+            "--wallet-id",
+            wid,
+            "--hex",
+            "zzzz",
+        ],
+    )
+    assert res.exit_code != 0
+    assert "invalid hex" in res.output
 
 
 def test_sign_rejects_wrong_wallet_for_proposal(tmp_path: Path) -> None:

@@ -6,7 +6,11 @@ import { describe, expect, it } from "vitest";
 
 import { deriveAddress } from "../src/lib/derive.js";
 import { scanWalletUtxos } from "../src/lib/utxo.js";
-import { WocClient, type WocUnspentEntry } from "../src/lib/woc.js";
+import {
+  WocClient,
+  type WocBulkUnspentResult,
+  type WocUnspentEntry,
+} from "../src/lib/woc.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = JSON.parse(
@@ -29,15 +33,27 @@ function utxo(txid: string, vout: number, sats: number): WocUnspentEntry {
   return { txid, vout, sats, height: 812345 };
 }
 
+/**
+ * Build a `fetchUnspentBatch` hook from a per-address fixture, mirroring
+ * how the real `WocClient.getUnspentBatch` returns one row per address
+ * in input order.
+ */
+function batchFromMap(
+  fund: Record<string, WocUnspentEntry[]>,
+): (addresses: string[]) => Promise<WocBulkUnspentResult[]> {
+  return async (addresses) =>
+    addresses.map((address) => ({ address, utxos: fund[address] ?? [] }));
+}
+
 describe("scanWalletUtxos", () => {
   it("returns no utxos when every probed address is empty (gap limit reached)", async () => {
     const probed: string[] = [];
     const result = await scanWalletUtxos(XPUB, dummyClient(), {
       gapLimit: 3,
       batch: 5,
-      fetchUnspent: async (addr) => {
-        probed.push(addr);
-        return [];
+      fetchUnspentBatch: async (addrs) => {
+        probed.push(...addrs);
+        return addrs.map((a) => ({ address: a, utxos: [] }));
       },
     });
     expect(result.utxos).toEqual([]);
@@ -58,7 +74,7 @@ describe("scanWalletUtxos", () => {
     const result = await scanWalletUtxos(XPUB, dummyClient(), {
       gapLimit: 3,
       batch: 5,
-      fetchUnspent: async (a) => fund[a] ?? [],
+      fetchUnspentBatch: batchFromMap(fund),
     });
     // After index=2 we need 3 consecutive empties (3,4,5) -> stop at 6 on receive.
     expect(result.lastReceiveUsed).toBe(2);
@@ -84,7 +100,8 @@ describe("scanWalletUtxos", () => {
     await scanWalletUtxos(XPUB, dummyClient(), {
       gapLimit: 2,
       batch: 5,
-      fetchUnspent: async () => [],
+      fetchUnspentBatch: async (addrs) =>
+        addrs.map((a) => ({ address: a, utxos: [] })),
       onProgress: (e) =>
         calls.push({ branch: e.branch, index: e.index, found: e.found }),
     });
@@ -106,7 +123,7 @@ describe("scanWalletUtxos", () => {
     const result = await scanWalletUtxos(XPUB, dummyClient(), {
       gapLimit: 2,
       batch: 5,
-      fetchUnspent: async (a) => fund[a] ?? [],
+      fetchUnspentBatch: batchFromMap(fund),
     });
     expect(result.utxos).toHaveLength(2);
     const recvUtxo = result.utxos.find((u) => u.derivation[0] === 0)!;
@@ -122,10 +139,14 @@ describe("scanWalletUtxos", () => {
     const result = await scanWalletUtxos(XPUB, dummyClient(), {
       gapLimit: 1,
       batch: 1,
-      fetchUnspent: async (addr) => {
-        if (addr !== a) return [];
-        return [utxo("11".repeat(32), 0, 1000), utxo("22".repeat(32), 1, 2000)];
-      },
+      fetchUnspentBatch: async (addrs) =>
+        addrs.map((address) => ({
+          address,
+          utxos:
+            address === a
+              ? [utxo("11".repeat(32), 0, 1000), utxo("22".repeat(32), 1, 2000)]
+              : [],
+        })),
     });
     expect(result.utxos.map((u) => u.sats).sort()).toEqual([1000, 2000]);
     expect(result.totalSats).toBe(3000);
@@ -138,11 +159,75 @@ describe("scanWalletUtxos", () => {
       batch: 5,
       startReceive: 7,
       startChange: 3,
-      fetchUnspent: async () => [],
+      fetchUnspentBatch: async (addrs) =>
+        addrs.map((a) => ({ address: a, utxos: [] })),
       onProgress: (e) => probed.push({ branch: e.branch, index: e.index }),
     });
     expect(probed[0]).toEqual({ branch: 0, index: 7 });
     // The receive branch probes [7,8] (gap=2). Then change starts at index 3.
     expect(probed.find((p) => p.branch === 1)?.index).toBe(3);
+  });
+
+  it("uses one bulk call per branch when wallet is empty (default batch)", async () => {
+    const callSizes: number[] = [];
+    await scanWalletUtxos(XPUB, dummyClient(), {
+      gapLimit: 20,
+      // Default batch (== WOC_BULK_BATCH_MAX, 20) so the empty-wallet
+      // case turns into exactly 2 bulk calls — the whole point of
+      // adopting the bulk endpoint.
+      fetchUnspentBatch: async (addrs) => {
+        callSizes.push(addrs.length);
+        return addrs.map((a) => ({ address: a, utxos: [] }));
+      },
+    });
+    expect(callSizes).toEqual([20, 20]);
+  });
+
+  it("clamps batch sizes above WOC_BULK_BATCH_MAX", async () => {
+    const callSizes: number[] = [];
+    await scanWalletUtxos(XPUB, dummyClient(), {
+      gapLimit: 20,
+      batch: 100, // caller passes more than the WoC bulk cap
+      fetchUnspentBatch: async (addrs) => {
+        callSizes.push(addrs.length);
+        return addrs.map((a) => ({ address: a, utxos: [] }));
+      },
+    });
+    // Each call should be clamped at 20.
+    expect(callSizes.every((n) => n <= 20)).toBe(true);
+    expect(callSizes).toEqual([20, 20]);
+  });
+
+  it("counts a mempool-only UTXO (height=0) toward the wallet balance", async () => {
+    // Regression for the "fresh broadcast → recipient shows 0 balance"
+    // bug. WoC's older `POST /addresses/unspent` was mempool-blind,
+    // so a tx that just landed in WoC's mempool wouldn't count until
+    // it confirmed (sometimes minutes). The fix wires
+    // `WocClient.getUnspentBatch` to the split confirmed/unconfirmed
+    // endpoints and merges them; this test pins the contract that
+    // `scanWalletUtxos` honours `height: 0` rows the same as
+    // confirmed ones — they're spendable (or at least visible) and
+    // belong in the balance.
+    const recvAddr0 = deriveAddress(XPUB, 0, 0).address;
+    const fund: Record<string, WocUnspentEntry[]> = {
+      [recvAddr0]: [
+        { txid: "ee".repeat(32), vout: 0, sats: 10000, height: 0 },
+      ],
+    };
+    const result = await scanWalletUtxos(XPUB, dummyClient(), {
+      gapLimit: 3,
+      batch: 5,
+      fetchUnspentBatch: batchFromMap(fund),
+    });
+    expect(result.totalSats).toBe(10000);
+    expect(result.utxos).toHaveLength(1);
+    expect(result.utxos[0]).toMatchObject({
+      txid: "ee".repeat(32),
+      vout: 0,
+      sats: 10000,
+      height: 0,
+      derivation: [0, 0],
+    });
+    expect(result.lastReceiveUsed).toBe(0);
   });
 });

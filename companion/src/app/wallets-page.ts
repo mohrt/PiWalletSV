@@ -37,6 +37,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
           <a href="#/scan">Scan</a>
           <a href="#/loop">Loop</a>
           <a href="#/wallets" class="active">Wallets</a>
+          <a href="#/security">Security</a>
         </nav>
       </header>
 

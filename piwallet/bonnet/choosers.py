@@ -29,7 +29,9 @@ class WordCountChooser:
     def on_event(self, event: Event) -> None:
         if self.done:
             return
-        if event.button == Button.B and event.kind == EventKind.LONG:
+        # Either short tap or long hold of B cancels back to the caller —
+        # consistent with every other "cancel/back" surface in the app.
+        if event.button == Button.B and event.kind in (EventKind.PRESS, EventKind.LONG):
             self.done = True
             self.result = None
             return
@@ -63,7 +65,7 @@ class EntropySourceChooser:
     def on_event(self, event: Event) -> None:
         if self.done:
             return
-        if event.button == Button.B and event.kind == EventKind.LONG:
+        if event.button == Button.B and event.kind in (EventKind.PRESS, EventKind.LONG):
             self.done = True
             self.result = None
             return

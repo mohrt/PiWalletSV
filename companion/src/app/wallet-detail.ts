@@ -18,7 +18,7 @@ import {
   deriveAddress,
   deriveAddressBatch,
 } from "../lib/derive.js";
-import { encodeEnvelope } from "../lib/envelope.js";
+import { bytesToHex, encodeEnvelope } from "../lib/envelope.js";
 import { CoinSelectError, selectUtxosGreedy } from "../lib/coin-select.js";
 import { encodeMultipartLines } from "../pw1.js";
 import { ProofFetchError, fetchInputProof } from "../lib/proof-fetcher.js";
@@ -26,8 +26,9 @@ import {
   ProposalBuilderError,
   buildUnsignedProposal,
 } from "../lib/proposal.js";
+import { splitConfirmedPending } from "../lib/balance-split.js";
 import { scanWalletUtxos } from "../lib/utxo.js";
-import { WocClient, WocError, wocBaseForNetwork } from "../lib/woc.js";
+import { WocClient, WocError, effectiveWocBase } from "../lib/woc.js";
 import {
   type WalletRecord,
   getWallet,
@@ -39,6 +40,23 @@ import type { NetworkT } from "../lib/envelope.js";
 
 const RECENT_WINDOW = 8;
 const SATS_PER_BSV = 100_000_000;
+
+/**
+ * Insert a newline every {@link width} chars. Used to format the
+ * unsigned-proposal hex blob into manageable lines so a `cat <<'EOF'`
+ * heredoc on the Pi side accepts the paste even from terminals that
+ * silently truncate at column N. The CLI strips whitespace before
+ * decoding ({@link _read_hex_blob} in `piwallet/cli.py`), so the
+ * wrapping is purely cosmetic.
+ */
+function wrapHex(hex: string, width: number): string {
+  if (width <= 0) return hex;
+  const lines: string[] = [];
+  for (let i = 0; i < hex.length; i += width) {
+    lines.push(hex.slice(i, i + width));
+  }
+  return lines.join("\n");
+}
 
 function escapeHtml(s: string): string {
   return s
@@ -101,6 +119,7 @@ export function mountWalletDetailPage(
           <a href="#/scan">Scan</a>
           <a href="#/loop">Loop</a>
           <a href="#/wallets" class="active">Wallets</a>
+          <a href="#/security">Security</a>
         </nav>
       </header>
       <section id="loadingCard" class="card">
@@ -152,6 +171,7 @@ export function mountWalletDetailPage(
             <a href="#/scan">Scan</a>
             <a href="#/loop">Loop</a>
             <a href="#/wallets" class="active">Wallets</a>
+            <a href="#/security">Security</a>
           </nav>
         </header>
 
@@ -171,8 +191,16 @@ export function mountWalletDetailPage(
           <h2>Balance</h2>
           <div class="balance-row">
             <div class="balance-figures">
-              <div class="balance-sats" id="balanceSats">—</div>
+              <div class="balance-sats-row">
+                <span class="balance-sats" id="balanceSats">—</span>
+                <span class="balance-badge pending" id="balanceBadge"
+                  hidden
+                  title="Includes UTXOs that are in WoC's mempool but not yet confirmed in a block.">
+                  pending
+                </span>
+              </div>
               <div class="balance-bsv muted-line" id="balanceBsv"></div>
+              <div class="muted-line balance-split" id="balanceSplit" hidden></div>
               <div class="muted-line" id="balanceMeta"></div>
             </div>
             <div class="actions">
@@ -194,12 +222,12 @@ export function mountWalletDetailPage(
             <label class="field">
               <span>Recipient address</span>
               <input id="sendAddress" type="text" autocomplete="off"
-                placeholder="1..." />
+                placeholder="${wallet.network === "test" ? "m… or n… (testnet)" : "1… (mainnet)"}" />
             </label>
             <label class="field">
               <span>Amount (sats)</span>
               <input id="sendSats" type="number" min="1" step="1"
-                placeholder="10000" />
+                placeholder="e.g. 10000" />
             </label>
             <details class="advanced">
               <summary>Advanced</summary>
@@ -229,6 +257,31 @@ export function mountWalletDetailPage(
               <button id="proposalToggle" type="button" class="primary">Pause</button>
               <button id="proposalDone" type="button">New send</button>
             </div>
+            <details class="advanced proposal-hex-details">
+              <summary>Or sign over SSH (paste hex)</summary>
+              <p class="muted-line">
+                Copy hex (single contiguous line — the textarea wraps
+                for readability only), then on the Pi run:
+              </p>
+              <pre class="ssh-snippet"><code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code></pre>
+              <p class="muted-line">
+                Or for very long paste-overs, use stdin:
+                <code>piwallet sign --hex - --wallet-id &lt;id&gt;</code>
+                and paste at the heredoc. Either way the Pi prints
+                signed_tx hex — paste that into the
+                <a href="#/scan">Scan</a> page's
+                "Paste hex" box to broadcast.
+                <a href="#/security">Why is this safe?</a>
+              </p>
+              <textarea id="proposalHex" class="hex-blob" rows="6"
+                readonly spellcheck="false" autocorrect="off"></textarea>
+              <div class="actions">
+                <button id="copyProposalHex" type="button" class="primary">
+                  Copy hex
+                </button>
+              </div>
+              <p class="muted-line" id="proposalHexStatus"></p>
+            </details>
           </div>
         </section>
 
@@ -276,8 +329,36 @@ export function mountWalletDetailPage(
     $toggle.addEventListener("click", toggleAnimation);
     const $done = root.querySelector<HTMLButtonElement>("#proposalDone")!;
     $done.addEventListener("click", resetSendCard);
+    const $copyHex = root.querySelector<HTMLButtonElement>("#copyProposalHex")!;
+    $copyHex.addEventListener("click", () => void onCopyProposalHex());
 
     renderBalance();
+  }
+
+  async function onCopyProposalHex(): Promise<void> {
+    const $hex = root.querySelector<HTMLTextAreaElement>("#proposalHex");
+    const $status = root.querySelector<HTMLElement>("#proposalHexStatus");
+    if (!$hex || !$status) return;
+    // The textarea wraps the hex with newlines for readability — strip
+    // whitespace before copy so the clipboard payload is a single
+    // contiguous hex string. The CLI side tolerates either form, but
+    // the unwrapped version is friendlier in pipelines that don't
+    // expect embedded newlines.
+    const flat = $hex.value.replace(/\s+/g, "");
+    try {
+      await navigator.clipboard.writeText(flat);
+      $status.classList.remove("error");
+      $status.textContent = `copied ${flat.length} hex chars (${flat.length / 2} bytes) to clipboard`;
+    } catch (e) {
+      // Older browsers / non-secure contexts (e.g. http on a LAN IP) —
+      // fall back to selecting the textarea so the operator can ⌘C.
+      $hex.focus();
+      $hex.select();
+      $status.classList.add("error");
+      $status.textContent =
+        `clipboard access denied (${(e as Error).message}); ` +
+        "selected the textarea — press ⌘C / Ctrl+C to copy";
+    }
   }
 
   function renderBalance(): void {
@@ -285,10 +366,16 @@ export function mountWalletDetailPage(
     const $sats = root.querySelector<HTMLElement>("#balanceSats");
     const $bsv = root.querySelector<HTMLElement>("#balanceBsv");
     const $meta = root.querySelector<HTMLElement>("#balanceMeta");
+    const $badge = root.querySelector<HTMLElement>("#balanceBadge");
+    const $split = root.querySelector<HTMLElement>("#balanceSplit");
     const $details = root.querySelector<HTMLDetailsElement>("#utxoDetails");
     const $count = root.querySelector<HTMLElement>("#utxoCount");
     const $list = root.querySelector<HTMLUListElement>("#utxoList");
-    if (!$sats || !$bsv || !$meta || !$details || !$count || !$list) return;
+    if (
+      !$sats || !$bsv || !$meta || !$badge || !$split ||
+      !$details || !$count || !$list
+    )
+      return;
 
     const scan = wallet.lastScan;
     if (!scan) {
@@ -296,6 +383,8 @@ export function mountWalletDetailPage(
       $bsv.textContent = "";
       $meta.textContent =
         "Not scanned yet. Click Refresh to query WhatsOnChain for UTXOs.";
+      $badge.hidden = true;
+      $split.hidden = true;
       $details.hidden = true;
       return;
     }
@@ -305,13 +394,38 @@ export function mountWalletDetailPage(
       `${scan.utxos.length} UTXO${scan.utxos.length === 1 ? "" : "s"} · ` +
       `scanned ${scan.addressesScanned} addresses · ` +
       `last refreshed ${relativeTimeFrom(scan.at)}`;
+
+    // Surface mempool UTXOs as a "pending" pill on the headline figure
+    // and (when mixed) a confirmed/pending split sub-line. The data
+    // already flows through `WocClient.getUnspentBatch`, which merges
+    // confirmed + unconfirmed and tags mempool entries with height 0.
+    const split = splitConfirmedPending(scan.utxos);
+    if (split.hasPending) {
+      $badge.hidden = false;
+      // Tighten copy when *everything* is pending — saying "0
+      // confirmed + N pending" reads like noise; a single "pending"
+      // pill plus the headline figure is enough.
+      if (split.allPending) {
+        $split.hidden = true;
+      } else {
+        $split.hidden = false;
+        $split.textContent =
+          `${formatSats(split.confirmedSats)} confirmed · ` +
+          `${formatSats(split.pendingSats)} pending`;
+      }
+    } else {
+      $badge.hidden = true;
+      $split.hidden = true;
+    }
+
     $details.hidden = scan.utxos.length === 0;
     $count.textContent = String(scan.utxos.length);
 
     $list.innerHTML = "";
     for (const u of scan.utxos) {
       const li = document.createElement("li");
-      li.className = "utxo-row";
+      const isPending = u.height === 0;
+      li.className = isPending ? "utxo-row pending" : "utxo-row";
       const branchLabel = u.derivation[0] === 0 ? "recv" : "change";
       li.innerHTML = `
         <div class="utxo-top">
@@ -321,7 +435,7 @@ export function mountWalletDetailPage(
         <div class="muted-line">
           ${branchLabel} m/${u.derivation[0]}/${u.derivation[1]} ·
           ${escapeHtml(u.address)} ·
-          ${u.height === 0 ? "mempool" : `block ${u.height}`}
+          ${isPending ? '<span class="utxo-pending-tag">mempool</span>' : `block ${u.height}`}
         </div>
       `;
       $list.appendChild(li);
@@ -342,7 +456,7 @@ export function mountWalletDetailPage(
       $status.textContent = "Starting gap-limit scan (this can take a few seconds)…";
     }
     if (!woc) {
-      woc = new WocClient({ baseUrl: wocBaseForNetwork(wallet.network) });
+      woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
     }
 
     try {
@@ -399,7 +513,15 @@ export function mountWalletDetailPage(
     $status.classList.remove("error");
 
     const recipient = $addr.value.trim();
-    const sats = parseInt($sats.value, 10);
+    // `<input type="number">` returns "" when the field is empty *or*
+    // when the user typed something the browser couldn't parse as a
+    // number (e.g. a comma in some locales). Treat both as "missing"
+    // and use a clearer message than "must be a positive integer",
+    // which is misleading when the field is just blank — the
+    // placeholder text reads like a value, so users sometimes click
+    // Build proposal without typing anything.
+    const satsRaw = $sats.value.trim();
+    const sats = parseInt(satsRaw, 10);
     const feeRate = parseInt($feeRate.value, 10);
 
     if (!recipient) {
@@ -407,9 +529,16 @@ export function mountWalletDetailPage(
       $status.textContent = "enter a recipient address";
       return;
     }
+    if (satsRaw === "") {
+      $status.classList.add("error");
+      $status.textContent = "enter an amount to send (in sats)";
+      $sats.focus();
+      return;
+    }
     if (!Number.isInteger(sats) || sats <= 0) {
       $status.classList.add("error");
-      $status.textContent = "amount must be a positive integer (sats)";
+      $status.textContent = `amount must be a positive whole number of sats (got "${satsRaw}")`;
+      $sats.focus();
       return;
     }
     if (!wallet.lastScan || wallet.lastScan.utxos.length === 0) {
@@ -436,7 +565,7 @@ export function mountWalletDetailPage(
         `Fetching SPV proofs…`;
 
       if (!woc) {
-        woc = new WocClient({ baseUrl: wocBaseForNetwork(wallet.network) });
+        woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
       }
       const proofs = [];
       for (let i = 0; i < selection.inputs.length; i++) {
@@ -489,6 +618,15 @@ export function mountWalletDetailPage(
       const $bytes = root.querySelector<HTMLElement>("#proposalByteCount")!;
       $count.textContent = String(frames.length);
       $bytes.textContent = String(blob.length);
+
+      // Hex form of the same envelope, for the SSH copy-paste bridge.
+      // Wrapped to 64 chars/line so a `cat <<EOF` on the Pi receives
+      // the paste cleanly even from terminals that don't auto-soft-wrap.
+      // The CLI strips whitespace before decoding so wrapping is free.
+      const $proposalHex = root.querySelector<HTMLTextAreaElement>(
+        "#proposalHex",
+      )!;
+      $proposalHex.value = wrapHex(bytesToHex(blob), 64);
 
       const $form = root.querySelector<HTMLElement>("#sendForm")!;
       const $result = root.querySelector<HTMLElement>("#sendResult")!;

@@ -1,22 +1,28 @@
 """Bonnet global settings screen.
 
 A minimal value-editor for :class:`piwallet.core.settings.BonnetSettings`.
-Two rows today — Brightness (continuous slider) and Sleep timer
-(discrete cycle: 1 min / 5 min / off). The screen is structured as a
-small row table so future toggles (panel rotation, target FPS, etc.)
-drop in without redesign.
+Two value rows today — Brightness (continuous slider) and Sleep timer
+(discrete cycle: 1 min / 5 min / off) — and one action row, "Change
+PIN…", which exits the screen with ``result = "change_pin"`` so the
+caller can drive the change-PIN sub-flow and then re-open Settings.
+The screen is structured as a small row table so future toggles
+(panel rotation, target FPS, etc.) drop in without redesign.
 
 Controls
 --------
-=========  ==================================================
-UP/DOWN    Move the cursor between settings rows.
-LEFT/RIGHT Adjust the highlighted row's value (live preview for
-           brightness; cycles the discrete value for sleep timer).
-A / SEL    Save the draft and return ``"saved"``.
-B PRESS    Discard the draft and return ``"back"``; the
-           caller restores the original brightness on exit.
-B LONG     Exit the bonnet app entirely (``"exit"``).
-=========  ==================================================
+==================  ==================================================
+UP/DOWN             Move the cursor between settings rows.
+LEFT/RIGHT          Adjust the highlighted *value* row (live preview
+                    for brightness; cycles the discrete value for
+                    sleep timer). No effect on action rows.
+A / SEL on a value  Save the draft and return ``"saved"``.
+A / SEL on action   Save the value-row drafts (just like a normal save)
+                    AND return the action key (today only
+                    ``"change_pin"``) so the caller dispatches.
+B PRESS             Discard the draft and return ``"back"``; the
+                    caller restores the original brightness on exit.
+B LONG              Exit the bonnet app entirely (``"exit"``).
+==================  ==================================================
 
 Design notes
 ------------
@@ -34,6 +40,10 @@ Design notes
 - The screen never persists settings on its own — that's the
   caller's job, so the same flow can be reused when the bonnet boots
   to a settings re-prompt or runs an inline brightness tweak.
+- Action rows save the in-progress value drafts on ``A`` so an
+  operator who tweaks brightness, then taps "Change PIN…", doesn't
+  lose their slider change just because the change-PIN flow happens
+  to be a separate sub-screen.
 """
 
 from __future__ import annotations
@@ -61,7 +71,7 @@ from piwallet.ui.display import (
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.widgets import draw_text
 
-SettingsScreenResult = Literal["saved", "back", "exit"]
+SettingsScreenResult = Literal["saved", "back", "exit", "change_pin"]
 
 #: Step size used by left/right and repeat-events when adjusting brightness.
 BRIGHTNESS_STEP: float = 0.05
@@ -69,12 +79,25 @@ BRIGHTNESS_STEP: float = 0.05
 
 @dataclass
 class SettingsRow:
-    """Visual + interaction metadata for a single editable setting."""
+    """Visual + interaction metadata for a single settings row.
+
+    Two flavours, discriminated by :attr:`is_action`:
+
+    * ``is_action=False`` (default) — a *value* row whose right-hand
+      column is the editable value. L/R adjusts the draft; ``A`` on
+      this row saves and exits with ``"saved"``.
+    * ``is_action=True`` — an *action* row that opens a sub-flow
+      when ``A`` is pressed. L/R is a no-op. The screen exits with
+      ``result = key`` so the caller can dispatch on the row's key
+      (e.g. ``"change_pin"``). Pending value-row drafts are saved
+      first so the operator's slider/cycle changes aren't dropped.
+    """
 
     key: str
     label: str
     #: Renderer for the right-hand value column.
     value_text: Callable[[BonnetSettings], str]
+    is_action: bool = False
 
 
 def _brightness_value_text(s: BonnetSettings) -> str:
@@ -97,6 +120,11 @@ def _sleep_timer_value_text(s: BonnetSettings) -> str:
     return _format_sleep_timeout_ms(s.sleep_timeout_ms)
 
 
+def _action_arrow(_s: BonnetSettings) -> str:
+    """Right-column glyph for action rows — visual cue that A opens a sub-flow."""
+    return ">"
+
+
 SETTINGS_ROWS: tuple[SettingsRow, ...] = (
     SettingsRow(
         key="brightness",
@@ -107,6 +135,12 @@ SETTINGS_ROWS: tuple[SettingsRow, ...] = (
         key="sleep_timer",
         label="Sleep timer",
         value_text=_sleep_timer_value_text,
+    ),
+    SettingsRow(
+        key="change_pin",
+        label="Change PIN",
+        value_text=_action_arrow,
+        is_action=True,
     ),
 )
 
@@ -154,9 +188,15 @@ class SettingsScreen:
             self.result = "back"
             return
         if b in (Button.A, Button.SELECT) and k == EventKind.PRESS:
+            row = self.rows[self.cursor]
+            # Save pending value-row drafts on either path. For
+            # action rows this means a tweak made just before
+            # tapping the action isn't lost while the sub-flow
+            # runs; for value rows it's the long-standing
+            # save-and-exit behaviour.
             self.settings = self._draft
             self.done = True
-            self.result = "saved"
+            self.result = row.key if row.is_action else "saved"
             return
         if b == Button.UP and k in (EventKind.PRESS, EventKind.REPEAT):
             self.cursor = (self.cursor - 1) % len(self.rows)
@@ -266,12 +306,16 @@ class SettingsScreen:
         if self.rows[self.cursor].key == "brightness":
             self._draw_slider(fb, self._draft.brightness)
 
-        # Footer hints.
+        # Footer hints — A's verb depends on whether the cursor sits on
+        # a value row (save-and-exit) or an action row (open sub-flow).
+        on_action = self.rows[self.cursor].is_action
+        upper_hint = "U/D row" if on_action else "L/R adjust   U/D row"
+        a_verb = "open" if on_action else "save"
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 24,
-            "L/R adjust   U/D row",
+            upper_hint,
             size=10,
             color=COLOR_DIM,
             anchor="mm",
@@ -280,7 +324,7 @@ class SettingsScreen:
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 10,
-            "A save   B back   hold B quit",
+            f"A {a_verb}   B back   hold B quit",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

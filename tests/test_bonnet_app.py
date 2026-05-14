@@ -52,8 +52,24 @@ def _drive(
         backend.set(button, pressed)
 
 
-def test_no_vault_returns_exit_code_1(tmp_path: Path, accepted_terms: Path) -> None:
-    """If the vault doesn't exist, run_bonnet exits 1 and shows a banner."""
+def test_no_vault_drives_vault_setup_flow(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    accepted_terms: Path,
+) -> None:
+    """If the vault is missing, run_bonnet enters first-boot vault
+    setup. We can't drive the PinSetupScreen inside this integration
+    test cheaply, so we stub ``run_vault_setup`` to return ``None``
+    and verify the legacy "Vault setup failed" exit-1 fallback fires.
+
+    The positive path is covered end-to-end in
+    ``tests/test_bonnet_vault_setup.py``; here we only assert the
+    boot loop wires the new flow up correctly.
+    """
+    from piwallet.bonnet import app as bonnet_app
+
+    monkeypatch.setattr(bonnet_app, "run_vault_setup", lambda *a, **kw: None)
+
     backend = FakeInputBackend()
     mgr = InputManager(backend)
     display = HeadlessDisplay()
@@ -65,7 +81,6 @@ def test_no_vault_returns_exit_code_1(tmp_path: Path, accepted_terms: Path) -> N
         target_fps=1000,
     )
     assert code == 1
-    # The "No vault" banner should have rendered at least once.
     assert display.flip_count >= 1
     assert display.backlight_on is False
 
@@ -151,28 +166,34 @@ def test_derive_address_fn_returns_p2pkh_for_indices(
 
 
 def test_persisted_settings_apply_at_run_bonnet_boot(
+    monkeypatch: pytest.MonkeyPatch,
     accepted_terms: Path,
     tmp_path: Path,
 ) -> None:
     """Brightness saved on disk applies before the first paint of session N+1.
 
-    We deliberately use the "no vault" exit path because it's the
-    shortest run_bonnet flow that still goes through the full boot
-    prologue: load_settings -> set_brightness -> show "No vault"
-    banner -> exit 1. If a regression dropped the apply step from
-    the boot path, the displayed banner would render at MAX_BRIGHTNESS
-    instead of the persisted 0.4 the operator chose last session.
+    We use the missing-vault path with ``run_vault_setup`` stubbed to
+    return ``None`` (the new equivalent of the old "No vault → exit
+    1" shortcut). That keeps the run_bonnet flow short while still
+    exercising the boot prologue: load_settings → set_brightness →
+    show "Vault setup failed" banner → exit 1. If a regression
+    dropped the apply step from the boot path, the displayed banner
+    would render at MAX_BRIGHTNESS instead of the persisted 0.4 the
+    operator chose last session.
 
     Both fields are persisted; a separate test
     (``test_load_v1_file_save_re_stamps_v2`` in test_core_settings.py)
     pins ``sleep_timeout_ms`` round-trip behaviour at the
     ``BonnetSettings`` layer.
     """
+    from piwallet.bonnet import app as bonnet_app
     from piwallet.core.settings import (
         BonnetSettings,
         load_settings,
         save_settings,
     )
+
+    monkeypatch.setattr(bonnet_app, "run_vault_setup", lambda *a, **kw: None)
 
     settings_path = tmp_path / "settings.json"
     save_settings(
@@ -198,8 +219,9 @@ def test_persisted_settings_apply_at_run_bonnet_boot(
         target_fps=1000,
     )
 
-    assert code == 1  # No vault path; exits before unlock.
-    # The "No vault" banner painted at least once at the persisted level.
+    assert code == 1  # vault setup failed → fallback exit.
+    # The "Vault setup failed" banner painted at least once at the
+    # persisted level.
     assert display.flip_count >= 1
     # Brightness was applied before that paint; the multiplier sticks
     # on the display object even though run_bonnet's finally clause

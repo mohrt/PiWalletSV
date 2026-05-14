@@ -100,7 +100,7 @@ class CameraEntropyScreen:
     def on_event(self, event: Event) -> None:
         if self.done or self.busy:
             return
-        if event.button == Button.B and event.kind == EventKind.LONG:
+        if event.button == Button.B and event.kind in (EventKind.PRESS, EventKind.LONG):
             self._close_dual()
             self.done = True
             self.result = None
@@ -192,7 +192,7 @@ class CameraEntropyScreen:
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 28,
-            "A capture   hold B cancel",
+            "A capture   B cancel",
             size=11,
             color=COLOR_DIM,
             anchor="mm",
@@ -229,7 +229,7 @@ class DiceEntropyScreen:
             return
         b = event.button
         k = event.kind
-        if b == Button.B and k == EventKind.LONG:
+        if b == Button.B and k in (EventKind.PRESS, EventKind.LONG):
             self.done = True
             self.result = None
             return
@@ -304,7 +304,7 @@ class DiceEntropyScreen:
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 12,
-            "hold B cancel",
+            "B cancel",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

@@ -70,7 +70,7 @@ class HdPathPresetChooser:
     ``result`` is one of:
       * ``"bsv-default"`` — operator accepted ``m/44'/236'/0'``.
       * ``"advanced"``    — operator wants the custom editor.
-      * ``"back"``        — operator long-pressed B to bail.
+      * ``"back"``        — operator pressed B (short or long) to bail.
     """
 
     title: str = "HD path"
@@ -93,7 +93,7 @@ class HdPathPresetChooser:
     def on_event(self, event: Event) -> None:
         if self.done:
             return
-        if event.button == Button.B and event.kind == EventKind.LONG:
+        if event.button == Button.B and event.kind in (EventKind.PRESS, EventKind.LONG):
             self.done = True
             self.result = "back"
             return
@@ -109,7 +109,7 @@ class HdPathPresetChooser:
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 10,
-            "A confirm   hold B cancel",
+            "A confirm   B back",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

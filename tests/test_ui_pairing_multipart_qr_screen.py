@@ -13,8 +13,13 @@ from piwallet.ui.pairing_multipart_qr_screen import (
 
 
 def test_max_qr_px_reserves_footer_gap() -> None:
-    # Matches default layout: qr_y=28, first footer line center y=202 on 240 px panel.
-    assert _max_qr_px_for_footer(qr_top_y=28, first_footer_center_y=202, gap_px=8) == 160
+    # Matches the current PairingMultipartQrScreen layout: 18-px title +
+    # 4-px gap (qr_y=22), single 10-px-tall footer hint centered at y=230,
+    # 6-px breathing room between QR bottom and footer center. The
+    # resulting 196-px QR area is what gives v6 frames their 4 px/module
+    # rendering — the threshold below which phone cameras struggle to
+    # autofocus on the TFT.
+    assert _max_qr_px_for_footer(qr_top_y=22, first_footer_center_y=230, gap_px=6) == 196
 
 
 def test_pairing_multipart_qr_requires_non_empty() -> None:

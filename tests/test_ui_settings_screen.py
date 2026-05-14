@@ -210,8 +210,8 @@ def test_draw_at_maximum_brightness() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_settings_rows_include_brightness_then_sleep_timer() -> None:
-    """Order is fixed — brightness first, sleep timer second.
+def test_settings_rows_include_brightness_then_sleep_timer_then_change_pin() -> None:
+    """Order is fixed — brightness first, sleep timer second, change PIN third.
 
     The Settings screen's row ordering is observable via cursor index;
     if a future edit reorders the rows, every existing test that
@@ -219,7 +219,16 @@ def test_settings_rows_include_brightness_then_sleep_timer() -> None:
     has to update too.
     """
     keys = [row.key for row in SETTINGS_ROWS]
-    assert keys[:2] == ["brightness", "sleep_timer"]
+    assert keys == ["brightness", "sleep_timer", "change_pin"]
+
+
+def test_change_pin_row_is_an_action_row() -> None:
+    rows_by_key = {row.key: row for row in SETTINGS_ROWS}
+    assert rows_by_key["change_pin"].is_action is True
+    # Value rows must explicitly stay non-action so a future
+    # refactor that flips defaults can't accidentally promote them.
+    assert rows_by_key["brightness"].is_action is False
+    assert rows_by_key["sleep_timer"].is_action is False
 
 
 def test_format_sleep_timeout_ms_renders_each_preset() -> None:
@@ -314,6 +323,71 @@ def test_drafted_off_preset_stays_off_through_redraw() -> None:
     fb = FrameBuffer()
     s.draw(fb)  # must not raise
     assert s.draft.sleep_timeout_ms == 0
+
+
+# ---------------------------------------------------------------------------
+# Change-PIN action row dispatch
+# ---------------------------------------------------------------------------
+
+
+def _move_to_change_pin_row(s: SettingsScreen) -> None:
+    """Walk DOWN until the cursor sits on the change_pin row."""
+    target = next(i for i, r in enumerate(SETTINGS_ROWS) if r.key == "change_pin")
+    while s.cursor != target:
+        s.on_event(_evt(Button.DOWN))
+
+
+def test_a_on_change_pin_row_returns_change_pin_result() -> None:
+    s = _make_screen(brightness=0.5)
+    _move_to_change_pin_row(s)
+    s.on_event(_evt(Button.A))
+    assert s.done is True
+    assert s.result == "change_pin"
+
+
+def test_select_on_change_pin_row_returns_change_pin_result() -> None:
+    s = _make_screen(brightness=0.5)
+    _move_to_change_pin_row(s)
+    s.on_event(_evt(Button.SELECT))
+    assert s.result == "change_pin"
+
+
+def test_a_on_change_pin_row_persists_pending_value_drafts() -> None:
+    """Operator tweaks brightness, then taps Change PIN — the slider
+    change must be saved (mirrored into ``settings``) before the
+    sub-flow runs so it isn't lost while the change-PIN modal stack
+    takes over the display."""
+    s = _make_screen(brightness=0.5)
+    s.on_event(_evt(Button.RIGHT))  # bump brightness on the brightness row
+    bumped = s.draft.brightness
+    _move_to_change_pin_row(s)
+    s.on_event(_evt(Button.A))
+    assert s.result == "change_pin"
+    assert s.settings.brightness == pytest.approx(bumped)
+
+
+def test_left_right_on_change_pin_row_is_a_noop() -> None:
+    s = _make_screen(brightness=0.5)
+    _move_to_change_pin_row(s)
+    rec_before = s.draft
+    s.on_event(_evt(Button.RIGHT))
+    s.on_event(_evt(Button.LEFT))
+    assert s.draft == rec_before
+
+
+def test_b_press_on_change_pin_row_still_cancels() -> None:
+    """B is the universal back gesture — must work on action rows too."""
+    s = _make_screen(brightness=0.5)
+    _move_to_change_pin_row(s)
+    s.on_event(_evt(Button.B))
+    assert s.result == "back"
+
+
+def test_draw_on_change_pin_row() -> None:
+    s = _make_screen(brightness=0.5)
+    _move_to_change_pin_row(s)
+    fb = FrameBuffer()
+    s.draw(fb)
 
 
 def test_unknown_drafted_value_snaps_to_first_preset_on_cycle() -> None:
