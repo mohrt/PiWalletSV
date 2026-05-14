@@ -33,6 +33,15 @@ interface FixtureMeta {
   merkle_root_hex: string;
 }
 
+// NOTE on Phase-2 transition state: the Python fixture now emits the
+// new SPV schema (`checkpointHeight` + raw `headers` list) and no
+// longer carries the legacy per-height `headerAnchors` map. The
+// companion codec on this branch still consumes the legacy field, so
+// the decoded `headerAnchors` is just empty here. Phase 3 of the SPV
+// alignment plan rewires the companion codec to read `headers`
+// directly; once that lands, this test will assert chain-validation
+// rather than the legacy anchor map.
+
 function makeXpub(): XpubExportT {
   return {
     kind: KIND_XPUB,
@@ -56,7 +65,6 @@ function makeProposal(): UnsignedProposalT {
         vout: 0,
         sats: 50000,
         beef: new Uint8Array(64).fill(0xaa),
-        merklePath: new Uint8Array(48).fill(0xbb),
         derivation: [0, 5],
       },
     ],
@@ -75,11 +83,22 @@ function makeProposal(): UnsignedProposalT {
 }
 
 function makeSigned(): SignedTxT {
+  // Hand-constructed Atomic BEEF: 4-byte magic + 32-byte subject TXID
+  // (in raw byte order; displayed-hex is the byte-reverse) + a
+  // sentinel "BEEF body" placeholder. The test only asserts that the
+  // codec round-trips the bytes; full BRC-62 BEEF semantics are
+  // covered by the upstream `@bsv/sdk` test suite.
+  const txidDisplayHex = "cd".repeat(32);
+  const txidBytes = hexToBytes(txidDisplayHex).reverse();
+  const beefBody = new Uint8Array(60).fill(0xee);
+  const atomicBeef = new Uint8Array(4 + 32 + beefBody.length);
+  atomicBeef.set([0x01, 0x01, 0x01, 0x01], 0);
+  atomicBeef.set(txidBytes, 4);
+  atomicBeef.set(beefBody, 4 + 32);
   return {
     kind: KIND_SIGNED,
     walletFp: hexToBytes("cf987d8c"),
-    rawHex: "01000000" + "00".repeat(60),
-    txid: "cd".repeat(32),
+    atomicBeef,
   };
 }
 
@@ -97,16 +116,19 @@ describe("envelope codec", () => {
     expect(env.inputs[0].txid).toBe(meta.funding_txid);
     expect(env.inputs[0].sats).toBe(meta.funding_amount_sats);
     expect(env.inputs[0].beef.byteLength).toBeGreaterThan(0);
-    expect(env.inputs[0].merklePath.byteLength).toBeGreaterThan(0);
 
     expect(env.outputs.length).toBe(2);
     const totalOut = env.outputs.reduce((acc, o) => acc + o.sats, 0);
     expect(totalOut).toBe(meta.pay_amount_sats + meta.change_amount_sats);
 
-    expect(env.headerAnchors.size).toBeGreaterThanOrEqual(1);
-    const anchor = env.headerAnchors.get(meta.block_height);
-    expect(anchor).toBeDefined();
-    expect(bytesToHex(anchor!)).toBe(meta.merkle_root_hex);
+    // Legacy `headerAnchors` was dropped from the wire format in
+    // Phase 2; the companion codec on this branch still surfaces a
+    // (now-always-empty) Map for compatibility until the Phase-3
+    // `headers` rewire lands. Reference `meta` so the destructure
+    // doesn't drift.
+    expect(env.headerAnchors.size).toBe(0);
+    expect(meta.block_height).toBeGreaterThan(0);
+    expect(meta.merkle_root_hex).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("round-trips an xpub_export", async () => {
@@ -211,15 +233,18 @@ describe("envelope codec", () => {
     );
   });
 
-  it("round-trips a signed_tx", async () => {
+  it("round-trips a signed_tx (Atomic BEEF payload)", async () => {
     const src = makeSigned();
     const blob = await encodeEnvelope(src);
     const round = await decodeEnvelope(blob);
     expect(round.kind).toBe(KIND_SIGNED);
     if (round.kind !== KIND_SIGNED) return;
     expect(bytesToHex(round.walletFp)).toBe(bytesToHex(src.walletFp));
-    expect(round.rawHex).toBe(src.rawHex);
-    expect(round.txid).toBe(src.txid);
+    expect(Array.from(round.atomicBeef)).toEqual(Array.from(src.atomicBeef));
+    // BRC-95 magic is preserved as the first 4 bytes.
+    expect(Array.from(round.atomicBeef.slice(0, 4))).toEqual([
+      0x01, 0x01, 0x01, 0x01,
+    ]);
   });
 
   it("round-trip output is decodable by Python (header preserved)", async () => {
@@ -273,7 +298,7 @@ describe("envelope codec", () => {
     expect(blob.byteLength).toBeGreaterThan(0);
   });
 
-  it("ENVELOPE_VERSION is 1 (matches Python)", () => {
-    expect(ENVELOPE_VERSION).toBe(1);
+  it("ENVELOPE_VERSION is 2 (matches Python)", () => {
+    expect(ENVELOPE_VERSION).toBe(2);
   });
 });

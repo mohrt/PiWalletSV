@@ -125,7 +125,6 @@ export function buildUnsignedProposal(args: BuildProposalArgs): UnsignedProposal
     sats: i.sats,
     derivation: i.derivation,
     beef: i.proof.beef,
-    merklePath: i.proof.merklePath,
   }));
 
   const outputs: ProposalOutputT[] = [

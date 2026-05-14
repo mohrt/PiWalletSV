@@ -9,6 +9,7 @@
  * Privacy: getUserMedia is only invoked when the user clicks "Start
  * camera". Tracks are released on Stop and on page teardown.
  */
+import { Transaction } from "@bsv/sdk";
 import jsQR from "jsqr";
 
 import {
@@ -18,6 +19,7 @@ import {
   KIND_XPUB,
   type SignedTxT,
   type XpubExportT,
+  atomicBeefTxid,
   bytesToHex,
   decodeEnvelope,
 } from "../lib/envelope.js";
@@ -186,6 +188,11 @@ export function mountScannerPage(root: HTMLElement): () => void {
   let pairXpub: XpubExportT | null = null;
   let signedTx: SignedTxT | null = null;
   let signedTxNetwork: NetworkT = "main";
+  // Decoded once when the broadcast card is shown so the broadcast click
+  // doesn't re-parse the BEEF (and so a parse failure surfaces in the UI
+  // before the user commits to a network round-trip).
+  let signedTxRawHex = "";
+  let signedTxId = "";
   let woc: WocClient | null = null;
   let broadcasting = false;
 
@@ -300,7 +307,6 @@ export function mountScannerPage(root: HTMLElement): () => void {
           `  sats:       ${i.sats}`,
           `  derivation: [${i.derivation.join(", ")}]`,
           `  beef:       ${i.beef.byteLength} bytes`,
-          `  merklePath: ${i.merklePath.byteLength} bytes`,
         );
       });
       env.outputs.forEach((o, idx) => {
@@ -312,8 +318,16 @@ export function mountScannerPage(root: HTMLElement): () => void {
         }
       }
     } else {
-      lines.push(`txid:        ${env.txid}`);
-      lines.push(`rawHex:      ${env.rawHex.length / 2} bytes`);
+      // signed_tx envelope. The BRC-95 header carries the subject TXID
+      // directly; we surface the inner BEEF body length as a sanity hint.
+      try {
+        lines.push(`txid:        ${atomicBeefTxid(env.atomicBeef)}`);
+      } catch (e) {
+        lines.push(`atomicBeef:  parse error: ${(e as Error).message}`);
+      }
+      lines.push(
+        `atomicBeef:  ${env.atomicBeef.byteLength} bytes (BRC-95)`,
+      );
     }
     return lines.join("\n");
   }
@@ -408,6 +422,8 @@ export function mountScannerPage(root: HTMLElement): () => void {
   function hideBroadcastCard(): void {
     signedTx = null;
     signedTxNetwork = "main";
+    signedTxRawHex = "";
+    signedTxId = "";
     broadcasting = false;
     $broadcastCard.hidden = true;
     $broadcastTxid.textContent = "";
@@ -440,11 +456,38 @@ export function mountScannerPage(root: HTMLElement): () => void {
     }
     signedTxNetwork = net;
 
+    // Decode the Atomic BEEF (BRC-95) once at card-display time so
+    // the operator sees the same txid the broadcast will submit, and
+    // any malformed payload surfaces a clear error before the user
+    // commits to a network round-trip.
+    let txid: string;
+    let rawHex: string;
+    let txByteSize: number;
+    try {
+      const tx = Transaction.fromAtomicBEEF(Array.from(env.atomicBeef));
+      txid = tx.id("hex") as string;
+      rawHex = tx.toHex();
+      txByteSize = rawHex.length / 2;
+    } catch (e) {
+      $broadcastCard.hidden = false;
+      $broadcastTxid.textContent = "";
+      $broadcastMeta.textContent = "";
+      $broadcastStatus.classList.add("error");
+      $broadcastStatus.textContent =
+        `signed_tx Atomic BEEF parse failed: ${(e as Error).message}`;
+      $broadcastBtn.disabled = true;
+      $broadcastBtn.textContent = "Cannot broadcast";
+      $broadcastExplorer.hidden = true;
+      return;
+    }
+    signedTxRawHex = rawHex;
+    signedTxId = txid;
+
     $broadcastCard.hidden = false;
-    $broadcastTxid.textContent = `txid: ${env.txid}`;
+    $broadcastTxid.textContent = `txid: ${txid}`;
     const netLabel = net === "test" ? "TESTNET" : "mainnet";
     $broadcastMeta.textContent =
-      `wallet ${fpHex} · raw tx ${env.rawHex.length / 2} bytes · ${netLabel}`;
+      `wallet ${fpHex} · raw tx ${txByteSize} bytes · ${netLabel}`;
     $broadcastStatus.classList.remove("error");
     $broadcastStatus.textContent = "";
     $broadcastBtn.disabled = false;
@@ -470,13 +513,13 @@ export function mountScannerPage(root: HTMLElement): () => void {
       woc = new WocClient({ baseUrl });
     }
     try {
-      const txid = await woc.broadcastRaw(signedTx.rawHex);
+      const txid = await woc.broadcastRaw(signedTxRawHex);
       $broadcastStatus.textContent = `accepted by WoC mempool · txid ${txid}`;
       // Pi-side txid must match what WoC echoes back.
-      if (txid.toLowerCase() !== signedTx.txid.toLowerCase()) {
+      if (txid.toLowerCase() !== signedTxId.toLowerCase()) {
         $broadcastStatus.classList.add("error");
         $broadcastStatus.textContent =
-          `WARNING: WoC returned txid ${txid} but the Pi signed ${signedTx.txid}.`;
+          `WARNING: WoC returned txid ${txid} but the Pi signed ${signedTxId}.`;
       }
       const explorerBase =
         signedTxNetwork === "test"

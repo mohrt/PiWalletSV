@@ -486,7 +486,12 @@ def test_decode_unsigned_fixture() -> None:
     assert res.exit_code == 0, res.output
     assert "unsigned_proposal" in res.output
     assert "walletFp: cf987d8c" in res.output
-    assert "headerAnchors: [812345]" in res.output
+    # The v2 schema replaced the per-height ``headerAnchors`` map with
+    # a raw ``headers`` chain plus a ``checkpointHeight`` reference.
+    # The CLI summary surfaces both so an operator can sanity-check
+    # them against the firmware checkpoint at decode time.
+    assert "checkpointHeight:" in res.output
+    assert "headers:" in res.output
 
 
 def test_vault_list_renders_network_column(tmp_path: Path) -> None:

@@ -28,6 +28,7 @@ from bsv.script.script import Script
 from bsv.transaction_input import TransactionInput
 from bsv.transaction_output import TransactionOutput
 
+from piwallet.core import atomic_beef
 from piwallet.core.envelope import SignedTx, UnsignedProposal
 from piwallet.core.verify import (
     VerifiedInput,
@@ -48,13 +49,23 @@ KeyDeriver = Callable[[int, int], PrivateKey]
 
 @dataclass(frozen=True)
 class SignedResult:
-    """Output of `build_signed_tx` / `verify_then_sign`."""
+    """Output of `build_signed_tx` / `verify_then_sign`.
+
+    ``raw_hex`` and ``txid`` remain on this struct for internal callers
+    (CLI summary, sanity checks, tests). The wire-level ``signed_tx``
+    envelope, however, carries the **Atomic BEEF (BRC-95)** form via
+    :func:`to_signed_envelope` so any BRC-62-aware consumer can ingest
+    it without an out-of-band txid hint. ``atomic_beef`` is precomputed
+    here once and reused by ``to_signed_envelope`` to avoid re-walking
+    the source-transaction graph.
+    """
 
     raw_hex: str
     txid: str
     size: int
     fee_sats: int
     verified: VerifiedProposal
+    atomic_beef: bytes = b""
 
 
 def build_signed_tx(
@@ -121,6 +132,7 @@ def build_signed_tx(
             size=tx.size(),
             fee_sats=verified.fee_sats,
             verified=verified,
+            atomic_beef=atomic_beef.encode(tx),
         )
     finally:
         # Best-effort: drop our references to the leaf keys ASAP.
@@ -155,11 +167,17 @@ def verify_then_sign(
 
 
 def to_signed_envelope(result: SignedResult, wallet_fp: bytes) -> SignedTx:
-    """Wrap a `SignedResult` into a `SignedTx` envelope ready to encode."""
+    """Wrap a `SignedResult` into a `SignedTx` envelope ready to encode.
+
+    The envelope's payload is the Atomic BEEF (BRC-95) form of the
+    signed transaction. The companion (or any downstream consumer) can
+    recover the raw signed-tx hex by feeding ``signed.atomic_beef``
+    through :mod:`piwallet.core.atomic_beef` (or the equivalent
+    ``Beef`` parser in `@bsv/sdk`).
+    """
     return SignedTx(
         wallet_fp=wallet_fp,
-        raw_hex=result.raw_hex,
-        txid=result.txid,
+        atomic_beef=result.atomic_beef,
     )
 
 

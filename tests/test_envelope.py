@@ -13,8 +13,10 @@ from piwallet.core import envelope as e
 DUMMY_FP = b"\xab\xcd\xef\x01"
 DUMMY_TXID = "a" * 64
 DUMMY_BEEF = b"\xde\xad\xbe\xef" * 32
-DUMMY_PATH = b"\xca\xfe" * 16
-DUMMY_HEADER_ROOT = bytes(range(32))
+# Header bytes are unconstrained at the codec layer (PoW + linkage are
+# enforced by ``piwallet.core.headers.verify_chain``, not by the envelope
+# decoder), so the codec round-trip suite uses a sentinel 80-byte string.
+DUMMY_HEADER = b"\x42" * 80
 
 
 def make_xpub_export() -> e.XpubExport:
@@ -33,7 +35,6 @@ def make_unsigned_proposal(*, change_index: int = 1) -> e.UnsignedProposal:
         vout=0,
         sats=10_000,
         beef=DUMMY_BEEF,
-        merkle_path=DUMMY_PATH,
         derivation=(0, 0),
     )
     out_recv = e.ProposalOutput(script_hex="76a914" + "00" * 20 + "88ac", sats=4_000)
@@ -46,15 +47,24 @@ def make_unsigned_proposal(*, change_index: int = 1) -> e.UnsignedProposal:
         change_derivation=(1, 0),
         fee_rate_satskb=500,
         locktime=0,
-        header_anchors={812345: DUMMY_HEADER_ROOT},
+        checkpoint_height=812340,
+        headers=(DUMMY_HEADER,),
     )
+
+
+def make_atomic_beef(*, txid_hex: str = "b" * 64, body_bytes: int = 64) -> bytes:
+    """Hand-built BRC-95 Atomic BEEF envelope for codec round-trip
+    tests. Real BRC-95 production happens via
+    ``piwallet.core.atomic_beef.encode``; this helper just produces a
+    well-formed byte string the envelope codec can ferry intact."""
+    txid_bytes = bytes.fromhex(txid_hex)[::-1]
+    return b"\x01\x01\x01\x01" + txid_bytes + (b"\xee" * body_bytes)
 
 
 def make_signed_tx() -> e.SignedTx:
     return e.SignedTx(
         wallet_fp=DUMMY_FP,
-        raw_hex="0100000001" + "00" * 36 + "00ffffffff" + "0100000000000000000000000000000000",
-        txid="b" * 64,
+        atomic_beef=make_atomic_beef(),
     )
 
 
@@ -78,7 +88,7 @@ def test_xpub_export_rejects_bad_fingerprint_length() -> None:
     with pytest.raises(e.EnvelopeError, match="4 bytes"):
         e.XpubExport.from_cbor(
             {
-                "v": 1,
+                "v": e.ENVELOPE_VERSION,
                 "kind": "xpub",
                 "xpub": "x",
                 "path": "m/44'/236'/0'",
@@ -90,7 +100,9 @@ def test_xpub_export_rejects_bad_fingerprint_length() -> None:
 
 def test_xpub_export_rejects_missing_keys() -> None:
     with pytest.raises(e.EnvelopeError, match="missing required key"):
-        e.XpubExport.from_cbor({"v": 1, "kind": "xpub", "xpub": "x"})
+        e.XpubExport.from_cbor(
+            {"v": e.ENVELOPE_VERSION, "kind": "xpub", "xpub": "x"}
+        )
 
 
 def test_xpub_export_defaults_to_main_network() -> None:
@@ -194,10 +206,28 @@ def test_unsigned_proposal_empty_outputs() -> None:
         e.decode(gzip.compress(cbor2.dumps(body)))
 
 
-def test_unsigned_proposal_bad_header_anchor_length() -> None:
+def test_unsigned_proposal_rejects_short_header() -> None:
+    """v2 carries the SPV chain as a list of 80-byte headers. A
+    truncated entry must surface a clear, height-tagged error so the
+    bonnet can show a diagnosable message without having to walk
+    every header before refusing."""
     body = make_unsigned_proposal().to_cbor()
-    body["headerAnchors"] = {812345: b"\x00" * 16}  # not 32 bytes
-    with pytest.raises(e.EnvelopeError, match="header anchor"):
+    body["headers"] = [b"\x00" * 79]  # not 80 bytes
+    with pytest.raises(e.EnvelopeError, match=r"headers\[0\]"):
+        e.decode(gzip.compress(cbor2.dumps(body)))
+
+
+def test_unsigned_proposal_rejects_non_list_headers() -> None:
+    body = make_unsigned_proposal().to_cbor()
+    body["headers"] = {0: b"\x00" * 80}  # mistakenly wrote a map, not a list
+    with pytest.raises(e.EnvelopeError, match="headers must be a list"):
+        e.decode(gzip.compress(cbor2.dumps(body)))
+
+
+def test_unsigned_proposal_rejects_negative_checkpoint_height() -> None:
+    body = make_unsigned_proposal().to_cbor()
+    body["checkpointHeight"] = -1
+    with pytest.raises(e.EnvelopeError, match="checkpointHeight"):
         e.decode(gzip.compress(cbor2.dumps(body)))
 
 
@@ -206,6 +236,20 @@ def test_unsigned_proposal_bad_derivation_format() -> None:
     body["inputs"][0]["derivation"] = [0, 1, 2]
     with pytest.raises(e.EnvelopeError, match="derivation"):
         e.decode(gzip.compress(cbor2.dumps(body)))
+
+
+def test_unsigned_proposal_does_not_carry_standalone_merkle_path() -> None:
+    """v2 schema dropped the redundant per-input ``merklePath`` field
+    because the BEEF (BRC-62) payload already carries it. Any caller
+    that tries to assemble a v2 envelope by including the old field
+    should not appear in the encoded CBOR; a decoded payload should
+    not surface it either."""
+    proposal = make_unsigned_proposal()
+    body = proposal.to_cbor()
+    assert "merklePath" not in body["inputs"][0]
+    decoded = e.decode(e.encode(proposal))
+    assert isinstance(decoded, e.UnsignedProposal)
+    assert not hasattr(decoded.inputs[0], "merkle_path")
 
 
 def test_unsigned_proposal_default_locktime() -> None:
@@ -217,13 +261,16 @@ def test_unsigned_proposal_default_locktime() -> None:
     assert decoded.locktime == 0
 
 
-def test_unsigned_proposal_no_header_anchors_ok() -> None:
-    """Header anchors are optional in the wire format (will fail SPV verify, but decodes)."""
+def test_unsigned_proposal_empty_headers_decode_but_will_fail_verify() -> None:
+    """An empty ``headers`` list is structurally legal at the codec
+    layer (the SPV chain validator in ``verify_proposal`` is what
+    refuses it). We pin this so a future tightening of the codec
+    surface is a deliberate, test-visible decision."""
     body = make_unsigned_proposal().to_cbor()
-    body["headerAnchors"] = {}
+    body["headers"] = []
     decoded = e.decode(gzip.compress(cbor2.dumps(body)))
     assert isinstance(decoded, e.UnsignedProposal)
-    assert decoded.header_anchors == {}
+    assert decoded.headers == ()
 
 
 # ---- signed_tx -----------------------------------------------------------
@@ -240,13 +287,36 @@ def test_signed_tx_rejects_bad_fingerprint() -> None:
     with pytest.raises(e.EnvelopeError, match="walletFp"):
         e.SignedTx.from_cbor(
             {
-                "v": 1,
+                "v": e.ENVELOPE_VERSION,
                 "kind": "signed",
                 "walletFp": b"\xff\xff",
-                "rawHex": "00",
-                "txid": "x",
+                "atomicBeef": make_atomic_beef(),
             }
         )
+
+
+def test_signed_tx_rejects_non_bytes_atomic_beef() -> None:
+    with pytest.raises(e.EnvelopeError, match="atomicBeef"):
+        e.SignedTx.from_cbor(
+            {
+                "v": e.ENVELOPE_VERSION,
+                "kind": "signed",
+                "walletFp": DUMMY_FP,
+                "atomicBeef": "not bytes",
+            }
+        )
+
+
+def test_signed_tx_txid_is_derived_from_atomic_beef_header() -> None:
+    """v2 dropped the standalone ``txid`` field and exposes it as a
+    property derived from the BRC-95 header. Decoded envelopes must
+    surface the same hex the producer declared."""
+    txid_hex = "ab" * 32
+    s = e.SignedTx(wallet_fp=DUMMY_FP, atomic_beef=make_atomic_beef(txid_hex=txid_hex))
+    assert s.txid == txid_hex
+    decoded = e.decode(e.encode(s))
+    assert isinstance(decoded, e.SignedTx)
+    assert decoded.txid == txid_hex
 
 
 # ---- top-level decode errors --------------------------------------------
@@ -275,8 +345,20 @@ def test_decode_rejects_unknown_version() -> None:
 
 
 def test_decode_rejects_unknown_kind() -> None:
-    body = {"v": 1, "kind": "weird"}
+    body = {"v": e.ENVELOPE_VERSION, "kind": "weird"}
     with pytest.raises(e.EnvelopeError, match="kind"):
+        e.decode(gzip.compress(cbor2.dumps(body)))
+
+
+def test_decode_rejects_legacy_v1_envelopes() -> None:
+    """v1 envelopes (pre-Atomic-BEEF, pre-merklePath-drop) MUST be
+    refused. The schema bump is the documented signal that an
+    out-of-sync producer needs an upgrade; silently accepting v1
+    would let stale companions ship a wire format the verifier no
+    longer understands and fail with a less actionable error
+    later."""
+    body = {"v": 1, "kind": "xpub"}
+    with pytest.raises(e.EnvelopeError, match="version"):
         e.decode(gzip.compress(cbor2.dumps(body)))
 
 
@@ -294,5 +376,8 @@ def test_encoded_size_is_smaller_than_raw() -> None:
     assert len(gz) < len(raw)
 
 
-def test_envelope_version_constant_is_1() -> None:
-    assert e.ENVELOPE_VERSION == 1
+def test_envelope_version_constant_is_2() -> None:
+    """v2 was cut for the BRC-95 / merklePath-drop schema cleanup;
+    pin the constant so a future bump triggers a deliberate update of
+    every version-aware test rather than slipping through silently."""
+    assert e.ENVELOPE_VERSION == 2

@@ -9,8 +9,13 @@
   "change_address": "125GFsvYsDtyzGkExfsX8DoHuXu2UsMUEZ",
   "change_amount_sats": 19500,
   "fee_sats": 500,
-  "block_height": 812345,
+  "block_height": 1,
   "merkle_root_hex": "82594796714b432cc288b09dc94ff9d434b5808d49ab327107150fe7c56071ea",
+  "checkpoint_network": "main",
+  "checkpoint_height": 0,
+  "checkpoint_hash_hex": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+  "chain_length": 6,
+  "tip_height": 6,
   "envelope_path": "fixtures/proposal_01.cbor",
-  "envelope_size_bytes": 511
+  "envelope_size_bytes": 908
 }

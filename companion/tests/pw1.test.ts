@@ -22,18 +22,30 @@ describe("encodeMultipartLines", () => {
   });
 
   it("round-trips proposal_01.cbor fixture", () => {
+    // The Phase-2 v2 envelope (Atomic BEEF + raw header chain) is
+    // larger than the original fixture, so a 720-byte chunk no longer
+    // fits in a single frame. Just assert the multipart codec
+    // round-trips cleanly across however many frames it splits into.
     const bytes = new Uint8Array(readFileSync(FIXTURE));
     const lines = encodeMultipartLines(bytes, 720);
-    expect(lines.length).toBe(1);
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    for (const ln of lines) expect(ln.startsWith("PW1|")).toBe(true);
     const back = joinMultipartLines(lines);
     expect(Array.from(back)).toEqual(Array.from(bytes));
   });
 
-  it("matches Python default chunking for fixture (single frame)", () => {
+  it("matches Python default chunking for fixture", () => {
+    // Default chunking still produces well-formed PW1 frames the
+    // assembler can rejoin; the v2 fixture spans multiple frames.
     const bytes = new Uint8Array(readFileSync(FIXTURE));
     const lines = encodeMultipartLines(bytes);
-    expect(lines[0].startsWith("PW1|1|0|")).toBe(true);
-    expect(lines[0].length).toBeLessThan(800);
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    for (let i = 0; i < lines.length; i++) {
+      expect(lines[i].startsWith(`PW1|${lines.length}|${i}|`)).toBe(true);
+      expect(lines[i].length).toBeLessThan(800);
+    }
+    const back = joinMultipartLines(lines);
+    expect(Array.from(back)).toEqual(Array.from(bytes));
   });
 
   it("empty payload assembles to empty buffer", () => {

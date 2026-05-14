@@ -20,7 +20,18 @@
  */
 import { Decoder, Encoder } from "cbor-x";
 
-export const ENVELOPE_VERSION = 1;
+/**
+ * Current envelope schema version, kept byte-identical with the Pi-side
+ * `piwallet.core.envelope.ENVELOPE_VERSION`.
+ *
+ * History:
+ *   v1 — initial release.
+ *   v2 — drop the redundant per-input `merklePath` field (BEEF carries
+ *        it once), switch `signed_tx` to a single `atomicBeef`
+ *        Uint8Array (BRC-95). v1 envelopes are intentionally rejected
+ *        so an out-of-sync producer surfaces clearly.
+ */
+export const ENVELOPE_VERSION = 2;
 export const KIND_XPUB = "xpub" as const;
 export const KIND_PROPOSAL = "tx" as const;
 export const KIND_SIGNED = "signed" as const;
@@ -76,10 +87,14 @@ export interface ProposalInputT {
   txid: string;
   vout: number;
   sats: number;
-  /** BEEF bytes for the prior tx funding this input. */
+  /**
+   * BRC-62 BEEF bytes for the prior transaction funding this input.
+   * The BEEF carries the prior tx itself plus its BRC-74 BUMP Merkle
+   * path; the standalone per-input ``merklePath`` field that earlier
+   * envelope revisions also carried was removed in v2 because it was
+   * always redundant with this payload.
+   */
   beef: Uint8Array;
-  /** Structured MerklePath (`MerklePath.to_binary()` on the Pi side). */
-  merklePath: Uint8Array;
   /** `[change_branch, index]` the Pi will use to re-derive the signing key. */
   derivation: [number, number];
 }
@@ -107,8 +122,17 @@ export interface UnsignedProposalT {
 export interface SignedTxT {
   kind: typeof KIND_SIGNED;
   walletFp: Uint8Array;
-  rawHex: string;
-  txid: string;
+  /**
+   * Signed transaction in **Atomic BEEF (BRC-95)** form: a 4-byte
+   * magic ``0x01010101``, the 32-byte subject TXID in raw byte order,
+   * and a regular BRC-62 BEEF body. Consumers can recover the raw
+   * signed-tx hex via ``Transaction.fromAtomicBEEF`` (or the helpers
+   * exported from this module). The previously-separate ``rawHex`` /
+   * ``txid`` fields were dropped in envelope v2: ``rawHex`` is
+   * reproducible from the BEEF body, and ``txid`` is already declared
+   * in the BRC-95 header.
+   */
+  atomicBeef: Uint8Array;
 }
 
 export type Envelope = XpubExportT | UnsignedProposalT | SignedTxT;
@@ -180,7 +204,6 @@ function envelopeToCborBody(env: Envelope): Map<string, unknown> {
         im.set("vout", i.vout);
         im.set("sats", i.sats);
         im.set("beef", i.beef);
-        im.set("merklePath", i.merklePath);
         im.set("derivation", [...i.derivation]);
         return im;
       }),
@@ -203,8 +226,7 @@ function envelopeToCborBody(env: Envelope): Map<string, unknown> {
   }
   // KIND_SIGNED
   m.set("walletFp", env.walletFp);
-  m.set("rawHex", env.rawHex);
-  m.set("txid", env.txid);
+  m.set("atomicBeef", env.atomicBeef);
   return m;
 }
 
@@ -291,17 +313,12 @@ function parseInput(raw: unknown, idx: number): ProposalInputT {
     throw new EnvelopeError(`input[${idx}] must be a map`);
   }
   const ctx = `input[${idx}]`;
-  requireKeys(
-    raw,
-    ["txid", "vout", "sats", "beef", "merklePath", "derivation"],
-    ctx,
-  );
+  requireKeys(raw, ["txid", "vout", "sats", "beef", "derivation"], ctx);
   return {
     txid: requireString(raw, "txid", ctx),
     vout: requireNumber(raw, "vout", ctx),
     sats: requireNumber(raw, "sats", ctx),
     beef: requireBytes(raw, "beef", ctx),
-    merklePath: requireBytes(raw, "merklePath", ctx),
     derivation: parseDerivation(raw.get("derivation"), ctx),
   };
 }
@@ -433,12 +450,11 @@ function parseProposal(body: CborMap): UnsignedProposalT {
 }
 
 function parseSignedTx(body: CborMap): SignedTxT {
-  requireKeys(body, ["walletFp", "rawHex", "txid"], "signed_tx");
+  requireKeys(body, ["walletFp", "atomicBeef"], "signed_tx");
   return {
     kind: KIND_SIGNED,
     walletFp: requireBytes(body, "walletFp", "signed_tx", 4),
-    rawHex: requireString(body, "rawHex", "signed_tx"),
-    txid: requireString(body, "txid", "signed_tx"),
+    atomicBeef: requireBytes(body, "atomicBeef", "signed_tx"),
   };
 }
 
@@ -473,6 +489,69 @@ export async function decodeEnvelope(blob: Uint8Array): Promise<Envelope> {
   if (kind === KIND_XPUB) return parseXpub(body);
   if (kind === KIND_PROPOSAL) return parseProposal(body);
   return parseSignedTx(body);
+}
+
+// ---------------------------------------------------------------------------
+// Atomic BEEF (BRC-95) helpers.
+//
+// Used by the scanner to surface the txid declared in a signed_tx
+// envelope and to recover the raw signed-tx hex for broadcast. Pure
+// byte-level helpers; no `@bsv/sdk` dependency so we can run them in
+// environments where the SDK isn't loaded.
+// ---------------------------------------------------------------------------
+
+const ATOMIC_BEEF_MAGIC = new Uint8Array([0x01, 0x01, 0x01, 0x01]);
+const ATOMIC_BEEF_HEADER_LEN = 4 + 32;
+
+export class AtomicBeefError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AtomicBeefError";
+  }
+}
+
+/**
+ * Split a BRC-95 Atomic BEEF blob into its `(subjectTxidHex, body)`
+ * components. ``subjectTxidHex`` is rendered in the displayed form
+ * (big-endian hex), which is the inverse of how it appears on the
+ * wire. ``body`` is a fresh ``Uint8Array`` view on the inner regular
+ * BEEF (BRC-62) bytes.
+ */
+export function splitAtomicBeef(blob: Uint8Array): {
+  subjectTxidHex: string;
+  body: Uint8Array;
+} {
+  if (!(blob instanceof Uint8Array)) {
+    throw new AtomicBeefError("atomic beef blob must be Uint8Array");
+  }
+  if (blob.length < ATOMIC_BEEF_HEADER_LEN) {
+    throw new AtomicBeefError(
+      `atomic beef blob is ${blob.length} bytes; need at least ${ATOMIC_BEEF_HEADER_LEN}`,
+    );
+  }
+  for (let i = 0; i < 4; i++) {
+    if (blob[i] !== ATOMIC_BEEF_MAGIC[i]) {
+      const got = bytesToHex(blob.slice(0, 4));
+      throw new AtomicBeefError(
+        `atomic beef magic mismatch: expected 01010101, got ${got}`,
+      );
+    }
+  }
+  // Subject txid is stored in raw byte order on the wire; the displayed
+  // form is the byte-reversal.
+  const txidWire = blob.slice(4, 36);
+  const subjectTxidHex = bytesToHex(txidWire.slice().reverse());
+  const body = blob.slice(ATOMIC_BEEF_HEADER_LEN);
+  return { subjectTxidHex, body };
+}
+
+/**
+ * Convenience: peel the subject TXID off an Atomic BEEF blob without
+ * parsing the inner BEEF body. Used when a caller only needs to label
+ * a UI surface, not actually broadcast.
+ */
+export function atomicBeefTxid(blob: Uint8Array): string {
+  return splitAtomicBeef(blob).subjectTxidHex;
 }
 
 // ---------------------------------------------------------------------------

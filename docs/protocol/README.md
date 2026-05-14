@@ -68,6 +68,11 @@ not implement, and surface a clear error to the user.
    (`proposal_01_decoded.json`) that an implementation can diff
    against.
 
+For where this protocol fits relative to the broader BSV BRC stack
+(BRC-62 BEEF, BRC-67 SPV, BRC-74 BUMP, BRC-95 Atomic BEEF, and why
+PiWalletSV intentionally is *not* a BRC-100 wallet), see
+[`../brc-alignment.md`](../brc-alignment.md).
+
 ## Design tenets
 
 These are the rules the reference implementation follows; they explain

@@ -95,9 +95,20 @@ def test_to_signed_envelope_roundtrips(fixture) -> None:
     blob = env.encode(envelope)
     decoded = env.decode(blob)
     assert isinstance(decoded, env.SignedTx)
-    assert decoded.raw_hex == result.raw_hex
+    # Wire-level invariant: the envelope carries the same Atomic BEEF
+    # bytes the signer produced, and the subject TXID derived from the
+    # BRC-95 header equals the txid the signer reported.
+    assert decoded.atomic_beef == result.atomic_beef
     assert decoded.txid == result.txid
     assert decoded.wallet_fp == fp
+    # And the inner BEEF body still parses back into the same signed
+    # transaction the signer produced (proves the BRC-95 wrapper is a
+    # pure additive layer, not a re-serialization).
+    from piwallet.core.atomic_beef import to_transaction
+
+    recovered = to_transaction(decoded.atomic_beef)
+    assert recovered.hex() == result.raw_hex
+    assert recovered.txid() == result.txid
 
 
 def test_sign_aborts_when_verify_fails(fixture) -> None:
@@ -105,7 +116,7 @@ def test_sign_aborts_when_verify_fails(fixture) -> None:
     import dataclasses
 
     proposal, xprv, xpub = fixture
-    bad_proposal = dataclasses.replace(proposal, header_anchors={})
+    bad_proposal = dataclasses.replace(proposal, headers=())
     with pytest.raises(v.ProposalVerificationError):
         s.verify_then_sign(bad_proposal, xpub, make_deriver(xprv))
 

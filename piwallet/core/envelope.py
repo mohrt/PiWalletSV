@@ -1,20 +1,29 @@
 """CBOR-coded versioned envelopes that travel between Pi and PWA over QR.
 
-Three message kinds are defined for v1; all share a small header so a receiver
+Three message kinds are defined; all share a small header so a receiver
 can route them to the right handler before decoding the rest:
 
 - `xpub_export`        Pi -> phone, on pairing. Contains the account xpub.
-- `unsigned_proposal`  phone -> Pi, on send. Contains the unsigned tx, BEEF
-                       per input, MerklePaths, header anchors, change index.
-- `signed_tx`          Pi -> phone, after successful sign. Contains the raw
-                       signed tx hex and txid.
+- `unsigned_proposal`  phone -> Pi, on send. Contains the unsigned tx,
+                       per-input BEEF (BRC-62), the validated header chain
+                       walked from a firmware checkpoint to a tip, and the
+                       change derivation index.
+- `signed_tx`          Pi -> phone, after successful sign. Contains the
+                       signed transaction as Atomic BEEF (BRC-95) and its
+                       txid for convenience.
 
 On-the-wire encoding is **CBOR + gzip**. Larger blobs are split into
 ``PW1|`` multipart barcode lines in :mod:`piwallet.qr`; that layer is
 intentionally separate from this codec.
 
-Schema versioning: every payload carries `v: 1`. Bump on breaking changes;
-the receiver MUST refuse unknown versions.
+Schema versioning: every payload carries an integer ``v``. Bump on
+breaking changes; the receiver MUST refuse unknown versions. v2
+(this revision) replaces v1's ``headerAnchors`` (a trusted
+``height -> root`` map supplied by the companion) with a raw
+``headers`` chain that the Pi PoW-validates from a baked-in
+checkpoint, drops the redundant standalone per-input ``merklePath``
+field (the BEEF carries it), and uses Atomic BEEF (BRC-95) for the
+``signed_tx`` payload.
 
 The CBOR shapes are deliberately flat dicts with short string keys to keep
 multipart QR payloads small.
@@ -28,8 +37,18 @@ from typing import Any, ClassVar
 
 import cbor2
 
-ENVELOPE_VERSION: int = 1
-"""Current envelope schema version. Bump for breaking changes."""
+ENVELOPE_VERSION: int = 2
+"""Current envelope schema version. Bump for breaking changes.
+
+History:
+    v1 — initial release.
+    v2 — drop the redundant per-input ``merklePath`` field (the BEEF
+         payload already carries it); switch the ``signed_tx`` payload
+         from a hex-string + separate txid to a single ``atomicBeef``
+         bytes field (BRC-95). v1 envelopes are intentionally rejected
+         by this build; the schema bump is the documented signal that
+         a v1 producer should be upgraded.
+"""
 
 KIND_XPUB_EXPORT: str = "xpub"
 KIND_UNSIGNED_PROPOSAL: str = "tx"
@@ -110,9 +129,13 @@ class XpubExport:
 class ProposalInput:
     """One input in an `unsigned_proposal`.
 
-    `beef` is the full BEEF bytes covering the prior tx that funds this input.
-    `merkle_path` is the structured MerklePath bytes (as `to_binary()`).
-    `derivation` is the index pair this input's key was derived from
+    ``beef`` is the BRC-62 BEEF bytes covering the prior tx that funds
+    this input, including the prior tx's BRC-74 BUMP Merkle path. The
+    standalone ``merklePath`` field that earlier revisions of this
+    schema also carried per input was always redundant with the BEEF
+    payload; it was removed in envelope version 2.
+
+    ``derivation`` is the index pair this input's key was derived from
     (change, index). The Pi uses it to derive the matching signing key.
     """
 
@@ -120,7 +143,6 @@ class ProposalInput:
     vout: int
     sats: int
     beef: bytes
-    merkle_path: bytes
     derivation: tuple[int, int]  # (change, index)
 
 
@@ -140,10 +162,32 @@ class ProposalOutput:
 class UnsignedProposal:
     """Phone -> Pi spend request. The Pi MUST verify before signing.
 
-    `change_derivation` is a `(branch, index)` pair the Pi uses to re-derive
-    the change output's address from the wallet's account xpub. If the
-    re-derived address doesn't match the script at `outputs[change_index]`,
-    signing must abort. This is the plan's "verify, then sign" rule.
+    ``change_derivation`` is a ``(branch, index)`` pair the Pi uses to
+    re-derive the change output's address from the wallet's account
+    xpub. If the re-derived address doesn't match the script at
+    ``outputs[change_index]``, signing must abort. This is the plan's
+    "verify, then sign" rule.
+
+    ``checkpoint_height`` and ``headers`` together carry the SPV
+    chain the Pi must independently validate before trusting any
+    Merkle proof in the BEEFs:
+
+    - ``checkpoint_height`` is the height of the firmware checkpoint
+      whose hash the first header's ``prev_hash`` must equal. The
+      companion picks the network's recent-checkpoint height from
+      :mod:`piwallet.core.checkpoints` so the Pi can refuse a stale
+      / wrong-network chain at the first comparison.
+    - ``headers`` is a contiguous list of 80-byte headers, in
+      ascending height order, starting at ``checkpoint_height + 1``.
+      Each header is independently PoW-validated by
+      :func:`piwallet.core.headers.verify_chain`; the resulting
+      ``height -> merkle_root`` map is what the SPV verifier uses.
+
+    The previous schema (envelope v1) carried a
+    ``header_anchors: dict[height, root]`` map directly. v2 replaces
+    it with the raw header chain so the Pi no longer has to *trust*
+    the companion's claimed roots — it derives them from headers it
+    has independently checked.
     """
 
     KIND: ClassVar[str] = KIND_UNSIGNED_PROPOSAL
@@ -154,12 +198,9 @@ class UnsignedProposal:
     change_index: int  # index in `outputs` that the Pi must re-derive
     change_derivation: tuple[int, int]  # (branch, index) for the change address
     fee_rate_satskb: int
+    checkpoint_height: int
+    headers: tuple[bytes, ...] = ()
     locktime: int = 0
-    header_anchors: dict[int, bytes] = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.header_anchors is None:
-            object.__setattr__(self, "header_anchors", {})
 
     def to_cbor(self) -> dict[str, Any]:
         return {
@@ -172,7 +213,6 @@ class UnsignedProposal:
                     "vout": ip.vout,
                     "sats": ip.sats,
                     "beef": ip.beef,
-                    "merklePath": ip.merkle_path,
                     "derivation": list(ip.derivation),
                 }
                 for ip in self.inputs
@@ -182,14 +222,24 @@ class UnsignedProposal:
             "changeDerivation": list(self.change_derivation),
             "feeRate": self.fee_rate_satskb,
             "locktime": self.locktime,
-            "headerAnchors": {h: r for h, r in self.header_anchors.items()},
+            "checkpointHeight": self.checkpoint_height,
+            "headers": list(self.headers),
         }
 
     @classmethod
     def from_cbor(cls, body: dict[str, Any]) -> UnsignedProposal:
         _require_keys(
             body,
-            {"walletFp", "inputs", "outputs", "changeIndex", "changeDerivation", "feeRate"},
+            {
+                "walletFp",
+                "inputs",
+                "outputs",
+                "changeIndex",
+                "changeDerivation",
+                "feeRate",
+                "checkpointHeight",
+                "headers",
+            },
             cls.KIND,
         )
         wallet_fp = body["walletFp"]
@@ -217,12 +267,24 @@ class UnsignedProposal:
             raise EnvelopeError("changeDerivation must be [branch, index]")
         change_derivation = (int(cd[0]), int(cd[1]))
 
-        anchors_raw = body.get("headerAnchors") or {}
-        header_anchors: dict[int, bytes] = {}
-        for h, r in anchors_raw.items():
-            if not isinstance(r, (bytes, bytearray)) or len(r) != 32:
-                raise EnvelopeError(f"header anchor at height {h} must be 32 bytes")
-            header_anchors[int(h)] = bytes(r)
+        checkpoint_height = int(body["checkpointHeight"])
+        if checkpoint_height < 0:
+            raise EnvelopeError(
+                f"checkpointHeight must be non-negative, got {checkpoint_height}"
+            )
+
+        headers_raw = body["headers"]
+        if not isinstance(headers_raw, list):
+            raise EnvelopeError("headers must be a list of 80-byte byte strings")
+        headers: list[bytes] = []
+        for i, hb in enumerate(headers_raw):
+            if not isinstance(hb, (bytes, bytearray)) or len(hb) != 80:
+                raise EnvelopeError(
+                    f"headers[{i}] must be 80 bytes, got "
+                    f"{type(hb).__name__} of length "
+                    f"{len(hb) if isinstance(hb, (bytes, bytearray)) else 'n/a'}"
+                )
+            headers.append(bytes(hb))
 
         return cls(
             wallet_fp=bytes(wallet_fp),
@@ -232,14 +294,15 @@ class UnsignedProposal:
             change_derivation=change_derivation,
             fee_rate_satskb=int(body["feeRate"]),
             locktime=int(body.get("locktime", 0)),
-            header_anchors=header_anchors,
+            checkpoint_height=checkpoint_height,
+            headers=tuple(headers),
         )
 
 
 def _decode_input(raw: Any) -> ProposalInput:
     if not isinstance(raw, dict):
         raise EnvelopeError("each input must be a dict")
-    _require_keys(raw, {"txid", "vout", "sats", "beef", "merklePath", "derivation"}, "input")
+    _require_keys(raw, {"txid", "vout", "sats", "beef", "derivation"}, "input")
     deriv = raw["derivation"]
     if not (isinstance(deriv, (list, tuple)) and len(deriv) == 2):
         raise EnvelopeError("input.derivation must be [change, index]")
@@ -248,7 +311,6 @@ def _decode_input(raw: Any) -> ProposalInput:
         vout=int(raw["vout"]),
         sats=int(raw["sats"]),
         beef=bytes(raw["beef"]),
-        merkle_path=bytes(raw["merklePath"]),
         derivation=(int(deriv[0]), int(deriv[1])),
     )
 
@@ -262,33 +324,57 @@ def _decode_output(raw: Any) -> ProposalOutput:
 
 @dataclass(frozen=True)
 class SignedTx:
-    """Pi -> phone signed transaction payload."""
+    """Pi -> phone signed transaction payload.
+
+    The signed transaction is carried in **Atomic BEEF (BRC-95)**
+    form, which is a regular BRC-62 BEEF body prefixed with a 4-byte
+    magic and the 32-byte subject TXID. The companion uses the
+    subject TXID for routing and feedback, and decodes the inner BEEF
+    to recover the raw signed tx hex it broadcasts.
+
+    The previously-separate ``raw_hex`` / ``txid`` fields were dropped
+    in envelope v2: ``raw_hex`` is reproducible from the BEEF body,
+    and ``txid`` is already declared in the Atomic BEEF header.
+    """
 
     KIND: ClassVar[str] = KIND_SIGNED_TX
 
     wallet_fp: bytes
-    raw_hex: str
-    txid: str
+    atomic_beef: bytes
+
+    @property
+    def txid(self) -> str:
+        """Subject TXID declared in the Atomic BEEF header.
+
+        Returns the displayed (big-endian-hex) form. Lazily computed;
+        the dataclass intentionally does not store it as a separate
+        field, since the BRC-95 header is the canonical source.
+        """
+        from piwallet.core.atomic_beef import split
+
+        subject_txid_hex, _ = split(self.atomic_beef)
+        return subject_txid_hex
 
     def to_cbor(self) -> dict[str, Any]:
         return {
             "v": ENVELOPE_VERSION,
             "kind": self.KIND,
             "walletFp": self.wallet_fp,
-            "rawHex": self.raw_hex,
-            "txid": self.txid,
+            "atomicBeef": self.atomic_beef,
         }
 
     @classmethod
     def from_cbor(cls, body: dict[str, Any]) -> SignedTx:
-        _require_keys(body, {"walletFp", "rawHex", "txid"}, cls.KIND)
+        _require_keys(body, {"walletFp", "atomicBeef"}, cls.KIND)
         fp = body["walletFp"]
         if not isinstance(fp, (bytes, bytearray)) or len(fp) != 4:
             raise EnvelopeError("walletFp must be 4 bytes")
+        atomic = body["atomicBeef"]
+        if not isinstance(atomic, (bytes, bytearray)):
+            raise EnvelopeError("atomicBeef must be bytes")
         return cls(
             wallet_fp=bytes(fp),
-            raw_hex=str(body["rawHex"]),
-            txid=str(body["txid"]),
+            atomic_beef=bytes(atomic),
         )
 
 

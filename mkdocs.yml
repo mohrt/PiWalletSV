@@ -99,6 +99,7 @@ nav:
   - CLI reference: cli.md
   - Develop: develop.md
   - Security: security.md
+  - BRC alignment: brc-alignment.md
   - Disclaimer: disclaimer.md
   - Protocol spec:
       - Overview: protocol/README.md

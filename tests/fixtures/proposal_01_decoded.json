@@ -1,10 +1,10 @@
 {
-  "envelope_size_bytes": 511,
-  "cbor_size_bytes": 650,
-  "compression_ratio": 0.7862,
+  "envelope_size_bytes": 908,
+  "cbor_size_bytes": 1023,
+  "compression_ratio": 0.8876,
   "body": {
     "type": "map",
-    "length": 10,
+    "length": 11,
     "entries": [
       {
         "key": {
@@ -14,7 +14,7 @@
         },
         "value": {
           "type": "uint",
-          "value": 1
+          "value": 2
         }
       },
       {
@@ -53,7 +53,7 @@
           "items": [
             {
               "type": "map",
-              "length": 6,
+              "length": 5,
               "entries": [
                 {
                   "key": {
@@ -97,21 +97,9 @@
                   },
                   "value": {
                     "type": "bytes",
-                    "length": 168,
-                    "head_hex": "0100beef01fe39650c0001020002dc6f61807df2f1aebe7f1bb8259967d15482",
+                    "length": 164,
+                    "head_hex": "0100beef010101020002dc6f61807df2f1aebe7f1bb8259967d15482be6c018a",
                     "tail_hex": "1976a914c674ac8e0534044717c9ee450d5d9f25e243645088ac000000000100"
-                  }
-                },
-                {
-                  "key": {
-                    "type": "text",
-                    "length": 10,
-                    "value": "merklePath"
-                  },
-                  "value": {
-                    "type": "bytes",
-                    "length": 75,
-                    "value_hex": "fe39650c0001020002dc6f61807df2f1aebe7f1bb8259967d15482be6c018a959e49b054be3e237dec0100c05d1c00951a1b138c8ce19df377b913f665734cff30fc649b4b9d85fcff63b6"
                   }
                 },
                 {
@@ -268,23 +256,53 @@
       {
         "key": {
           "type": "text",
-          "length": 13,
-          "value": "headerAnchors"
+          "length": 16,
+          "value": "checkpointHeight"
         },
         "value": {
-          "type": "map",
-          "length": 1,
-          "entries": [
+          "type": "uint",
+          "value": 0
+        }
+      },
+      {
+        "key": {
+          "type": "text",
+          "length": 7,
+          "value": "headers"
+        },
+        "value": {
+          "type": "array",
+          "length": 6,
+          "items": [
             {
-              "key": {
-                "type": "uint",
-                "value": 812345
-              },
-              "value": {
-                "type": "bytes",
-                "length": 32,
-                "value_hex": "82594796714b432cc288b09dc94ff9d434b5808d49ab327107150fe7c56071ea"
-              }
+              "type": "bytes",
+              "length": 80,
+              "value_hex": "010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000ea7160c5e70f15077132ab498d80b534d4f94fc99db088c22c434b719647598201000000ffff7f2000000000"
+            },
+            {
+              "type": "bytes",
+              "length": 80,
+              "value_hex": "010000008ec14dbcd6380458cd78b38505f76d549ab9653ad72d9acf0b7c12bb2279bb55faa4d5cce4f634dfa27aae9ff3837f70c35c75258c2a3af4f4aa7ac459e33ba502000000ffff7f2000000000"
+            },
+            {
+              "type": "bytes",
+              "length": 80,
+              "value_hex": "010000006ce3b5b76021e6737c1c5e307b230ae02b2a95fba21ba0f820337fc5b4b756560edc0d08ed7ca51a1e3505ac0ebc770e2da530dff3dca97a24e3902d2bb28b8e03000000ffff7f2001000000"
+            },
+            {
+              "type": "bytes",
+              "length": 80,
+              "value_hex": "0100000019a60937bfed7b1cee74cae092d33a1e3debdfc9ec25ccca376d797d6a23ef6d27b95caeb36907e69711dc56a382b5ac726fc299f73541a841652c2f18ed650004000000ffff7f2008000000"
+            },
+            {
+              "type": "bytes",
+              "length": 80,
+              "value_hex": "01000000367323649595ccb9e20e5b34aa091bd1c6ea0437ce0f7d6779a9a78f8b09c14c38768a93044ae1b426fd4d7439ba53ff999c55baa620c456c221bba61796a10705000000ffff7f2000000000"
+            },
+            {
+              "type": "bytes",
+              "length": 80,
+              "value_hex": "01000000f990c44b7c3e81cb583df98a6e2aeca2bbcef1a0cc10ff20be153ed46950ca7f451a4cadf0b68edc43321a36203376f6ee3d3f520e7f5a281e7c8c47f2d036ab06000000ffff7f2000000000"
             }
           ]
         }

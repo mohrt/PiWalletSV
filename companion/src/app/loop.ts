@@ -60,7 +60,6 @@ function makeProposal(): UnsignedProposalT {
         vout: 0,
         sats: 50_000,
         beef: new Uint8Array(64).fill(0xaa),
-        merklePath: new Uint8Array(48).fill(0xbb),
         derivation: [0, 5],
       },
     ],
@@ -79,11 +78,20 @@ function makeProposal(): UnsignedProposalT {
 }
 
 function makeSigned(): SignedTxT {
+  // Hand-rolled Atomic BEEF: 4-byte magic + 32-byte subject TXID (raw
+  // byte order) + a placeholder BEEF body. Used only by the in-app
+  // dev demo / smoke loop; the production sign path on the Pi emits
+  // the real BRC-95 form via `piwallet.core.atomic_beef.encode`.
+  const txidBytes = hexToBytes("cd".repeat(32)).reverse();
+  const beefBody = new Uint8Array(60).fill(0xee);
+  const atomicBeef = new Uint8Array(4 + 32 + beefBody.length);
+  atomicBeef.set([0x01, 0x01, 0x01, 0x01], 0);
+  atomicBeef.set(txidBytes, 4);
+  atomicBeef.set(beefBody, 4 + 32);
   return {
     kind: KIND_SIGNED,
     walletFp: hexToBytes("cf987d8c"),
-    rawHex: `01000000${"00".repeat(60)}`,
-    txid: "cd".repeat(32),
+    atomicBeef,
   };
 }
 
@@ -158,7 +166,13 @@ function summarize(env: Envelope): string {
       `${env.headerAnchors.size} anchor`
     );
   }
-  return `walletFp ${bytesToHex(env.walletFp)}, txid ${env.txid.slice(0, 12)}…`;
+  // signed_tx envelopes carry the txid in the BRC-95 Atomic BEEF
+  // header; surface only the byte size + the leading magic so the
+  // dev loop has a one-line summary without parsing the inner BEEF.
+  return (
+    `walletFp ${bytesToHex(env.walletFp)}, ` +
+    `atomicBeef ${env.atomicBeef.byteLength}B (BRC-95)`
+  );
 }
 
 export function mountLoopPage(root: HTMLElement): () => void {

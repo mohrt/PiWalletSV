@@ -666,6 +666,7 @@ def _read_hex_blob(hex_input: str) -> bytes:
 def _summarize_proposal(p: env.UnsignedProposal) -> str:
     total_in = sum(i.sats for i in p.inputs)
     total_out = sum(o.sats for o in p.outputs)
+    tip_height = p.checkpoint_height + len(p.headers)
     lines = [
         f"kind: unsigned_proposal v={env.ENVELOPE_VERSION}",
         f"walletFp: {p.wallet_fp.hex()}",
@@ -673,7 +674,8 @@ def _summarize_proposal(p: env.UnsignedProposal) -> str:
         f"outputs: {len(p.outputs)} (total {total_out} sat)",
         f"changeIndex: {p.change_index}  changeDerivation: {p.change_derivation}",
         f"feeRate: {p.fee_rate_satskb} sat/kb  locktime: {p.locktime}",
-        f"headerAnchors: {sorted(p.header_anchors.keys())}",
+        f"checkpointHeight: {p.checkpoint_height}  headers: {len(p.headers)} "
+        f"(tip {tip_height})",
     ]
     return "\n".join(lines)
 
@@ -697,7 +699,7 @@ def _summarize_signed(s: env.SignedTx) -> str:
             f"kind: signed_tx v={env.ENVELOPE_VERSION}",
             f"walletFp: {s.wallet_fp.hex()}",
             f"txid: {s.txid}",
-            f"raw size: {len(s.raw_hex) // 2} bytes",
+            f"atomicBeef: {len(s.atomic_beef)} bytes (BRC-95)",
         ]
     )
 
