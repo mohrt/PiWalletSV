@@ -464,4 +464,94 @@ describe("WocClient", () => {
     await w.getChainInfo();
     expect(calls).toHaveLength(1);
   });
+
+  // ---- header chain fetch -----------------------------------------------
+
+  it("getHeaderJsonByHeight forwards the height in the URL", async () => {
+    const { fetch, calls } = stubFetch((url) => {
+      expect(url).toBe(`${WOC_DEFAULT_BASE}/block/812345/header`);
+      return jsonResponse({
+        hash: "aa".repeat(32),
+        height: 812345,
+        version: 1,
+        bits: "1d00ffff",
+        nonce: 0,
+        merkleroot: "bb".repeat(32),
+        time: 0,
+        previousblockhash: "cc".repeat(32),
+      });
+    });
+    const w = new WocClient({ fetch, minIntervalMs: 0 });
+    const row = await w.getHeaderJsonByHeight(812345);
+    expect(row.height).toBe(812345);
+    expect(row.bits).toBe("1d00ffff");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("getHeaderJsonByHeight rejects negative heights without hitting WoC", async () => {
+    const { fetch, calls } = stubFetch(() => jsonResponse({}));
+    const w = new WocClient({ fetch });
+    await expect(w.getHeaderJsonByHeight(-1)).rejects.toBeInstanceOf(
+      WocError,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("getHeaderChain fetches a contiguous run via the per-height JSON endpoint", async () => {
+    const { fetch, calls } = stubFetch((url) => {
+      const m = url.match(/\/block\/(\d+)\/header$/);
+      expect(m).not.toBeNull();
+      const h = Number(m![1]);
+      return jsonResponse({
+        hash: h.toString().padStart(64, "0"),
+        height: h,
+        version: 1,
+        bits: "1d00ffff",
+        nonce: 0,
+        merkleroot: "00".repeat(32),
+        time: h,
+        previousblockhash: (h - 1).toString().padStart(64, "0"),
+      });
+    });
+    const w = new WocClient({ fetch, minIntervalMs: 0 });
+    const out = await w.getHeaderChain(800_000, 5);
+    expect(out).toHaveLength(5);
+    expect(out.map((r) => r.height)).toEqual([
+      800_000, 800_001, 800_002, 800_003, 800_004,
+    ]);
+    expect(calls).toHaveLength(5);
+    for (const c of calls) {
+      expect(c.url).toMatch(/\/block\/\d+\/header$/);
+    }
+  });
+
+  it("getHeaderChain rejects when WoC returns a row at the wrong height", async () => {
+    const { fetch } = stubFetch((url) => {
+      const m = url.match(/\/block\/(\d+)\/header$/)!;
+      const requested = Number(m[1]);
+      return jsonResponse({
+        hash: "00".repeat(32),
+        // Lie about the height: claim 999 regardless of the request.
+        height: 999,
+        version: 1,
+        bits: "1d00ffff",
+        nonce: 0,
+        merkleroot: "00".repeat(32),
+        time: requested,
+        previousblockhash: "00".repeat(32),
+      });
+    });
+    const w = new WocClient({ fetch, minIntervalMs: 0 });
+    await expect(w.getHeaderChain(800_000, 1)).rejects.toBeInstanceOf(
+      WocError,
+    );
+  });
+
+  it("getHeaderChain count=0 makes zero requests", async () => {
+    const { fetch, calls } = stubFetch(() => jsonResponse({}));
+    const w = new WocClient({ fetch });
+    const out = await w.getHeaderChain(800_000, 0);
+    expect(out).toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
 });

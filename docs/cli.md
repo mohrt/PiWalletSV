@@ -273,9 +273,12 @@ envelope without modifying the vault.
 
 ## `piwallet decode <blob_path>`
 
-Decode any envelope blob (`xpub_export`, `unsigned_proposal`,
+Decode any v2 envelope blob (`xpub_export`, `unsigned_proposal`,
 `signed_tx`) and print a human-readable summary — addresses, amounts,
-fee, anchors. Useful for debugging fixtures or scanned blobs.
+fee, the input BUMP heights and the bundled header chain
+(`checkpointHeight` + range), and for `signed_tx` the BRC-95
+Atomic BEEF subject TXID. Useful for debugging fixtures or scanned
+blobs.
 
 ```bash
 piwallet decode /tmp/proposal_01.cbor
@@ -365,17 +368,29 @@ piwallet sign --hex 8a07b3f1... --wallet-id <id>
 What it does, in order:
 
 1. Reads the input (file or hex).
-2. Decodes the envelope; refuses anything that isn't an
-   `unsigned_proposal`.
+2. Decodes the envelope; refuses anything that isn't a v2
+   `unsigned_proposal` (v1 envelopes are intentionally rejected).
 3. Prompts for the PIN.
 4. Confirms `--wallet-id`'s xpub fingerprint matches
    `proposal.wallet_fp`.
-5. Verifies BEEF + Merkle paths against header anchors.
-6. Re-derives every claimed input address and confirms script match.
-7. Re-derives the change address and confirms script match.
-8. Asserts value conservation and fee within
+5. Validates the bundled `headers` list against the firmware
+   checkpoint for the wallet's network: each header's PoW is
+   re-checked from `bits` and the chain is asserted contiguous
+   from `checkpointHeight + 1` upward. The resulting
+   `height → merkle_root` map is the only source of trust for the
+   subsequent BEEF checks.
+6. For each input, parses the BRC-62 BEEF, walks the embedded
+   BRC-74 BUMP path to a Merkle root the validated chain pins at
+   the BUMP's `block_height`, and rejects any input shallower than
+   `MIN_CONFIRMATION_DEPTH` (6) below the chain tip.
+7. Re-derives every claimed input address and confirms script
+   match.
+8. Re-derives the change address and confirms script match.
+9. Asserts value conservation and fee within
    `--max-fee-rate-satskb`.
-9. Signs all inputs, emits the `signed_tx` envelope.
+10. Signs all inputs and emits a `signed_tx` envelope whose payload
+    is the BRC-95 Atomic BEEF blob (4-byte magic + 32-byte subject
+    TXID + BRC-62 BEEF body) for the just-signed transaction.
 
 **Stdout (no `-o`):** the encoded `signed_tx` envelope as hex. Two
 shapes depending on whether stdout is attached to a terminal:

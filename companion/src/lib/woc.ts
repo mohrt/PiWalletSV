@@ -138,6 +138,36 @@ export interface WocBlockHeader {
   previousblockhash?: string;
 }
 
+/**
+ * Raw shape of `GET /block/{hashOrHeight}/header` carrying every
+ * field needed to reconstruct the 80-byte wire form. Distinct from
+ * {@link WocBlockHeader} (which omits the PoW-relevant `version`,
+ * `bits`, `nonce` triple) so type-checkers prevent accidentally
+ * mixing the two surfaces — only the chain-fetch path needs the
+ * complete shape, and only it can do PoW validation.
+ *
+ * Defined here rather than in `headers.ts` so call sites that only
+ * consume the WoC response don't have to import the SPV machinery,
+ * but `rawHeaderFromJson` accepts this same shape via a structural
+ * subtype (see {@link "./headers.js".WocHeaderJson}).
+ */
+export interface WocHeaderJsonShape {
+  hash: string;
+  height: number;
+  /** Little-endian uint32 source value. */
+  version: number;
+  /** Compact target rendered as 8 hex chars (big-endian). */
+  bits: string;
+  /** PoW nonce (uint32). */
+  nonce: number;
+  /** Displayed (big-endian) merkle root hex (64 chars). */
+  merkleroot: string;
+  /** Miner-reported UNIX timestamp. */
+  time: number;
+  /** Absent on the genesis block. */
+  previousblockhash?: string;
+}
+
 export interface WocChainInfo {
   blocks: number;
   bestblockhash: string;
@@ -573,6 +603,85 @@ export class WocClient {
       time: raw.time,
       previousblockhash: raw.previousblockhash,
     };
+  }
+
+  /**
+   * `GET /block/{height}/header` — same endpoint, addressed by height.
+   *
+   * Returns the *full* JSON body so callers can reconstruct the 80-byte
+   * raw wire form locally (see {@link rawHeaderFromJson}). The fields
+   * surfaced are the seven that go into the canonical serialization
+   * plus the `hash` for self-consistency checks.
+   */
+  async getHeaderJsonByHeight(height: number): Promise<WocHeaderJsonShape> {
+    if (!Number.isInteger(height) || height < 0) {
+      throw new WocError(
+        `/block/${height}/header`,
+        0,
+        `height must be a non-negative integer, got ${height}`,
+      );
+    }
+    return this.request<WocHeaderJsonShape>(
+      "GET",
+      `/block/${encodeURIComponent(String(height))}/header`,
+    );
+  }
+
+  /**
+   * Fetch a contiguous sequence of headers `[fromHeight, fromHeight+count)`
+   * via the per-height JSON endpoint, returning each as a 7-field JSON
+   * record.
+   *
+   * WoC has bulk binary endpoints (`/block/headers/latest?count=N`,
+   * `/block/headers/resources`) that are more efficient for very long
+   * ranges, but those return only the latest N (≤100) blocks or
+   * pre-baked 10k-header bundles, neither of which lines up with the
+   * arbitrary `[checkpoint, recent-tx-block]` window the SPV pipeline
+   * needs. The per-height JSON path is universal and threads through
+   * the same `_paced` rate-limiter as everything else, so a cold sync
+   * trickles out at the documented ~3 req/s and a warm cache resync
+   * (typical case) is just a handful of fetches at the top.
+   *
+   * Each entry is returned in its source JSON form; the caller is
+   * expected to run {@link rawHeaderFromJson} (which validates field
+   * shape and recomputes the declared hash) before treating the bytes
+   * as authoritative.
+   */
+  async getHeaderChain(
+    fromHeight: number,
+    count: number,
+  ): Promise<WocHeaderJsonShape[]> {
+    if (!Number.isInteger(fromHeight) || fromHeight < 0) {
+      throw new WocError(
+        "/block/header/chain",
+        0,
+        `fromHeight must be a non-negative integer, got ${fromHeight}`,
+      );
+    }
+    if (!Number.isInteger(count) || count < 0) {
+      throw new WocError(
+        "/block/header/chain",
+        0,
+        `count must be a non-negative integer, got ${count}`,
+      );
+    }
+    const out: WocHeaderJsonShape[] = [];
+    for (let i = 0; i < count; i++) {
+      const h = fromHeight + i;
+      const row = await this.getHeaderJsonByHeight(h);
+      // WoC indexes headers by hash internally; if the height in the
+      // returned record does not match what we asked for, it's a bug
+      // in the upstream mirror, not a transient error worth retrying.
+      if (typeof row.height === "number" && row.height !== h) {
+        throw new WocError(
+          `/block/${h}/header`,
+          200,
+          `WoC returned header at height ${row.height}, asked for ${h}`,
+        );
+      }
+      out.push(row);
+    }
+    return out;
   }
 
   /** `GET /chain/info` — current best block etc. */

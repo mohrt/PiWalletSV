@@ -626,6 +626,18 @@ button:hover:not(:disabled) {
   font-weight: 600;
 }
 
+.utxo-spv-tag {
+  font-weight: 600;
+}
+
+.utxo-spv-tag.verified {
+  color: #6cd09a;
+}
+
+.utxo-spv-tag.failed {
+  color: #e07b7b;
+}
+
 .utxo-top {
   display: flex;
   align-items: baseline;

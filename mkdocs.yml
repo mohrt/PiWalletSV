@@ -100,6 +100,7 @@ nav:
   - Develop: develop.md
   - Security: security.md
   - BRC alignment: brc-alignment.md
+  - Prior art: prior-art.md
   - Disclaimer: disclaimer.md
   - Protocol spec:
       - Overview: protocol/README.md
@@ -107,6 +108,7 @@ nav:
       - Envelopes: protocol/envelopes.md
       - QR transport: protocol/qr-transport.md
       - SPV requirements: protocol/spv.md
+      - Header chains: protocol/headers.md
       - Conformance: protocol/conformance.md
   - Hardware tests:
       - Checkpoint 1 (bonnet boot path): hardware/checkpoint-1.md

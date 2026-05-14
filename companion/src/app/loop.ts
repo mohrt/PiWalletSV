@@ -51,6 +51,12 @@ function makeXpub(): XpubExportT {
 }
 
 function makeProposal(): UnsignedProposalT {
+  // Synthetic single-header chain. The bytes here do NOT pass PoW;
+  // the loop page exercises the codec round-trip only and never
+  // ships this envelope to a Pi. The production proposal builder
+  // assembles the chain via `ensureChain` from validated WoC headers.
+  const fakeHeader = new Uint8Array(80);
+  fakeHeader[0] = 0x01; // version
   return {
     kind: KIND_PROPOSAL,
     walletFp: hexToBytes("cf987d8c"),
@@ -71,9 +77,8 @@ function makeProposal(): UnsignedProposalT {
     changeDerivation: [1, 0],
     feeRate: 500,
     locktime: 0,
-    headerAnchors: new Map<number, Uint8Array>([
-      [812_345, new Uint8Array(32).fill(0x42)],
-    ]),
+    checkpointHeight: 0,
+    headers: [fakeHeader],
   };
 }
 
@@ -163,7 +168,7 @@ function summarize(env: Envelope): string {
       `walletFp ${bytesToHex(env.walletFp)}, ` +
       `${env.inputs.length} input → ${env.outputs.length} output, ` +
       `change@${env.changeIndex}, ` +
-      `${env.headerAnchors.size} anchor`
+      `${env.headers.length} header(s) from cp@${env.checkpointHeight}`
     );
   }
   // signed_tx envelopes carry the txid in the BRC-95 Atomic BEEF

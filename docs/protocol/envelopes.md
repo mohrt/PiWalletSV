@@ -1,10 +1,25 @@
-# Envelope encoding — v1
+# Envelope encoding — v2
 
 This document specifies the on-the-wire payloads that travel between
-the signer and a companion. There are three message kinds in v1;
+the signer and a companion. There are three message kinds in v2;
 each is a CBOR map, gzip-compressed, and then carried across the
 air gap via the multipart QR transport described in
 [`qr-transport.md`](qr-transport.md).
+
+> **v2 schema highlights** (cumulative changes from v1):
+>
+> - Per-input `merklePath` field removed — the BRC-62 BEEF blob
+>   already carries the BRC-74 BUMP path attached to the prior tx,
+>   so the standalone field was redundant.
+> - `unsigned_proposal.headerAnchors` (a trusted `height → root`
+>   map) replaced with `checkpointHeight` + `headers` (a raw,
+>   PoW-validated header chain). See [`headers.md`](headers.md).
+> - `signed_tx.rawHex` + `signed_tx.txid` replaced with a single
+>   `atomicBeef` field carrying BRC-95 Atomic BEEF. The TXID is
+>   declared inside the Atomic BEEF wrapper itself.
+> - `v` bumped from `1` to `2`. v1 envelopes are intentionally
+>   rejected by v2 implementations so out-of-sync producers fail
+>   loudly.
 
 ## 1. Outer framing
 
@@ -27,8 +42,9 @@ A decoder MUST:
 
 1. Validate the gzip header before attempting CBOR.
 2. Reject any payload whose decompressed CBOR is not a top-level map.
-3. Reject any payload whose `v` integer is not `1` (the current
-   version constant).
+3. Reject any payload whose `v` integer is not `2` (the current
+   version constant). v1 producers must be upgraded; the v2
+   reference implementations do not silently accept stale envelopes.
 4. Reject any payload whose `kind` string is not one of the values
    in [§2](#2-message-kinds).
 
@@ -52,10 +68,10 @@ is **not** required for interop:
 - **Map keys are short text strings.** All keys are ASCII; none start
   with `_` or contain whitespace.
 - **`bytes` fields are major type 2**, not major-type-3 hex strings.
-  The single exception is `rawHex` and `txid` in `signed_tx`, where
-  the value is the hex-string form of an already-public on-chain tx
-  (those fields are text strings for human-readable QR debugging).
-- **Integers fit in 64 bits.** A v1 implementation MAY normalize
+  The hex-string variants v1 used in `signed_tx.rawHex` /
+  `signed_tx.txid` were dropped in v2; the entire signed-tx payload
+  is a single binary `atomicBeef` field now (see §5).
+- **Integers fit in 64 bits.** A v2 implementation MAY normalize
   numeric fields to safe-integer range; CBOR's bignum (major type 6
   tag 2/3) is not used. Satoshi amounts (`sats`, `feeRate`) fit
   comfortably in 53 bits.
@@ -86,7 +102,7 @@ Every envelope's outer map has two universally-required keys:
 
 | Key    | CBOR type   | Value                       |
 | ------ | ----------- | --------------------------- |
-| `v`    | uint        | `1` (current version).      |
+| `v`    | uint        | `2` (current version).      |
 | `kind` | text string | one of `"xpub"`, `"tx"`, `"signed"`. |
 
 The remaining keys are kind-specific.
@@ -99,7 +115,7 @@ wallet's addresses and start querying balances.
 
 ```
 {
-    "v":     1,
+    "v":     2,
     "kind":  "xpub",
     "xpub":  <text string>,    // Base58Check serialized BIP32 xpub at the path below
     "path":  <text string>,    // BIP44 account path, e.g. "m/44'/236'/0'"
@@ -117,7 +133,7 @@ Constraints:
   envelopes.
 - `path` is a BIP44 account path of the form `m/44'/<coin>'/<account>'`.
   The signer surfaces this so the companion can render path metadata;
-  in v1 the signer rejects paths outside this shape.
+  in v2 the signer rejects paths outside this shape.
 - `label` is informational. The companion MAY rename a wallet locally
   before persisting it; the signer's label is treated as a default,
   not authoritative metadata.
@@ -130,8 +146,9 @@ Constraints:
     `0x00`, testnet uses `0x6F`),
   - selecting its WhatsOnChain (or equivalent) endpoint
     (mainnet: `…/v1/bsv/main`, testnet: `…/v1/bsv/test`).
-  Pre-v1.1 envelopes lack this field; the companion MUST treat their
-  absence as `"main"` to avoid breaking existing pairings.
+  Older envelopes (pre-multinetwork) lack this field; the companion
+  MUST treat its absence as `"main"` to avoid breaking existing
+  pairings.
 
 A companion seeing two distinct `xpub_export` envelopes with the same
 `fp` and `path` MUST treat them as the same wallet (e.g., re-pairing
@@ -148,16 +165,17 @@ then sign it.
 
 ```
 {
-    "v":               1,
-    "kind":            "tx",
-    "walletFp":        <bytes, length 4>,    // routes to the wallet that must sign
-    "inputs":          [ <ProposalInput>, ... ],   // non-empty
-    "outputs":         [ <ProposalOutput>, ... ],  // non-empty
-    "changeIndex":     <uint>,               // index into outputs[] of the change output
-    "changeDerivation":[ <uint>, <uint> ],   // [branch, index] for change re-derivation
-    "feeRate":         <uint>,               // sats per 1000 bytes (advisory)
-    "locktime":        <uint>,               // optional; default 0
-    "headerAnchors":   { <uint>: <bytes, length 32>, ... }   // optional; height → root
+    "v":                2,
+    "kind":             "tx",
+    "walletFp":         <bytes, length 4>,    // routes to the wallet that must sign
+    "inputs":           [ <ProposalInput>, ... ],   // non-empty
+    "outputs":          [ <ProposalOutput>, ... ],  // non-empty
+    "changeIndex":      <uint>,               // index into outputs[] of the change output
+    "changeDerivation": [ <uint>, <uint> ],   // [branch, index] for change re-derivation
+    "feeRate":          <uint>,               // sats per 1000 bytes (advisory)
+    "locktime":         <uint>,               // optional; default 0
+    "checkpointHeight": <uint>,               // height of headers[0]'s parent (see §4.4)
+    "headers":          [ <bytes, length 80>, ... ]   // contiguous BSV headers above the checkpoint
 }
 ```
 
@@ -168,18 +186,14 @@ then sign it.
     "txid":       <text string, 64 lowercase hex chars>,
     "vout":       <uint>,
     "sats":       <uint>,           // the claimed satoshi value at vout
-    "beef":       <bytes>,           // BSV BEEF carrying the prior tx + Merkle path
-    "merklePath": <bytes>,           // standalone binary Merkle path
+    "beef":       <bytes>,           // BRC-62 BEEF carrying the prior tx + BRC-74 BUMP path
     "derivation": [ <uint>, <uint> ] // [branch, index] for the input's signing key
 }
 ```
 
-`beef` and `merklePath` byte serializations are defined in
-[`spv.md`](spv.md). The two fields are **partly redundant** in v1
-because `beef` already carries the Merkle path attached to the prior
-tx; we keep both because some signers will only re-implement one
-parser (and because the Pi-side reference implementation cross-checks
-them as a sanity test).
+`beef` byte serialization is defined in [`spv.md`](spv.md). The
+embedded BRC-74 BUMP path is the only Merkle proof carried in v2 —
+the v1 standalone `merklePath` field was redundant and was removed.
 
 The `sats` value is a claim by the companion; the signer MUST
 re-derive the real value from the prior tx in `beef` and reject any
@@ -194,7 +208,7 @@ mismatch.
 }
 ```
 
-In v1, every `script` MUST be a P2PKH locking script (see
+In v2, every `script` MUST be a P2PKH locking script (see
 [`derivation.md`](derivation.md) §3.1). Signers MAY refuse to sign
 proposals containing non-P2PKH outputs and surface the reason to the
 user.
@@ -208,29 +222,42 @@ output's `script` byte-for-byte, the signer MUST abort. This is the
 core "you cannot trick me into paying my change to the wrong place"
 check.
 
-A v1 proposal MUST contain at least one change output. The reference
+A v2 proposal MUST contain at least one change output. The reference
 companion folds change below the 546-sat dust threshold into the
 miner fee, but as long as the proposal carries an explicit change
 output the signer will accept it. A future protocol revision may
 introduce an explicit no-change marker; until then, build with
 change.
 
-### 4.4 `headerAnchors`
+### 4.4 `checkpointHeight` + `headers`
 
-A CBOR map from **block height** (uint) to **block Merkle root**
-(`bytes`, exactly 32 bytes, big-endian display form — the same byte
-order that block explorers print). Each anchor declares "this is
-the Merkle root the user has accepted as canonical for this height".
+`headers` is a CBOR array of raw 80-byte BSV block headers (BRC-67
+§3 "Block Header Format"). The chain MUST be:
 
-Every input's Merkle path MUST resolve to a root that's present in
-`headerAnchors` at the path's `block_height`. The signer SHOULD
-display each `(height, root)` pair to the user before signing,
-because a colluding companion + WhatsOnChain endpoint cannot lie to
-the signer about a root the user has just read on the bonnet screen.
+- non-empty,
+- contiguous (each header's `prevHash` equals the double-SHA256 of
+  the previous element),
+- linked back to a checkpoint the **signer** trusts: `headers[0]`'s
+  `prevHash` MUST equal the double-SHA256 of the firmware-pinned
+  header at `checkpointHeight`,
+- proof-of-work valid (each header's double-SHA256 ≤ the target
+  encoded by its `bits` field).
 
-`headerAnchors` MAY be empty only when the proposal has zero inputs,
-which is itself prohibited in v1; a v1 signer therefore SHOULD
-require at least one anchor.
+`checkpointHeight` is the height of that pinned predecessor (so
+`headers[0]` is at height `checkpointHeight + 1`).
+
+Every input's BUMP path inside `beef` MUST resolve to a Merkle root
+that exists in this chain at the BUMP's declared `block_height`,
+*and* the input's height must be at least `MIN_CONFIRMATION_DEPTH`
+blocks below the chain tip (6 in v2). The signer is responsible for
+this enforcement; see [`headers.md`](headers.md) and
+[`spv.md`](spv.md). The companion never tells the signer "trust this
+root" — it ships raw headers and the signer re-runs the PoW math on
+device.
+
+The signer's user-facing summary SHOULD render the header chain's
+height range and tip hash before prompting to sign so the human
+operator can spot a wildly stale or malformed chain.
 
 ## 5. `signed_tx` (`kind = "signed"`)
 
@@ -238,34 +265,49 @@ Direction: **signer → companion**. Returned after a successful sign.
 
 ```
 {
-    "v":        1,
-    "kind":     "signed",
-    "walletFp": <bytes, length 4>,    // MUST equal the proposal's walletFp
-    "rawHex":   <text string>,        // raw signed tx as hex
-    "txid":     <text string, 64 lowercase hex chars>
+    "v":          2,
+    "kind":       "signed",
+    "walletFp":   <bytes, length 4>,    // MUST equal the proposal's walletFp
+    "atomicBeef": <bytes>               // BRC-95 Atomic BEEF for the new tx
 }
 ```
+
+The `atomicBeef` payload follows BRC-95 (Atomic BEEF):
+
+- a 4-byte magic `01 01 01 01` identifying Atomic BEEF,
+- a 32-byte little-endian *subject* TXID,
+- a regular BRC-62 BEEF blob whose final transaction is the subject
+  TX itself, with input proofs/parents resolved per BRC-62.
+
+The signer constructs the Atomic BEEF from the just-signed tx plus
+the BEEF blobs it already verified for each input, so the resulting
+envelope is fully self-describing for any downstream broadcaster or
+recipient.
 
 A companion broadcasting this transaction SHOULD verify, before
 calling its broadcast endpoint:
 
 1. `walletFp` equals the wallet it expected to sign.
-2. `txid` re-computes correctly from `rawHex` (double-SHA256, byte
-   reverse). If the broadcaster echoes back a different txid than
-   the signer claimed, treat that as a malleability red flag and
-   warn the user — the reference companion does this.
+2. The Atomic BEEF magic + TXID parse cleanly, and the embedded
+   subject TX matches the headline TXID. If the broadcaster echoes
+   back a different txid than the Atomic BEEF declares, treat that
+   as a malleability red flag and warn the user — the reference
+   companion does this.
 
 ## 6. Worked example
 
-`tests/fixtures/proposal_01.cbor` is a canonical
+`tests/fixtures/proposal_01.cbor` is a canonical v2
 `unsigned_proposal` envelope for the BIP39 mnemonic in
 [`derivation.md`](derivation.md) §6. The companion metadata file
 `tests/fixtures/proposal_01.json` reports the addresses, amounts,
-block height, and Merkle root involved.
+checkpoint height, and tip-block hash involved; the embedded BUMP
+inside each input's `beef` is what the verifier actually checks
+against the bundled header chain.
 
 `tests/fixtures/proposal_01_decoded.json` (generated by
 `scripts/dump_decoded_envelope.py`) lists every CBOR field, its
 type, length, and either its scalar value or a hex-encoded sample of
-the first/last bytes of binary fields. Use it as a structural
-reference when implementing a decoder. See
+the first/last bytes of binary fields, including the new
+`checkpointHeight` integer and the `headers` array. Use it as a
+structural reference when implementing a decoder. See
 [`conformance.md`](conformance.md) for details.

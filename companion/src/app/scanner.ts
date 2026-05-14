@@ -312,11 +312,13 @@ export function mountScannerPage(root: HTMLElement): () => void {
       env.outputs.forEach((o, idx) => {
         lines.push(`outputs[${idx}]: ${o.sats} sats → ${o.scriptHex}`);
       });
-      if (env.headerAnchors.size > 0) {
-        for (const [h, r] of env.headerAnchors) {
-          lines.push(`headerAnchor[${h}]: ${bytesToHex(r)}`);
-        }
-      }
+      lines.push(
+        `checkpointHeight: ${env.checkpointHeight}`,
+        `headers:          ${env.headers.length} × 80B ` +
+          `(heights ${env.checkpointHeight + 1}..${
+            env.checkpointHeight + env.headers.length
+          })`,
+      );
     } else {
       // signed_tx envelope. The BRC-95 header carries the subject TXID
       // directly; we surface the inner BEEF body length as a sanity hint.

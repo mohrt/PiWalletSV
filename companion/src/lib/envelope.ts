@@ -115,8 +115,21 @@ export interface UnsignedProposalT {
   changeDerivation: [number, number];
   feeRate: number;
   locktime: number;
-  /** height → 32-byte merkle root; the Pi cross-checks every input's path. */
-  headerAnchors: Map<number, Uint8Array>;
+  /**
+   * Height of the firmware checkpoint the ``headers`` chain links
+   * back to. The first entry in ``headers`` MUST live at
+   * ``checkpointHeight + 1``; the Pi rejects the proposal otherwise.
+   * The companion picks this height from
+   * {@link "./headers.js".checkpointFor}.
+   */
+  checkpointHeight: number;
+  /**
+   * Contiguous list of 80-byte headers in ascending height order,
+   * starting at ``checkpointHeight + 1``. The Pi PoW-validates this
+   * chain on receipt and uses the resulting per-height merkle roots
+   * to verify each input's BEEF Merkle path.
+   */
+  headers: Uint8Array[];
 }
 
 export interface SignedTxT {
@@ -221,7 +234,8 @@ function envelopeToCborBody(env: Envelope): Map<string, unknown> {
     m.set("changeDerivation", [...env.changeDerivation]);
     m.set("feeRate", env.feeRate);
     m.set("locktime", env.locktime);
-    m.set("headerAnchors", env.headerAnchors);
+    m.set("checkpointHeight", env.checkpointHeight);
+    m.set("headers", env.headers);
     return m;
   }
   // KIND_SIGNED
@@ -371,6 +385,8 @@ function parseProposal(body: CborMap): UnsignedProposalT {
       "changeIndex",
       "changeDerivation",
       "feeRate",
+      "checkpointHeight",
+      "headers",
     ],
     "unsigned_proposal",
   );
@@ -409,32 +425,32 @@ function parseProposal(body: CborMap): UnsignedProposalT {
     ? requireNumber(body, "locktime", "unsigned_proposal")
     : 0;
 
-  const headerAnchors = new Map<number, Uint8Array>();
-  const anchorsRaw = body.get("headerAnchors");
-  if (anchorsRaw !== undefined && anchorsRaw !== null) {
-    if (!isCborMap(anchorsRaw)) {
+  const checkpointHeight = requireNumber(
+    body,
+    "checkpointHeight",
+    "unsigned_proposal",
+  );
+  if (!Number.isInteger(checkpointHeight) || checkpointHeight < 0) {
+    throw new EnvelopeError(
+      `unsigned_proposal: checkpointHeight ${checkpointHeight} must be a non-negative integer`,
+    );
+  }
+
+  const headersRaw = body.get("headers");
+  if (!Array.isArray(headersRaw)) {
+    throw new EnvelopeError(
+      "unsigned_proposal: 'headers' must be a list of 80-byte byte strings",
+    );
+  }
+  const headers: Uint8Array[] = headersRaw.map((h, idx) => {
+    if (!(h instanceof Uint8Array) || h.length !== 80) {
+      const len = h instanceof Uint8Array ? h.length : "n/a";
       throw new EnvelopeError(
-        "unsigned_proposal: 'headerAnchors' must be a map of height → 32 bytes",
+        `unsigned_proposal: headers[${idx}] must be 80 bytes, got ${len}`,
       );
     }
-    for (const [h, r] of anchorsRaw) {
-      const height =
-        typeof h === "number"
-          ? h
-          : typeof h === "bigint"
-            ? Number(h)
-            : Number.NaN;
-      if (!Number.isInteger(height)) {
-        throw new EnvelopeError(
-          `headerAnchors: keys must be integers, got ${typeof h}`,
-        );
-      }
-      if (!(r instanceof Uint8Array) || r.length !== 32) {
-        throw new EnvelopeError(`headerAnchors[${height}] must be 32 bytes`);
-      }
-      headerAnchors.set(height, new Uint8Array(r));
-    }
-  }
+    return new Uint8Array(h);
+  });
 
   return {
     kind: KIND_PROPOSAL,
@@ -445,7 +461,8 @@ function parseProposal(body: CborMap): UnsignedProposalT {
     changeDerivation,
     feeRate,
     locktime,
-    headerAnchors,
+    checkpointHeight,
+    headers,
   };
 }
 

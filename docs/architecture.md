@@ -19,20 +19,22 @@ flowchart TB
     direction TB
     seed[("BIP39 seed<br/>encrypted vault")]
     decrypt["unlock_vault<br/>(PIN → scrypt → KEK → DEK → xprv)"]
-    verify["verify_proposal()<br/>BEEF + Merkle + anchors<br/>+ derivation match<br/>+ change re-derive<br/>+ value conservation"]
-    sign["sign_transaction()"]
+    verify["verify_proposal()<br/>BEEF + BUMP path<br/>+ PoW-valid header chain<br/>+ 6-conf depth<br/>+ derivation match<br/>+ change re-derive<br/>+ value conservation"]
+    sign["sign_transaction()<br/>→ Atomic BEEF (BRC-95)"]
     seed --> decrypt --> verify --> sign
   end
 
   subgraph online["Online companion (PWA)"]
     direction TB
     backend[("WhatsOnChain<br/>or alternative<br/>block explorer")]
-    scan["UTXO scan<br/>(gap-limit 20)"]
+    scan["UTXO scan<br/>(gap-limit 20)<br/>+ receive-side SPV"]
     select["greedy coin selection"]
-    proof["proof fetcher<br/>(TSC + header)"]
-    build["build unsigned_proposal"]
-    bcast["broadcast"]
+    proof["proof fetcher<br/>(TSC + headers)"]
+    chain["validated header chain<br/>(IndexedDB cache)"]
+    build["build unsigned_proposal<br/>(+ checkpointHeight + headers)"]
+    bcast["broadcast (Atomic BEEF)"]
     backend --> scan --> select --> proof --> build
+    backend --> chain --> build
     bcast --> backend
   end
 
@@ -75,13 +77,16 @@ to a tampered backend. So the cold piece can't just believe what
 the online piece tells it. It has to verify every claim against
 something the user has confirmed.
 
-That "something the user has confirmed" is, ultimately, the user
-reading a block height + Merkle-root prefix off the bonnet screen
-before signing. Every other check (BEEF parse, Merkle root
-recomputation, derivation match, change re-derivation, value
-conservation) chains off that visual confirmation. See
-[SPV requirements](protocol/spv.md) §1 for the exact rules and
-§7 for the threat model.
+That "something the user has confirmed" is, ultimately, a chain of
+proof-of-work the **Pi itself** validates from a firmware-pinned
+checkpoint up through every header the companion ships. Every other
+check (BEEF parse, Merkle root recomputation, 6-confirmation depth,
+derivation match, change re-derivation, value conservation) chains
+off that on-device verdict. See
+[SPV requirements](protocol/spv.md) §1 for the exact rules,
+[Header chains](protocol/headers.md) for the PoW + checkpoint logic,
+and [SPV §"Threat model"](protocol/spv.md#8-threat-model-summary)
+for the threat model.
 
 ## 3. The data flow, walked through
 
@@ -106,45 +111,66 @@ A real send looks like this:
 3. **Send.**
     - User taps "Send" on the wallet detail page, enters a
       recipient address and amount.
-    - Companion runs a gap-limit UTXO scan (cached in IndexedDB,
-      with a "Refresh" button to re-scan).
-    - Greedy coin selection picks UTXOs and computes the fee
-      under a P2PKH byte model.
+    - Companion runs a gap-limit UTXO scan and immediately runs
+      **receive-side SPV** on every confirmed UTXO: it pulls the
+      relevant header range from the backend, validates the chain's
+      PoW from a recent firmware checkpoint, fetches each UTXO's
+      TSC Merkle proof, and folds it against the validated chain's
+      Merkle roots. UTXOs with a passing proof get an
+      `SPV ✓` badge in the balance view; UTXOs that fail are
+      excluded from spendable totals.
+    - Greedy coin selection picks from the SPV-verified UTXOs and
+      computes the fee under a P2PKH byte model.
     - For each selected UTXO, the proof fetcher calls
-      `/tx/<txid>/proof/tsc` and `/block/<hash>/header` on the
-      backend, translates the TSC proof into a
-      `MerklePath` (`@bsv/sdk` format), and assembles a BEEF blob
-      from the prior transaction + path.
+      `/tx/<txid>/proof/tsc` on the backend, translates the TSC
+      proof into a `MerklePath` (`@bsv/sdk` format), and assembles
+      a BRC-62 BEEF blob whose embedded BRC-74 BUMP path covers
+      the prior tx.
+    - In parallel, the companion's header library
+      (`companion/src/lib/headers.ts`) builds a contiguous chain
+      from the network's recent firmware checkpoint up to at least
+      6 blocks past the deepest input, validating PoW per header
+      and caching results in IndexedDB to amortise the cost.
     - The proposal builder packages `{walletFp, inputs, outputs,
       changeIndex, changeDerivation, feeRate, locktime,
-      headerAnchors}` into an `unsigned_proposal` envelope,
-      gzips + CBORs it, frames it as PW1, and animates it on a
-      canvas.
+      checkpointHeight, headers}` into an `unsigned_proposal`
+      envelope, gzips + CBORs it, frames it as PW1, and animates
+      it on a canvas.
 
 4. **Verify and sign (Pi).**
     - User points the Pi's camera at the animated QR canvas.
     - `piwallet qr scan-camera` collects frames until the PW1
       assembler completes.
-    - `verify_proposal()` runs all eight rules from
-      [SPV requirements](protocol/spv.md) §1.
+    - `verify_proposal()` runs the rules from
+      [SPV requirements](protocol/spv.md) §1: parse + validate the
+      bundled header chain via
+      `piwallet.core.headers.verify_chain` against the network's
+      firmware checkpoint, then for every input parse the BEEF,
+      walk the BUMP path to a Merkle root that the **validated**
+      chain pins at the BUMP's declared height, enforce the 6-
+      confirmation depth rule, re-derive the signing key, check
+      value conservation, and re-derive the change script.
     - If anything fails, the bonnet shows a one-line reason and
       the signing path exits. No partial state is kept.
     - If everything passes, the bonnet shows the recipient
-      address, amount, fee, and the `(height, merkle-root-prefix)`
-      anchors. The user holds A to confirm.
+      address, amount, fee, the chain's height range and tip-hash
+      prefix, and per-input depth. The user holds A to confirm.
     - `sign_transaction()` derives the per-input signing keys from
       the (still-unlocked) account xprv, signs each input, builds
-      the raw tx, computes the txid, and returns a `signed_tx`
-      envelope.
+      the raw tx, then wraps the tx + each input's BEEF as a
+      single **BRC-95 Atomic BEEF** blob, returned in the
+      `signed_tx` envelope.
 
 5. **Broadcast.**
     - Companion's `/#/scan` page assembles the `signed_tx`,
       verifies the `walletFp` matches the proposal it sent,
-      displays the txid + amount, and offers a "Broadcast" button.
+      splits the Atomic BEEF wrapper to recover the subject TXID
+      + raw tx, displays the txid + amount, and offers a
+      "Broadcast" button.
     - On click, the companion `POST`s the raw hex to the chosen
       block-explorer's broadcast endpoint, surfaces the returned
-      txid, and warns if it differs from the one the Pi signed
-      (a hint at tx malleability).
+      txid, and warns if it differs from the one the Atomic BEEF
+      wrapper declared (a hint at tx malleability).
 
 The user never sees a master key, never enters a password into a
 networked machine, and never authorises a payment without seeing the
@@ -164,8 +190,10 @@ A useful way to summarise:
 | Account xpub                   | disk (Pi) + IndexedDB (companion) | yes |
 | Receive / change addresses     | derived on demand | derived on demand |
 | UTXO snapshot                  | derived per proposal | cached in IndexedDB |
-| Block headers / Merkle proofs  | per-proposal, in envelope | fetched from backend |
-| Signed transactions            | yes (after sign) | yes (received via QR) |
+| Firmware header checkpoints    | hard-coded in Pi binary, network-keyed | hard-coded mirror in PWA bundle |
+| Block headers (raw 80-byte)    | per-proposal, validated against checkpoint | fetched + cached, validated before use |
+| Merkle proofs (BUMP, embedded in BEEF) | per-proposal, validated against on-device chain | fetched, cross-checked vs. validated chain |
+| Signed transactions (Atomic BEEF) | yes (after sign) | yes (received via QR) |
 
 The companion holds **public data only**. Its IndexedDB can be
 wiped without losing funds. The Pi's vault is the single source of
@@ -180,10 +208,13 @@ device is the recovery channel.
 │   ├── core/
 │   │   ├── mnemonic.py           # BIP39 generate / validate / to_seed
 │   │   ├── derivation.py         # BIP32 + BIP44 + P2PKH addresses
-│   │   ├── envelope.py           # CBOR + gzip codec (3 message kinds)
+│   │   ├── envelope.py           # CBOR + gzip codec (3 message kinds, v2)
 │   │   ├── vault.py              # scrypt → KEK → DEK → AES-GCM xprv
-│   │   ├── verify.py             # BEEF + Merkle + anchor + derivation
-│   │   └── sign.py               # change re-derive + sign + raw tx
+│   │   ├── headers.py            # parse, hash, bits→target, verify_chain
+│   │   ├── checkpoints.py        # hardcoded mainnet+testnet checkpoints
+│   │   ├── atomic_beef.py        # BRC-95 Atomic BEEF wrap / split
+│   │   ├── verify.py             # chain validate + BUMP + depth + derivation
+│   │   └── sign.py               # change re-derive + sign + Atomic BEEF
 │   ├── qr/multipart.py           # PW1 framing + assembler
 │   ├── ui/                       # bonnet display + joystick (phase 2)
 │   └── cli.py                    # piwallet entry point
@@ -191,14 +222,16 @@ device is the recovery channel.
 ├── companion/                    # online half (TypeScript + Vite + PWA)
 │   └── src/
 │       ├── lib/
-│       │   ├── envelope.ts       # CBOR + gzip codec (mirrors Python)
+│       │   ├── envelope.ts       # CBOR + gzip codec (mirrors Python, v2)
 │       │   ├── pw1.ts            # PW1 framing
 │       │   ├── derive.ts         # BIP32 + P2PKH (scure + noble)
 │       │   ├── woc.ts            # block-explorer client (injectable fetch)
+│       │   ├── headers.ts        # PoW rules + IndexedDB header cache
+│       │   ├── spv.ts            # receive-side SPV for UTXOs
 │       │   ├── utxo.ts           # gap-limit scanner
 │       │   ├── coin-select.ts    # greedy P2PKH coin selection + dust
 │       │   ├── proof-fetcher.ts  # TSC → MerklePath + BEEF assembly
-│       │   ├── proposal.ts       # build_unsigned_proposal
+│       │   ├── proposal.ts       # build_unsigned_proposal (+ headers)
 │       │   ├── wallets.ts        # IndexedDB store
 │       │   └── terms.ts          # disclaimer acceptance state
 │       └── app/                  # UI pages: scan / wallets / detail / loop
@@ -219,7 +252,10 @@ device is the recovery channel.
 └── docs/
     ├── index.md getting-started.md architecture.md
     ├── user-manual.md develop.md security.md disclaimer.md
-    └── protocol/                 # interop spec (v1)
+    ├── brc-alignment.md          # which BRCs we conform to (and don't)
+    └── protocol/                 # interop spec (v2)
+        ├── envelopes.md spv.md headers.md
+        └── ...
 ```
 
 The Python and TypeScript halves share **only** the bytes of the
@@ -276,10 +312,11 @@ and not yet shipped.
 ## 8. Versioning and stability
 
 - **Protocol version**: tracked in the envelope's `v` field and the
-  QR magic. v1 is the current line. v2 would land in
-  `docs/protocol/v2/` and run alongside v1 during a deprecation
-  window. See [Protocol overview](protocol/README.md) §"Stability
-  promise."
+  QR magic. v2 is the current line; v1 producers are intentionally
+  rejected (no compat shim) so out-of-sync producers fail loudly.
+  A future v3 would land in `docs/protocol/v3/` and run alongside v2
+  during a deprecation window. See
+  [Protocol overview](protocol/README.md) §"Stability promise."
 - **Software version**: tracked in `pyproject.toml`'s `project.version`
   and `companion/package.json`'s `version`. The two are kept in
   lock-step for releases.
@@ -291,9 +328,9 @@ and not yet shipped.
 ## 9. What this architecture does not solve
 
 - **A user who confirms a transaction without reading the bonnet
-  screen.** The Pi displays the recipient, amount, fee, and anchor
-  prefixes for exactly this reason — they're only useful if the
-  human looks.
+  screen.** The Pi displays the recipient, amount, fee, header
+  chain range, and tip-hash prefix for exactly this reason — they
+  are only useful if the human looks.
 - **A user who entered a wrong address on the companion in the
   first place** (e.g., the companion got phished into displaying a
   swap-replaced address during a copy-paste). The signer can only

@@ -70,6 +70,11 @@ animated QR codes. The Pi never touches a network.
     requirements that any compatible companion (or signer) must
     follow.
 
+-   :material-history: __[Prior art](prior-art.md)__
+
+    How PiWalletSV's design choices compare to existing air-gapped
+    BSV setups, and what that comparison tells us about future scope.
+
 </div>
 
 ## Two halves

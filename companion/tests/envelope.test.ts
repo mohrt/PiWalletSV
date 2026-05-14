@@ -56,6 +56,10 @@ function makeXpub(): XpubExportT {
 }
 
 function makeProposal(): UnsignedProposalT {
+  // Synthetic single-header chain. The bytes below do not pass PoW;
+  // the codec round-trip test exercises field shape only.
+  const stubHeader = new Uint8Array(80);
+  stubHeader[0] = 0x01;
   return {
     kind: KIND_PROPOSAL,
     walletFp: hexToBytes("cf987d8c"),
@@ -76,9 +80,8 @@ function makeProposal(): UnsignedProposalT {
     changeDerivation: [1, 0],
     feeRate: 500,
     locktime: 0,
-    headerAnchors: new Map<number, Uint8Array>([
-      [812345, new Uint8Array(32).fill(0x42)],
-    ]),
+    checkpointHeight: 812345,
+    headers: [stubHeader],
   };
 }
 
@@ -121,13 +124,16 @@ describe("envelope codec", () => {
     const totalOut = env.outputs.reduce((acc, o) => acc + o.sats, 0);
     expect(totalOut).toBe(meta.pay_amount_sats + meta.change_amount_sats);
 
-    // Legacy `headerAnchors` was dropped from the wire format in
-    // Phase 2; the companion codec on this branch still surfaces a
-    // (now-always-empty) Map for compatibility until the Phase-3
-    // `headers` rewire lands. Reference `meta` so the destructure
-    // doesn't drift.
-    expect(env.headerAnchors.size).toBe(0);
-    expect(meta.block_height).toBeGreaterThan(0);
+    // v2 envelopes carry a raw header chain rooted at a known
+    // checkpoint height; the legacy `headerAnchors` map is gone.
+    expect(env.checkpointHeight).toBeGreaterThanOrEqual(0);
+    expect(env.headers.length).toBeGreaterThanOrEqual(1);
+    for (const h of env.headers) expect(h.byteLength).toBe(80);
+    // Sanity: the deepest input height must fit within the chain
+    // window the proposal ships, so the Pi-side verifier does not
+    // reject before even running PoW.
+    const tip = env.checkpointHeight + env.headers.length;
+    expect(tip).toBeGreaterThanOrEqual(meta.block_height);
     expect(meta.merkle_root_hex).toMatch(/^[0-9a-f]{64}$/);
   });
 
@@ -207,7 +213,7 @@ describe("envelope codec", () => {
     await expect(decodeEnvelope(blob)).rejects.toThrow(/net|main|test/i);
   });
 
-  it("round-trips an unsigned_proposal (incl. headerAnchors map)", async () => {
+  it("round-trips an unsigned_proposal (incl. checkpoint + headers chain)", async () => {
     const src = makeProposal();
     const blob = await encodeEnvelope(src);
     const round = await decodeEnvelope(blob);
@@ -225,12 +231,13 @@ describe("envelope codec", () => {
     expect(round.changeDerivation).toEqual(src.changeDerivation);
     expect(round.feeRate).toBe(src.feeRate);
     expect(round.locktime).toBe(src.locktime);
-    expect(round.headerAnchors.size).toBe(1);
-    const a = round.headerAnchors.get(812345);
-    expect(a).toBeDefined();
-    expect(Array.from(a!)).toEqual(
-      Array.from(src.headerAnchors.get(812345)!),
-    );
+    expect(round.checkpointHeight).toBe(src.checkpointHeight);
+    expect(round.headers).toHaveLength(src.headers.length);
+    for (let i = 0; i < src.headers.length; i++) {
+      expect(Array.from(round.headers[i])).toEqual(
+        Array.from(src.headers[i]),
+      );
+    }
   });
 
   it("round-trips a signed_tx (Atomic BEEF payload)", async () => {

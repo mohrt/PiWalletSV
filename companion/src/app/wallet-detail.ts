@@ -23,6 +23,16 @@ import { CoinSelectError, selectUtxosGreedy } from "../lib/coin-select.js";
 import { encodeMultipartLines } from "../pw1.js";
 import { ProofFetchError, fetchInputProof } from "../lib/proof-fetcher.js";
 import {
+  HeaderError,
+  checkpointFor,
+  ensureChain,
+} from "../lib/headers.js";
+import {
+  SpvVerifyError,
+  type SpvVerificationSummary,
+  verifyUtxoSpv,
+} from "../lib/spv.js";
+import {
   ProposalBuilderError,
   buildUnsignedProposal,
 } from "../lib/proposal.js";
@@ -105,6 +115,12 @@ export function mountWalletDetailPage(
   let scanRunning = false;
   let woc: WocClient | null = null;
   let sendBusy = false;
+  // Transient — recomputed on every refresh, not persisted. The
+  // validated header cache (IndexedDB) is what amortizes the heavy
+  // lifting; the per-UTXO verdicts live only in this page's lifetime
+  // because they depend on the current firmware checkpoint, which a
+  // rotation could invalidate.
+  let spvSummary: SpvVerificationSummary | null = null;
   let proposalFrames: string[] | null = null;
   let proposalFrameIdx = 0;
   let proposalLastFrameAt = 0;
@@ -390,17 +406,49 @@ export function mountWalletDetailPage(
     }
     $sats.textContent = formatSats(scan.totalSats);
     $bsv.textContent = formatBsv(scan.totalSats);
+    const spvLabel = spvSummary
+      ? ` · validated to block ${
+          spvSummary.chain.checkpoint.height + spvSummary.chain.rawHeaders.length
+        }`
+      : "";
     $meta.textContent =
       `${scan.utxos.length} UTXO${scan.utxos.length === 1 ? "" : "s"} · ` +
       `scanned ${scan.addressesScanned} addresses · ` +
-      `last refreshed ${relativeTimeFrom(scan.at)}`;
+      `last refreshed ${relativeTimeFrom(scan.at)}${spvLabel}`;
 
     // Surface mempool UTXOs as a "pending" pill on the headline figure
     // and (when mixed) a confirmed/pending split sub-line. The data
     // already flows through `WocClient.getUnspentBatch`, which merges
     // confirmed + unconfirmed and tags mempool entries with height 0.
+    //
+    // When SPV verification ran for this snapshot, prefer the
+    // verified/unverified/pending breakdown over the plain
+    // confirmed/pending split — it carries strictly more information
+    // and an "unverified" total of zero (the common case) collapses
+    // back to the same display.
     const split = splitConfirmedPending(scan.utxos);
-    if (split.hasPending) {
+    if (spvSummary) {
+      const showSplit =
+        spvSummary.failedCount > 0 || spvSummary.pendingCount > 0;
+      $badge.hidden = !split.hasPending;
+      $split.hidden = !showSplit;
+      if (showSplit) {
+        const parts: string[] = [
+          `${formatSats(spvSummary.verifiedSats)} verified`,
+        ];
+        if (spvSummary.failedCount > 0) {
+          parts.push(`${formatSats(spvSummary.failedSats)} unverified`);
+        }
+        if (spvSummary.pendingCount > 0) {
+          parts.push(`${formatSats(spvSummary.pendingSats)} pending`);
+        }
+        $split.textContent = parts.join(" · ");
+        $split.classList.toggle(
+          "error",
+          spvSummary.failedCount > 0,
+        );
+      }
+    } else if (split.hasPending) {
       $badge.hidden = false;
       // Tighten copy when *everything* is pending — saying "0
       // confirmed + N pending" reads like noise; a single "pending"
@@ -421,12 +469,40 @@ export function mountWalletDetailPage(
     $details.hidden = scan.utxos.length === 0;
     $count.textContent = String(scan.utxos.length);
 
+    // Index SPV verdicts by `txid:vout` so the per-row render is
+    // O(1). Verdicts only exist for the most recent refresh; an
+    // older snapshot reloaded from IndexedDB renders without
+    // badges (the operator just hits Refresh to revalidate).
+    const verdictByKey = new Map<
+      string,
+      { spvVerified: boolean; spvError?: string; pending: boolean }
+    >();
+    for (const v of spvSummary?.utxos ?? []) {
+      verdictByKey.set(`${v.txid}:${v.vout}`, {
+        spvVerified: v.spvVerified,
+        spvError: v.spvError,
+        pending: v.pending,
+      });
+    }
+
     $list.innerHTML = "";
     for (const u of scan.utxos) {
       const li = document.createElement("li");
       const isPending = u.height === 0;
       li.className = isPending ? "utxo-row pending" : "utxo-row";
       const branchLabel = u.derivation[0] === 0 ? "recv" : "change";
+      const verdict = verdictByKey.get(`${u.txid}:${u.vout}`);
+      let spvBadge = "";
+      if (!isPending && verdict) {
+        if (verdict.spvVerified) {
+          spvBadge = ' · <span class="utxo-spv-tag verified">SPV ✓</span>';
+        } else {
+          spvBadge =
+            ' · <span class="utxo-spv-tag failed" title="' +
+            escapeHtml(verdict.spvError ?? "verification failed") +
+            '">SPV ✗</span>';
+        }
+      }
       li.innerHTML = `
         <div class="utxo-top">
           <code title="${escapeHtml(u.txid)}">${escapeHtml(shortTxid(u.txid))}:${u.vout}</code>
@@ -435,7 +511,7 @@ export function mountWalletDetailPage(
         <div class="muted-line">
           ${branchLabel} m/${u.derivation[0]}/${u.derivation[1]} ·
           ${escapeHtml(u.address)} ·
-          ${isPending ? '<span class="utxo-pending-tag">mempool</span>' : `block ${u.height}`}
+          ${isPending ? '<span class="utxo-pending-tag">mempool</span>' : `block ${u.height}`}${spvBadge}
         </div>
       `;
       $list.appendChild(li);
@@ -445,6 +521,10 @@ export function mountWalletDetailPage(
   async function onRefreshBalance(): Promise<void> {
     if (!wallet || scanRunning) return;
     scanRunning = true;
+    // Drop the previous verdict so a partial failure mid-refresh
+    // doesn't leave stale "SPV ✓" badges on UTXOs that may no longer
+    // be in the new snapshot.
+    spvSummary = null;
     const $refresh = root.querySelector<HTMLButtonElement>("#refreshBalance");
     const $status = root.querySelector<HTMLElement>("#balanceStatus");
     if ($refresh) {
@@ -482,11 +562,42 @@ export function mountWalletDetailPage(
       };
       await setLastScan(wallet.id, snapshot);
       wallet.lastScan = snapshot;
+      // SPV verification step. Failures here do NOT abort the scan
+      // (the UI still wants to show the headline UTXOs), but the
+      // status line surfaces them so the operator knows the displayed
+      // confirmed balance is unverified.
+      if ($status) {
+        $status.textContent =
+          `Verifying SPV proofs for ${result.utxos.length} UTXO(s)…`;
+      }
+      try {
+        spvSummary = await verifyUtxoSpv(
+          result.utxos,
+          woc,
+          wallet.network,
+        );
+      } catch (e) {
+        spvSummary = null;
+        if ($status) {
+          $status.classList.add("error");
+          const msg =
+            e instanceof SpvVerifyError || e instanceof HeaderError
+              ? e.message
+              : (e as Error).message;
+          $status.textContent = `SPV verification skipped: ${msg}`;
+        }
+      }
       renderBalance();
-      if ($status)
+      if ($status && !$status.classList.contains("error")) {
+        const verifiedNote = spvSummary
+          ? ` · SPV ${spvSummary.verifiedCount}/` +
+            `${spvSummary.verifiedCount + spvSummary.failedCount} ` +
+            `verified`
+          : "";
         $status.textContent =
           `Scan complete — ${result.utxos.length} UTXO(s), ` +
-          `${result.addressesScanned} addresses probed.`;
+          `${result.addressesScanned} addresses probed${verifiedNote}.`;
+      }
     } catch (e) {
       if (cancelled) return;
       const msg = e instanceof WocError ? e.message : (e as Error).message;
@@ -576,6 +687,25 @@ export function mountWalletDetailPage(
         proofs.push({ utxo: u, proof });
       }
 
+      // The Pi requires the headers chain to extend at least
+      // MIN_CONFIRMATION_DEPTH (= 6) blocks past the deepest input
+      // before it will sign. Ship a few extra to absorb a same-block
+      // race where WoC and the Pi disagree on the current tip by 1-2.
+      const deepestInputHeight = proofs.reduce(
+        (max, p) => Math.max(max, p.proof.height),
+        0,
+      );
+      const targetTipHeight = deepestInputHeight + 6;
+      $status.textContent =
+        `Validating ${
+          targetTipHeight - checkpointFor(wallet.network).height
+        } block headers from firmware checkpoint…`;
+      const chain = await ensureChain(
+        wallet.network,
+        targetTipHeight,
+        woc,
+      );
+
       // v1 proposals always carry an explicit above-dust change output.
       // selectUtxosGreedy throws if it cannot satisfy that, so by this
       // point selection.changeSats is guaranteed >= dust.
@@ -606,6 +736,8 @@ export function mountWalletDetailPage(
         changeDerivation,
         feeRateSatskb: feeRate,
         locktime: 0,
+        checkpointHeight: chain.checkpoint.height,
+        headers: chain.rawHeaders,
       });
 
       const blob = await encodeEnvelope(envelope);
@@ -639,6 +771,7 @@ export function mountWalletDetailPage(
         e instanceof CoinSelectError ||
         e instanceof ProofFetchError ||
         e instanceof ProposalBuilderError ||
+        e instanceof HeaderError ||
         e instanceof WocError
           ? e.message
           : (e as Error).message;
