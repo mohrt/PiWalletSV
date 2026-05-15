@@ -27,6 +27,16 @@ After=local-fs.target
 # provision-pi.sh — they're irrelevant here, listed only for clarity.
 Conflicts=getty@tty1.service
 
+# Cap restart storms — five failures within 60s probably means the
+# SPI panel cable is loose, not that another retry will help. These
+# directives belong to [Unit], not [Service]; systemd 257+ on Trixie
+# refuses to even queue a unit that has them in [Service] at boot
+# (silent drop with a parser warning), even though `systemctl start`
+# from a TTY still works. Move them up here and the unit resolves
+# correctly during multi-user.target's boot transaction.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
 [Service]
 Type=simple
 User=pwsv
@@ -57,10 +67,6 @@ ExecStart=/opt/piwallet/.venv/bin/piwallet bonnet \
 
 Restart=always
 RestartSec=3
-# Cap restart storms — five failures within 60s probably means the
-# SPI panel cable is loose, not that another retry will help.
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 # ---- hardening ----------------------------------------------------
 #
