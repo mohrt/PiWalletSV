@@ -12,9 +12,10 @@ hide:
 
 # An air-gapped wallet for Bitcoin SV
 
-Built on a Raspberry Pi, a TFT bonnet, and a Pi Camera. Your **seed
-phrase never touches a network**. A small web app on your phone or
-laptop talks to the chain; the Pi just signs.
+Built on a Raspberry Pi, a TFT bonnet, and a Pi Camera. Your **keys
+never leave the device** — no Wi-Fi, no Bluetooth, no Ethernet. A
+small web app on your phone or laptop talks to the chain; the Pi
+just signs.
 
 [Launch wallet ↗]({{ companion_url }}/){ .pwsv-cta }
 [Read the docs](getting-started.md){ .pwsv-cta-secondary }
@@ -187,14 +188,3 @@ device signs anything.
     it deliberately doesn't.
 
 </div>
-
-## Project status
-
-| Phase | Scope | Status |
-| ----- | ----- | ------ |
-| 1 | Offline core (mnemonic, derivation, envelope, vault, verify, sign, CLI) | done |
-| 2 | Pi-side bonnet UX (display, joystick word entry, first-boot disclaimer) | in progress |
-| 3 | Python + TypeScript PW1 multipart transport | done |
-| 4 | Companion web app (pairing, receive, UTXO scan, proposal, broadcast, terms) | done |
-| 7 | Documentation site + protocol spec + v0.1 release | this site |
-| 8 | Enclosure, tamper-evidence, first-boot hardening, signed SD image | planned |
