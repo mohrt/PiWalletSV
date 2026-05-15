@@ -16,6 +16,12 @@ copyright: >
 
 docs_dir: docs
 
+# Files inside docs_dir that should NOT be rendered as standalone
+# pages. Used for include-only fragments referenced by
+# pymdownx.snippets (e.g. the abbreviations glossary).
+exclude_docs: |
+  includes/
+
 theme:
   name: material
   logo: assets/logo.png
@@ -52,6 +58,7 @@ theme:
     code: JetBrains Mono
 
 markdown_extensions:
+  - abbr
   - admonition
   - attr_list
   - def_list
@@ -80,6 +87,11 @@ markdown_extensions:
   - pymdownx.snippets:
       base_path: ["."]
       check_paths: true
+      # Appended to every page after its own content, so the `abbr`
+      # extension picks up the project-wide *[ABBR]: definitions
+      # without having to repeat them in every file.
+      auto_append:
+        - docs/includes/abbreviations.md
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
