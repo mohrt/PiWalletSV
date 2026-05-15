@@ -367,10 +367,12 @@ step_mask_units() {
 
     local unit
     for unit in "${to_mask[@]}"; do
-        # `mask` succeeds on a unit that doesn't exist, but emits a
-        # warning. Skip the unknowns to keep the log clean.
-        if systemctl list-unit-files "$unit" >/dev/null 2>&1 \
-            && systemctl list-unit-files | grep -q "^$unit"; then
+        # `systemctl cat` resolves template instances (getty@tty1
+        # → getty@.service) where `list-unit-files | grep` does
+        # not. Returns 0 if systemd knows the unit, nonzero if the
+        # unit was purged or never existed; either way we won't
+        # spam errors trying to mask something that isn't there.
+        if systemctl cat "$unit" >/dev/null 2>&1; then
             run systemctl mask "$unit" || true
         else
             log "  $unit: not present, skipping"
@@ -460,8 +462,22 @@ step_install_app() {
 
 step_install_unit() {
     log "install systemd unit + journald drop-in"
-    local svc_src="$APP_DIR/$UNIT_SRC_DIR/piwallet-bonnet.service"
-    local jrn_src="$APP_DIR/$UNIT_SRC_DIR/journald-piwallet.conf.example"
+
+    # Read the unit files straight from the source tree when --src
+    # was given. This avoids a chicken-and-egg with dry-run, where
+    # step_install_app's rsync hasn't actually populated /opt yet,
+    # so /opt/piwallet/deploy/systemd/* doesn't exist. When --src
+    # is empty we're on the git-clone path and step_install_app
+    # has already cloned into /opt/piwallet, so reading from there
+    # is fine.
+    local unit_root
+    if [[ -n "$src_dir" ]]; then
+        unit_root="$src_dir/$UNIT_SRC_DIR"
+    else
+        unit_root="$APP_DIR/$UNIT_SRC_DIR"
+    fi
+    local svc_src="$unit_root/piwallet-bonnet.service"
+    local jrn_src="$unit_root/journald-piwallet.conf.example"
 
     [[ -f "$svc_src" ]] || fail "missing $svc_src"
     [[ -f "$jrn_src" ]] || fail "missing $jrn_src"
