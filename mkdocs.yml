@@ -26,6 +26,13 @@ theme:
   name: material
   logo: assets/logo.png
   favicon: assets/favicon.png
+  # Swap the default generic-git fork mark for the GitHub Octocat in
+  # the top-right "Go to repository" button. mkdocs-material does NOT
+  # auto-detect github.com hosts here — without this override the
+  # button renders Font Awesome's plain git icon and reads as "some
+  # git host", not "GitHub".
+  icon:
+    repo: fontawesome/brands/github
   features:
     - navigation.sections
     - navigation.expand
