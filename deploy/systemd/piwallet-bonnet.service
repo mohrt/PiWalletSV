@@ -62,8 +62,18 @@ Environment=PIWALLET_LOG_LEVEL=WARNING
 # invoking user's $HOME. Spelt out here so the unit reads cleanly
 # during ops review and so a moved $HOME doesn't silently relocate
 # the vault.
+#
+# --display st7789 / --input bonnet: refuse to fall back to the
+# headless / fake backends. Without these, missing display extras
+# in the venv (or a missing /dev/spidev*, or a missing /dev/gpiochip*)
+# cause `piwallet bonnet` to start a render loop into HeadlessDisplay
+# + FakeInputBackend and the panel stays dark with no journal trace.
+# Forcing the real backends turns a silent boot-into-blackness into a
+# loud Restart= cycle that an admin can actually see.
 ExecStart=/opt/piwallet/.venv/bin/piwallet bonnet \
-    --vault-path /home/pwsv/.piwallet/vault.bin
+    --vault-path /home/pwsv/.piwallet/vault.bin \
+    --display st7789 \
+    --input bonnet
 
 Restart=always
 RestartSec=3

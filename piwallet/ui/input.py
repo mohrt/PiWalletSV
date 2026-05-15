@@ -29,12 +29,15 @@ debounce thresholds without sleeping; production wires up
 
 from __future__ import annotations
 
+import logging
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, ClassVar
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Types
@@ -359,6 +362,15 @@ def open_input(backend: str = "auto") -> InputBackend:
     if backend == "auto":
         try:
             return BonnetInputBackend()
-        except RuntimeError:
+        except RuntimeError as exc:
+            # Visible at WARNING by default — the production unit
+            # pins --input bonnet to fail loudly instead of running
+            # input-less, but `piwallet bonnet` from a dev laptop
+            # still wants the auto downgrade.
+            logger.warning(
+                "Bonnet GPIO input unavailable, falling back to "
+                "FakeInputBackend: %s",
+                exc,
+            )
             return FakeInputBackend()
     raise ValueError(f"unknown input backend: {backend!r}")

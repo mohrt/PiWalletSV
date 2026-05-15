@@ -26,10 +26,13 @@ Both back ends present the same ``Display`` API.
 from __future__ import annotations
 
 import contextlib
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
 from PIL import Image, ImageDraw
+
+logger = logging.getLogger(__name__)
 
 DISPLAY_WIDTH: int = 240
 DISPLAY_HEIGHT: int = 240
@@ -309,6 +312,18 @@ def open_display(backend: str = "auto") -> Display:
     if backend == "auto":
         try:
             return ST7789Display()
-        except RuntimeError:
+        except RuntimeError as exc:
+            # Visible at WARNING by default — without this, a Pi with
+            # missing display extras boots cleanly into HeadlessDisplay
+            # and the panel stays dark with no journal trace. The
+            # production systemd unit pins --display st7789 to fail
+            # loudly instead, but this branch still exists for the
+            # `piwallet bonnet` CLI on a dev laptop, where the
+            # downgrade is intentional.
+            logger.warning(
+                "ST7789 display unavailable, falling back to "
+                "HeadlessDisplay: %s",
+                exc,
+            )
             return HeadlessDisplay()
     raise ValueError(f"unknown display backend: {backend!r}")

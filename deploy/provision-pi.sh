@@ -85,6 +85,14 @@ readonly APT_INSTALL=(
     rng-tools-debian
     fonts-dejavu-core
     git
+    # Build toolchain for C extensions pulled in by adafruit-blinka:
+    # RPi.GPIO and rpi-ws281x ship sdists only (no Python 3.13 wheels
+    # for aarch64 yet), so pip needs python3-dev headers + a compiler.
+    # Without these, `pip install '.[display]'` fails with "Failed
+    # building wheel for RPi.GPIO" and the bonnet silently falls back
+    # to HeadlessDisplay at boot (panel stays blank, no error visible).
+    python3-dev
+    build-essential
 )
 
 # Packages we PURGE — anything that could touch a radio or speaker.
@@ -457,7 +465,12 @@ step_install_app() {
     # Pinned via --upgrade-strategy only-if-needed so a re-run picks
     # up new requirements without churning unaffected packages.
     run "$APP_VENV/bin/pip" install --upgrade --quiet pip
-    run "$APP_VENV/bin/pip" install --quiet --editable "$APP_DIR"
+    # Install with the [display,camera] extras: the bonnet binds
+    # board/digitalio (adafruit-blinka) for SPI + GPIO on the ST7789
+    # panel, and pyzbar for QR decode in the camera flow. Without
+    # these, ST7789Display() raises ImportError -> open_display("auto")
+    # silently falls back to HeadlessDisplay and the panel stays dark.
+    run "$APP_VENV/bin/pip" install --quiet --editable "${APP_DIR}[display,camera]"
 }
 
 step_install_unit() {
