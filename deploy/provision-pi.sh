@@ -514,7 +514,16 @@ step_swap_off() {
 
 step_rng() {
     log "enable hardware RNG (rngd)"
-    if systemctl list-unit-files rngd.service >/dev/null 2>&1; then
+    # In dry-run we never `apt install rng-tools-debian` for real,
+    # so the unit isn't there yet. Print the intent instead of
+    # warning about a service that the real run will pull in.
+    if [[ $dry_run -eq 1 ]]; then
+        log "  DRY: would enable rngd.service (provided by rng-tools-debian)"
+        return 0
+    fi
+    # `systemctl cat` resolves whether systemd knows the unit at
+    # all; less brittle than `list-unit-files | grep`.
+    if systemctl cat rngd.service >/dev/null 2>&1; then
         run systemctl enable rngd.service || true
     else
         warn "rngd.service not present — HW RNG entropy won't feed kernel pool"
