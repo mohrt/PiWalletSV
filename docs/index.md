@@ -118,10 +118,18 @@ device signs anything.
 
 <div class="grid cards" markdown>
 
--   :material-rocket-launch: __[Get started](getting-started.md)__
+-   :material-sd: __[Download the image](download.md)__
 
-    Bring up the bonnet, install the signer, run the companion in a
-    browser. Start here if you've just got the hardware.
+    The fastest path. Verify the signature, flash to a microSD, boot.
+    The image is a sealed appliance — no SSH, no Wi-Fi, no setup
+    rituals. Pair with the [Flash and first run](build-image.md)
+    guide.
+
+-   :material-rocket-launch: __[Get started from source](getting-started.md)__
+
+    Bring up the bonnet, install the signer from a clone, run the
+    companion in a browser. Start here if you'd rather build the
+    image yourself or hack on the codebase.
 
 -   :material-cellphone-information: __[Companion (live)]({{ companion_url }}/)__
 

@@ -134,6 +134,8 @@ extra:
 
 nav:
   - Home: index.md
+  - Download: download.md
+  - Flash and first run: build-image.md
   - Getting started: getting-started.md
   - Build & deploy: build.md
   - Operate: operate.md

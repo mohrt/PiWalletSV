@@ -64,6 +64,37 @@ The complete disclosure / reporting policy lives in the project's
   cameras or screen-recorders see the disclaimer-revealed phrase
   during initial setup or recovery.
 
+## Release key
+
+Every PiWalletSV image artifact published from the
+[Download](download.md) page is signed with a single OpenPGP release
+key. Pin the fingerprint here so a substituted website can't lie
+about it.
+
+| Field | Value |
+|-------|-------|
+| Fingerprint | `<RELEASE_KEY_FINGERPRINT>` (published with the first signed alpha release) |
+| User ID | `PiWalletSV releases <releases@piwalletsv.com>` |
+| Keyserver | `hkps://keys.openpgp.org` |
+
+Until the first signed release ships, this fingerprint is a
+placeholder. **Do not flash an image whose signature you cannot
+verify against the fingerprint listed here.** A failed verification
+is the boundary between a sealed appliance and a compromised one;
+treat it as a stop-the-world signal.
+
+If you need to verify a download manually:
+
+```bash
+gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
+gpg --verify piwalletsv-<VERSION>.img.xz.asc piwalletsv-<VERSION>.img.xz
+```
+
+The release key is held in a hardware keystore (Yubikey, OpenPGP
+applet) that never touches a networked machine; new releases are
+signed by physically presenting the key on a build host whose only
+network exit is the upload to `download.piwalletsv.com`.
+
 ## Reporting a vulnerability
 
 Found a security-relevant bug? Please report it privately first — the
