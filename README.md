@@ -4,7 +4,9 @@
 > No warranty. Non-custodial: lose your seed and your funds are gone.
 > Report security issues per [`SECURITY.md`](SECURITY.md).
 
-Air-gapped **Bitcoin SV** wallet targeting **Raspberry Pi Zero 2 WH** + **Adafruit 1.3" TFT bonnet** (joystick + buttons) + **Pi Camera Module 3**. Signing is performed entirely offline; a companion PWA on your phone or laptop handles all on-chain work.
+Air-gapped **Bitcoin SV** wallet built on a **Raspberry Pi**, a **TFT bonnet** (joystick + buttons), and a **Pi Camera**. Signing is performed entirely offline; a companion web app on your phone or laptop handles all on-chain work.
+
+User-facing site: **[piwalletsv.com](https://piwalletsv.com/)** · Live wallet: **[app.piwalletsv.com](https://app.piwalletsv.com/)**
 
 The wire format, QR transport, derivation rules, and SPV requirements are documented as an open spec in [`docs/protocol/`](docs/protocol/README.md) so any project can build a compatible companion (or a compatible signer) against PiWalletSV. Canonical test vectors live in [`tests/fixtures/`](tests/fixtures/).
 
@@ -22,7 +24,7 @@ pytest
 - **CLI:** `piwallet --help` — vault, sign, decode, multipart QR (`piwallet qr join`, `piwallet qr scan-camera` on Pi).
 - **Pi camera path:** install `python3-picamera2` via apt, then in a venv use `pip install pyzbar` and `sudo apt install libzbar0t64`. See [GETTING_STARTED.md](GETTING_STARTED.md).
 
-## Companion PWA (preview)
+## Companion web app
 
 Vanilla TypeScript + Vite, in [`companion/`](companion/). The shared `PW1` multipart-QR module is byte-for-byte compatible with `piwallet.qr` on the Pi.
 
@@ -34,17 +36,14 @@ npm test             # vitest: round-trip vs tests/fixtures/proposal_01.cbor
 npm run build        # tsc --noEmit + vite build to companion/dist
 ```
 
-- **`/#/encode`** — paste any text / hex / base64(url) and watch it animate as `PW1|…` QR frames the Pi camera path can already ingest.
-- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream and shows it as text / hex / base64url, with `.bin` download. When the bytes are a real PiWalletSV envelope (`xpub_export`, `unsigned_proposal`, or `signed_tx`), the parsed structure is rendered inline.
-  - **xpub_export** → a "Save as paired wallet" card writes `{label, xpub, fingerprint, path, addedAt}` to IndexedDB.
-  - **signed_tx** → a "Broadcast signed transaction" card POSTs the Pi's raw hex to WhatsOnChain `/tx/raw`, surfaces the returned txid + a `whatsonchain.com/tx/<txid>` link, and warns if the broadcaster echoes a different txid than the Pi signed.
-- **`/#/wallets`** — paired-wallet list backed by IndexedDB. Rename, copy xpub, or remove an entry. The Pi side is unaffected by removals.
-- **`/#/wallets/<id>`** — wallet detail with four sections:
-  - **Balance**: gap-limit (20) UTXO scan via [WhatsOnChain](https://api.whatsonchain.com/v1/bsv/main) across `m/0/i` and `m/1/i`. Shows total sats / BSV, UTXO count, scrollable UTXO table tagged with derivation. Snapshot is cached on the wallet record so re-opening the page is instant; the **Refresh balance** button re-scans.
-  - **Send**: paste a recipient address + amount, click **Build proposal**. The companion runs greedy coin selection, fetches a TSC Merkle proof from `/tx/<txid>/proof/tsc` and the block header from `/block/<hash>/header` per input, builds a BSV BEEF via `@bsv/sdk`, derives the change address from `m/1/<lastChangeUsed + 1>`, and emits an `unsigned_proposal` envelope which is animated as PW1 frames for the Pi camera. Change is folded into the fee when below the 546-sat dust threshold.
-  - **Receive**: derives `m/0/<index>` children of the paired xpub, shows the current address as text + QR (P2PKH base58check, BSV mainnet prefix `0x00`), with **Next address / Previous** stepping that persists `nextReceiveIndex` on the wallet record. Pure derivation via `@scure/bip32` + `@noble/hashes`, cross-checked against `piwallet.core.derivation` byte-for-byte (see `tests/fixtures/addresses_canonical.json`).
-  - **Recent addresses**: a window of 8 around the current receive pointer.
-- **`/#/loop`** — runs an in-memory round-trip of every envelope kind (build → CBOR + gzip → PW1 split → reassemble → gunzip + CBOR decode) on page load and shows pass/fail. One-page sanity check that the wire stack agrees with itself.
+Routes:
+
+- **`/#/wallets`** — paired-wallet list (IndexedDB). Rename, copy xpub, remove. Default landing surface; the Pi side is unaffected by removals.
+- **`/#/wallets/<id>`** — wallet detail with **Balance**, **Send**, **Receive**, and **Recent addresses** sections. Balance does a gap-limit-20 UTXO scan via [WhatsOnChain](https://api.whatsonchain.com/v1/bsv/main) across `m/0/i` and `m/1/i`. Send runs greedy coin selection, fetches per-input TSC Merkle proofs + block headers, builds a BSV BEEF via `@bsv/sdk`, and emits an `unsigned_proposal` animated as PW1 frames. Receive derives `m/0/<index>` children, addresses computed via `@scure/bip32` + `@noble/hashes` and cross-checked against `piwallet.core.derivation` byte-for-byte.
+- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream. Recognises real envelopes (`xpub_export`, `unsigned_proposal`, `signed_tx`) and renders the right action card. `signed_tx` POSTs raw hex to WhatsOnChain `/tx/raw`, surfaces the returned txid + a `whatsonchain.com/tx/<txid>` link, and warns if the broadcaster echoes a different txid than the Pi signed.
+- **`/#/loop`** *(dev only)* — round-trips every envelope kind (build → CBOR + gzip → PW1 split → reassemble → gunzip + CBOR decode) on page load. Tree-shaken out of production builds.
+
+Cross-domain links (footer, "Why is this safe?", terms-modal pointers) are driven by `VITE_DOCS_BASE_URL` at build time so dev mirrors stay self-contained. See [`companion/.env`](companion/.env) and [`companion/src/lib/config.ts`](companion/src/lib/config.ts).
 
 ### Pi-side pairing demo
 
@@ -63,7 +62,7 @@ piwallet qr split --chunk-chars 200 /tmp/xpub.bin |
 
 Then on the phone, open `https://<pi-or-laptop-lan-ip>:5173/#/scan`, hit **Start camera**, and point it at the Pi terminal. When the assembler completes, the **Save as paired wallet** card appears; the wallet shows up under `/#/wallets`. The reverse direction (laptop/phone PW1 → Pi camera) already works via `piwallet qr scan-camera`.
 
-`piwallet decode /tmp/xpub.bin` prints the same human-readable summary the PWA shows for sanity checks.
+`piwallet decode /tmp/xpub.bin` prints the same human-readable summary the web app shows for sanity checks.
 
 ### iPhone / phone scanning
 
