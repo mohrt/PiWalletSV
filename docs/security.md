@@ -1,13 +1,14 @@
 # Security briefing
 
-This page is the operator-facing trust model for PiWalletSV — the same
-content the [companion `#/security` page](#)
-shows in the browser, kept here so it stays in sync with the website
-and so anyone reading the project docs gets the same plain-English
-summary.
+This page is the canonical operator-facing trust model for PiWalletSV.
+The companion app at [{{ companion_url|replace('https://', '') }}]({{ companion_url }}/)
+links here from its first-load disclaimer, its terms-of-service modal,
+and from the "Why is this safe?" affordances on the Send flow — there's
+one source of truth instead of a copy embedded in the app bundle that
+slowly drifts out of sync.
 
-The complete disclosure / reporting policy is in
-[`SECURITY.md`](../SECURITY.md).
+The complete disclosure / reporting policy lives in the project's
+`SECURITY.md`, which is embedded verbatim at the bottom of this page.
 
 ## 1. The companion website is static
 
@@ -65,11 +66,12 @@ The complete disclosure / reporting policy is in
 
 ## Reporting a vulnerability
 
-Found a security-relevant bug? Please report it privately first — see
-[`SECURITY.md`](../SECURITY.md) for the disclosure process.
+Found a security-relevant bug? Please report it privately first — the
+disclosure process is documented at the bottom of this page (the
+embedded `SECURITY.md`).
 
 ---
 
-The original short hardening checklist remains in `SECURITY.md`:
+## `SECURITY.md` (embedded)
 
 --8<-- "SECURITY.md"

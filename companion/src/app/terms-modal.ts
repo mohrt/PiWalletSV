@@ -10,6 +10,7 @@
  * When acceptance is already on record (matching version), the function
  * resolves immediately without rendering anything.
  */
+import { DOCS_BASE_URL } from "../lib/config.js";
 import {
   CURRENT_TERMS_VERSION,
   isTermsAccepted,
@@ -31,12 +32,12 @@ export async function ensureTermsAccepted(): Promise<void> {
       <div class="terms-modal">
         <h1 id="termsTitle">PiWalletSV — please read before continuing</h1>
         <p class="terms-version">
-          Disclaimer version <code>${CURRENT_TERMS_VERSION}</code>.
-          Full text:
-          <a href="https://github.com/" target="_blank" rel="noopener noreferrer">
-            DISCLAIMER.md
-          </a>
-          in the repository.
+          Disclaimer version <code>${CURRENT_TERMS_VERSION}</code>. The
+          short bullets below are a pointer; the full, canonical text
+          lives at
+          <a href="${DOCS_BASE_URL}/disclaimer/" target="_blank" rel="noopener noreferrer">
+            ${DOCS_BASE_URL.replace(/^https?:\/\//, "")}/disclaimer
+          </a>.
         </p>
         <ul class="terms-bullets">
           <li>
@@ -66,14 +67,18 @@ export async function ensureTermsAccepted(): Promise<void> {
           </li>
         </ul>
         <p class="terms-version" style="margin-top: 0.25rem;">
-          Want the plain-English trust model first? See the
-          <a href="#/security">Security briefing</a>.
+          Want the plain-English trust model first? See
+          <a href="${DOCS_BASE_URL}/security/" target="_blank" rel="noopener noreferrer">
+            ${DOCS_BASE_URL.replace(/^https?:\/\//, "")}/security ↗
+          </a>.
         </p>
         <label class="terms-accept">
           <input type="checkbox" id="termsAccept" />
           <span>
             I have read and accept the full
-            <code>DISCLAIMER.md</code> on my own responsibility.
+            <a href="${DOCS_BASE_URL}/disclaimer/"
+               target="_blank" rel="noopener noreferrer">disclaimer</a>
+            on my own responsibility.
           </span>
         </label>
         <div class="actions">

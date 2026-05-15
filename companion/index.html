@@ -5,10 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0f15" />
     <meta name="description" content="PiWalletSV companion — air-gapped Bitcoin SV signing partner" />
-    <title>PiWalletSV companion (preview)</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>PiWalletSV</title>
   </head>
   <body>
     <div id="app"></div>
+    <!--
+      Footer host is fixed at build time via VITE_DOCS_BASE_URL (see
+      companion/src/lib/config.ts). Defaults to canonical prod docs;
+      publish.sh sets it to https://dev.piwalletsv.com for the dev
+      mirror so the dev companion never bounces visitors into prod
+      docs by accident.
+    -->
+    <footer class="app-footer" role="contentinfo">
+      <a href="%VITE_DOCS_BASE_URL%/" target="_blank" rel="noopener noreferrer">
+        About PiWalletSV ↗
+      </a>
+      <span class="sep" aria-hidden="true">·</span>
+      <a href="%VITE_DOCS_BASE_URL%/security/" target="_blank" rel="noopener noreferrer">
+        Security
+      </a>
+      <span class="sep" aria-hidden="true">·</span>
+      <a href="%VITE_DOCS_BASE_URL%/disclaimer/" target="_blank" rel="noopener noreferrer">
+        Disclaimer
+      </a>
+    </footer>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

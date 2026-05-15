@@ -152,7 +152,7 @@ the PiWalletSV pitch is roughly:
 > of USB, and on-device SPV instead of trust-the-screen.
 
 The article's weakest section ("Verification Before Signing → verify
-manually") is precisely the gap [SPV requirements §1](protocol/spv.md#1-the-verify-then-sign-rule)
+manually") is precisely the gap [SPV requirements §2](protocol/spv.md#2-the-verify-then-sign-rule)
 closes.
 
 [cold-authority]: https://singulargrit.substack.com/p/cold-authority-constructing-an-air

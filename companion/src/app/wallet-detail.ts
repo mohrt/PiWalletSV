@@ -18,10 +18,12 @@ import {
   deriveAddress,
   deriveAddressBatch,
 } from "../lib/derive.js";
+import { DOCS_BASE_URL } from "../lib/config.js";
 import { bytesToHex, encodeEnvelope } from "../lib/envelope.js";
 import { CoinSelectError, selectUtxosGreedy } from "../lib/coin-select.js";
 import { encodeMultipartLines } from "../pw1.js";
 import { ProofFetchError, fetchInputProof } from "../lib/proof-fetcher.js";
+import { renderHeader } from "./nav.js";
 import {
   ProposalBuilderError,
   buildUnsignedProposal,
@@ -112,16 +114,7 @@ export function mountWalletDetailPage(
 
   root.innerHTML = `
     <main class="page">
-      <header class="page-header">
-        <h1>Wallet detail<span class="brand"> · PiWalletSV companion</span></h1>
-        <nav>
-          <a href="#/encode">Encode</a>
-          <a href="#/scan">Scan</a>
-          <a href="#/loop">Loop</a>
-          <a href="#/wallets" class="active">Wallets</a>
-          <a href="#/security">Security</a>
-        </nav>
-      </header>
+      ${renderHeader("Wallet detail", "wallets")}
       <section id="loadingCard" class="card">
         <p class="muted-line">Loading wallet…</p>
       </section>
@@ -164,16 +157,7 @@ export function mountWalletDetailPage(
         : "";
     root.innerHTML = `
       <main class="page">
-        <header class="page-header">
-          <h1>${escapeHtml(wallet.label)}${netBadge}<span class="brand"> · PiWalletSV companion</span></h1>
-          <nav>
-            <a href="#/encode">Encode</a>
-            <a href="#/scan">Scan</a>
-            <a href="#/loop">Loop</a>
-            <a href="#/wallets" class="active">Wallets</a>
-            <a href="#/security">Security</a>
-          </nav>
-        </header>
+        ${renderHeader(escapeHtml(wallet.label), "wallets", netBadge)}
 
         <section class="card wallet-meta-card">
           <p class="muted-line">
@@ -271,7 +255,8 @@ export function mountWalletDetailPage(
                 signed_tx hex — paste that into the
                 <a href="#/scan">Scan</a> page's
                 "Paste hex" box to broadcast.
-                <a href="#/security">Why is this safe?</a>
+                <a href="${DOCS_BASE_URL}/security/" target="_blank"
+                   rel="noopener noreferrer">Why is this safe?</a>
               </p>
               <textarea id="proposalHex" class="hex-blob" rows="6"
                 readonly spellcheck="false" autocorrect="off"></textarea>

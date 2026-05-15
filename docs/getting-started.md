@@ -19,7 +19,7 @@ transaction in a CLI smoke test." For the user-facing journey
 - A **5 V power supply** with a micro-USB connector that plugs into
   the bonnet's **PWR IN** port (the one farthest from the SD slot).
 - A **phone, tablet, or laptop** with a camera, to run the
-  companion PWA. Any modern browser (Chrome/Safari/Firefox) works.
+  companion web app. Any modern browser (Chrome/Safari/Firefox) works.
 
 ## Bring up the bonnet
 

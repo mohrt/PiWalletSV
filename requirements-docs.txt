@@ -1,3 +1,8 @@
 mkdocs>=1.6.0
 mkdocs-material>=9.5.0
+# Lets us reference variables (e.g. {{ companion_url }}) in markdown
+# bodies so the same docs source produces dev-aware links on
+# dev.piwalletsv.com and prod-aware links on piwalletsv.com — driven
+# by PIWALLETSV_COMPANION_URL at build time.
+mkdocs-macros-plugin>=1.0.5
 pymdown-extensions>=10.7.0

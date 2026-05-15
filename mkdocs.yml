@@ -1,11 +1,14 @@
 site_name: PiWalletSV
 site_description: >
-  Air-gapped Bitcoin SV signing device for Raspberry Pi Zero 2 WH +
-  1.3" TFT bonnet + Pi Camera Module 3, with a companion PWA for the
-  online half.
-site_url: https://example.invalid/  # set to the GitHub Pages URL once published
-repo_name: piwallet
-repo_url: https://github.com/example/piwallet  # update to the real repo URL
+  Air-gapped Bitcoin SV signing device built on a Raspberry Pi, a TFT
+  bonnet, and a Pi Camera, with a companion PWA for the online half.
+site_url: https://piwalletsv.com/
+# Source repo. mkdocs-material renders this as a "View on GitHub"
+# button in the top-right of every page (icon + repo name) and lets
+# the per-page "edit this page" pencil link to the matching markdown
+# source on the default branch.
+repo_url: https://github.com/mohrt/PiWalletSV
+repo_name: mohrt/PiWalletSV
 edit_uri: edit/main/docs/
 copyright: >
   Copyright &copy; PiWalletSV contributors. Licensed under MIT.
@@ -15,6 +18,8 @@ docs_dir: docs
 
 theme:
   name: material
+  logo: assets/logo.png
+  favicon: assets/favicon.png
   features:
     - navigation.sections
     - navigation.expand
@@ -45,8 +50,6 @@ theme:
   font:
     text: Inter
     code: JetBrains Mono
-  icon:
-    repo: fontawesome/brands/github
 
 markdown_extensions:
   - admonition
@@ -58,6 +61,13 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
+  # Renders both Unicode emoji shortcodes (:smile:) and the
+  # Material-bundled icon shortcodes (:material-shield-key:,
+  # :fontawesome-brands-github:, etc.) as inline SVGs. Without this
+  # extension those tokens leak through as literal text.
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
@@ -82,12 +92,23 @@ markdown_extensions:
 
 plugins:
   - search
+  # Lets markdown bodies reference {{ companion_url }} so dev builds
+  # link into the dev companion mirror and prod builds link to the
+  # canonical companion. The variable values come from the `extra`
+  # block below (env-overridable via PIWALLETSV_COMPANION_URL).
+  - macros:
+      on_undefined: strict
+
+extra_css:
+  - assets/extra.css
 
 extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/example/piwallet
-      name: PiWalletSV on GitHub
+  generator: false
+  # Cross-domain link target for the companion app. publish.sh sets
+  # PIWALLETSV_COMPANION_URL=https://app.dev.piwalletsv.com when
+  # building the dev mirror; otherwise this falls back to the
+  # canonical prod host. Reference in markdown as {{ companion_url }}.
+  companion_url: !ENV [PIWALLETSV_COMPANION_URL, "https://app.piwalletsv.com"]
 
 nav:
   - Home: index.md

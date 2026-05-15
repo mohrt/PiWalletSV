@@ -24,6 +24,7 @@ import {
   decodeEnvelope,
 } from "../lib/envelope.js";
 import { extractHexFromPaste } from "../lib/hex-paste.js";
+import { renderHeader } from "./nav.js";
 import { MultipartAssembler, MultipartQrError } from "../pw1.js";
 import {
   type WalletRecord,
@@ -43,16 +44,7 @@ type ViewMode = "text" | "hex" | "base64url";
 export function mountScannerPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
-      <header class="page-header">
-        <h1>Scan multipart QR<span class="brand"> · PiWalletSV companion</span></h1>
-        <nav>
-          <a href="#/encode">Encode</a>
-          <a href="#/scan" class="active">Scan</a>
-          <a href="#/loop">Loop</a>
-          <a href="#/wallets">Wallets</a>
-          <a href="#/security">Security</a>
-        </nav>
-      </header>
+      ${renderHeader("Scan QR", "scan")}
 
       <section class="card scan-card">
         <video id="video" playsinline muted autoplay></video>

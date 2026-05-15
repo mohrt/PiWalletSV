@@ -7,12 +7,14 @@
  * the user rename or remove an entry. The Pi side is unaffected; this
  * only manages the companion's local registry.
  */
+import { DOCS_BASE_URL } from "../lib/config.js";
 import {
   type WalletRecord,
   listWallets,
   removeWallet,
   updateLabel,
 } from "../lib/wallets.js";
+import { renderHeader } from "./nav.js";
 
 function escapeHtml(s: string): string {
   return s
@@ -30,23 +32,31 @@ function shortenXpub(xpub: string): string {
 export function mountWalletsPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
-      <header class="page-header">
-        <h1>Paired wallets<span class="brand"> · PiWalletSV companion</span></h1>
-        <nav>
-          <a href="#/encode">Encode</a>
-          <a href="#/scan">Scan</a>
-          <a href="#/loop">Loop</a>
-          <a href="#/wallets" class="active">Wallets</a>
-          <a href="#/security">Security</a>
-        </nav>
-      </header>
+      ${renderHeader("Wallets", "wallets")}
 
       <section class="card">
         <p class="muted-line" id="walletStatus"></p>
-        <p class="muted-line" id="emptyState" hidden>
-          No wallets paired yet. Scan an <code>xpub_export</code> on the
-          <a href="#/scan">Scan</a> page to pair one.
-        </p>
+        <div id="emptyState" class="empty-state" hidden>
+          <h2>No wallets paired yet</h2>
+          <p>
+            On the Pi: pick <strong>Show xpub</strong> (or run
+            <code>piwallet pair</code>) — the bonnet animates a multipart
+            QR code with the wallet's public xpub.
+          </p>
+          <p>
+            Then click <a class="primary-link" href="#/scan">Scan QR</a>
+            below and point your camera at the Pi to pair.
+          </p>
+          <p class="muted-line">
+            Pairing only ever transmits public material. Your seed phrase
+            never leaves the Pi.
+            <a href="${DOCS_BASE_URL}/security/" target="_blank"
+               rel="noopener noreferrer">Why is this safe?</a>
+          </p>
+          <div class="actions">
+            <a class="primary-link" href="#/scan">Scan a wallet xpub</a>
+          </div>
+        </div>
         <ul id="walletsList" class="wallets-list"></ul>
       </section>
     </main>

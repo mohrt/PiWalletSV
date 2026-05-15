@@ -50,8 +50,8 @@ camera = [
 piwallet = "piwallet.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/mohrt/PiWallet"
-Issues = "https://github.com/mohrt/PiWallet/issues"
+Homepage = "https://github.com/mohrt/PiWalletSV"
+Issues = "https://github.com/mohrt/PiWalletSV/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

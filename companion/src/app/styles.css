@@ -97,6 +97,64 @@ a:hover {
   color: var(--accent-strong);
 }
 
+/* External Docs link in the top nav. Tinted slightly differently so it's
+   obvious the click leaves the app domain. */
+.page-header nav a.ext {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* App-wide footer. Sits below #app (in index.html), persists across hash
+   route changes, and points at the marketing/docs site for anything
+   informational. */
+.app-footer {
+  text-align: center;
+  padding: 1.25rem 1rem 2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  margin-top: 1.5rem;
+}
+
+.app-footer a {
+  color: var(--muted);
+}
+
+.app-footer a:hover {
+  color: var(--accent-strong);
+}
+
+.app-footer .sep {
+  margin: 0 0.4rem;
+  opacity: 0.6;
+}
+
+/* Empty state for the wallets list. Centered, with a clear "go scan an
+   xpub" CTA so a brand-new visitor knows what to do without bouncing
+   to the docs site first. */
+.empty-state {
+  text-align: center;
+  padding: 1.5rem 0.5rem 0.5rem;
+}
+
+.empty-state h2 {
+  margin: 0 0 0.6rem 0;
+  font-size: 1.05rem;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.empty-state p {
+  margin: 0.4rem auto;
+  max-width: 36rem;
+  line-height: 1.55;
+}
+
+.empty-state .actions {
+  justify-content: center;
+  margin-top: 1rem;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -161,34 +219,7 @@ fieldset label {
   font-size: 0.9rem;
 }
 
-.slider {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.slider input[type="range"] {
-  width: 220px;
-}
-
-.qr-card {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem;
-  align-items: flex-start;
-}
-
-.qr-card canvas {
-  background: white;
-  border-radius: 8px;
-  width: 320px;
-  height: 320px;
-  flex: 0 0 auto;
-  display: block;
-}
-
+/* `.qr-status` is still used by the scanner page's status line. */
 .qr-status {
   flex: 1 1 200px;
   min-width: 220px;
@@ -817,41 +848,3 @@ body.terms-locked {
   flex: 0 0 auto;
 }
 
-/* Security briefing page (#/security). Each section is a card with a
-   plain-language heading and a short bullet list. Visually a touch
-   denser than the rest of the app so all three sections fit together
-   without endless scrolling on phones. */
-.security-section h2 {
-  margin: 0 0 0.6rem 0;
-  font-size: 1rem;
-  color: var(--text);
-  font-weight: 600;
-}
-
-.security-bullets {
-  list-style: disc;
-  margin: 0;
-  padding-left: 1.2rem;
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.security-bullets li {
-  margin-bottom: 0.55rem;
-}
-
-.security-bullets li:last-child {
-  margin-bottom: 0;
-}
-
-@media (max-width: 600px) {
-  .qr-card canvas {
-    width: 100%;
-    height: auto;
-    max-width: 360px;
-    aspect-ratio: 1 / 1;
-  }
-  .slider input[type="range"] {
-    width: 100%;
-  }
-}
