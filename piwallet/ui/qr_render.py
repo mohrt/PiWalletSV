@@ -43,18 +43,30 @@ _QR_CACHE_MAX: int = 64
 #: complement. Deliberately *not* pure ``(255, 255, 255)``.
 #:
 #: Rationale: the bonnet's 240x240 ST7789 LCD at full backlight emits
-#: enough light through pure-white pixels that a phone camera's auto
-#: exposure clips them and can't lock a clean binarisation threshold —
-#: especially for the dense multipart xpub frames (v6, ~4 px/module).
+#: enough light through pure-white pixels that camera auto-exposure
+#: clips them and can't lock a clean binarisation threshold —
+#: especially for the dense multipart frames (v6, ~4 px/module).
 #: Symptoms reported on hardware: "brightness all the way up, won't
 #: scan; turn brightness down, scans fine."
 #:
-#: Dropping the light channel to ~80% luminance keeps the contrast
-#: ratio against pure black overwhelmingly high (the QR spec only
-#: needs 3:1) but eliminates the bloom that wipes out edge sharpness.
+#: Tuning history:
+#:
+#: * ``(255, 255, 255)`` — pure white, blooms hard on every camera.
+#: * ``(208, 208, 208)`` — ~80% luminance, fixed phone scanning of
+#:   the xpub_export pairing QR.
+#: * ``(170, 170, 170)`` — ~67% luminance, fixed *most* laptop
+#:   webcams; some still saturated.
+#: * ``(140, 140, 140)`` — ~55% luminance (current). Tuned for the
+#:   companion's typical environment: a laptop webcam scanning the
+#:   signed_tx multipart sequence (~6-12 frames at v6 density,
+#:   ~4 px/module). Contrast vs pure black is 5.5:1, still well
+#:   above the QR spec's 3:1 floor, and phones reading the
+#:   deposit-address QR still resolve cleanly because their wider
+#:   dynamic range absorbs the lower light level easily.
+#:
 #: Tune downward if a particular panel still blooms; tune *up* and
 #: things get worse, never better.
-QR_LIGHT_BG: tuple[int, int, int] = (208, 208, 208)
+QR_LIGHT_BG: tuple[int, int, int] = (140, 140, 140)
 
 #: Module-private LRU cache keyed on ``(data, target_px, border, fg, bg, error)``.
 #: ``OrderedDict`` gives O(1) insertion + ``move_to_end`` for cache hits.

@@ -23,6 +23,7 @@ from enum import Enum
 from typing import Literal
 
 from piwallet.bonnet.companion_pairing import pairing_pw1_lines
+from piwallet.bonnet.sign_scan import run_sign_flow
 from piwallet.bonnet.wallet_detail import WalletDetailScreen
 from piwallet.bonnet.wallet_info import WalletInfoScreen
 from piwallet.core import derivation as deriv
@@ -43,6 +44,7 @@ class WalletManageAction(Enum):
 
     RECEIVE = "receive"
     COMPANION_QR = "companion_qr"
+    SIGN = "sign"
     INFO = "info"
     RENAME = "rename"
     DELETE = "delete"
@@ -78,6 +80,7 @@ class WalletManageMenuScreen:
             items=[
                 ListItem(label="Show deposit address", value=WalletManageAction.RECEIVE),
                 ListItem(label="Show xpub (QR)", value=WalletManageAction.COMPANION_QR),
+                ListItem(label="Sign transaction", value=WalletManageAction.SIGN),
                 ListItem(label="Wallet info", value=WalletManageAction.INFO),
                 ListItem(label="Rename", value=WalletManageAction.RENAME),
                 ListItem(label="Erase from Pi", value=WalletManageAction.DELETE),
@@ -197,6 +200,27 @@ def run_wallet_manage(
         qr = PairingMultipartQrScreen(lines)
         run_screen(display, input_mgr, qr, target_fps=target_fps, idle_wake=idle_wake)
         if qr.result == "exit":
+            return "exit"
+        return "stay"
+
+    if choice == WalletManageAction.SIGN:
+        try:
+            outcome = run_sign_flow(
+                display,
+                input_mgr,
+                vault,
+                pin,
+                wallet,
+                target_fps=target_fps,
+                toast_seconds=toast_seconds,
+                idle_wake=idle_wake,
+            )
+        except (VaultError, VaultWipedError) as exc:
+            log.exception("run_sign_flow vault error")
+            _brief_modal(display, title="Sign failed", body=str(exc)[:96], accent=COLOR_DANGER)
+            time.sleep(toast_seconds)
+            return "stay"
+        if outcome == "exit":
             return "exit"
         return "stay"
 

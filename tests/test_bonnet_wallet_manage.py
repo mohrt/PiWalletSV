@@ -239,6 +239,7 @@ def test_menu_lists_every_action_in_order() -> None:
     assert values == [
         WalletManageAction.RECEIVE,
         WalletManageAction.COMPANION_QR,
+        WalletManageAction.SIGN,
         WalletManageAction.INFO,
         WalletManageAction.RENAME,
         WalletManageAction.DELETE,
@@ -305,6 +306,60 @@ def test_run_info_exit_propagates(
         raise AssertionError(f"unexpected {type(screen)!r}")
 
     monkeypatch.setattr(wm, "run_screen", fake_run_screen)
+
+    assert wm.run_wallet_manage(display, mgr, vault, pin, rec, toast_seconds=0) == "exit"
+
+
+def test_run_sign_dispatches_to_run_sign_flow(
+    monkeypatch: pytest.MonkeyPatch,
+    vault_and_wallet: tuple[Vault, str, WalletRecord],
+) -> None:
+    """Selecting Sign dispatches to ``run_sign_flow`` and stays on stay."""
+    vault, pin, rec = vault_and_wallet
+    display = HeadlessDisplay()
+    from piwallet.ui.input import FakeInputBackend, InputManager
+
+    mgr = InputManager(FakeInputBackend())
+    seen: list[str] = []
+
+    def fake_run_screen(display, mgr, screen, **_):
+        if isinstance(screen, WalletManageMenuScreen):
+            screen.done = True
+            screen.result = WalletManageAction.SIGN
+            return screen.result
+        raise AssertionError(f"unexpected {type(screen)!r}")
+
+    def fake_sign_flow(*args, **kwargs):
+        seen.append("sign_flow")
+        return "stay"
+
+    monkeypatch.setattr(wm, "run_screen", fake_run_screen)
+    monkeypatch.setattr(wm, "run_sign_flow", fake_sign_flow)
+
+    assert wm.run_wallet_manage(display, mgr, vault, pin, rec, toast_seconds=0) == "stay"
+    assert seen == ["sign_flow"]
+
+
+def test_run_sign_propagates_exit(
+    monkeypatch: pytest.MonkeyPatch,
+    vault_and_wallet: tuple[Vault, str, WalletRecord],
+) -> None:
+    """Long-B inside the sign flow propagates as ``exit``."""
+    vault, pin, rec = vault_and_wallet
+    display = HeadlessDisplay()
+    from piwallet.ui.input import FakeInputBackend, InputManager
+
+    mgr = InputManager(FakeInputBackend())
+
+    def fake_run_screen(display, mgr, screen, **_):
+        if isinstance(screen, WalletManageMenuScreen):
+            screen.done = True
+            screen.result = WalletManageAction.SIGN
+            return screen.result
+        raise AssertionError(f"unexpected {type(screen)!r}")
+
+    monkeypatch.setattr(wm, "run_screen", fake_run_screen)
+    monkeypatch.setattr(wm, "run_sign_flow", lambda *a, **k: "exit")
 
     assert wm.run_wallet_manage(display, mgr, vault, pin, rec, toast_seconds=0) == "exit"
 

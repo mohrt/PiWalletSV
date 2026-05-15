@@ -27,6 +27,15 @@ ProgressCallback = Callable[[int, str], None]
 """(parts_received, status_message) — for CLI/progress display."""
 
 
+class ScanCancelled(RuntimeError):
+    """Raised when ``cancel_check`` returned True between camera frames.
+
+    The bonnet sign-flow uses this to exit the worker thread cleanly when the
+    operator presses **B** on the scan screen. The CLI does not pass
+    ``cancel_check`` so it never sees this exception.
+    """
+
+
 def _import_camera_stack() -> tuple[type, object]:
     try:
         from libcamera import controls
@@ -41,13 +50,31 @@ def _import_camera_stack() -> tuple[type, object]:
 
 
 def _import_pyzbar_decode():
+    """Return a ``decode(frame)`` callable restricted to QR codes only.
+
+    Without ``symbols=[ZBarSymbol.QRCODE]`` libzbar walks every barcode
+    format (Code-128, EAN, DataBar, …) on each frame. The DataBar
+    decoder is particularly noisy: it fires
+    ``WARNING: decoder/databar.c:1210: _zbar_decode_databar:
+    Assertion "seg->finder >= 0" failed`` on QR finder-pattern noise.
+    The warning is harmless (DataBar simply gives up and the QR
+    decoder still wins) but it spams stderr / the journal during a
+    scan. Restricting the symbol set silences it and shaves a few ms
+    per frame on the Pi Zero 2 W.
+    """
     try:
-        from pyzbar.pyzbar import decode
+        from pyzbar.pyzbar import ZBarSymbol, decode as _decode
     except ImportError as exc:
         raise RuntimeError(
             "pyzbar missing. Install in the active venv: `pip install pyzbar` "
             "and system lib: `sudo apt install -y libzbar0t64`"
         ) from exc
+
+    qr_only = [ZBarSymbol.QRCODE]
+
+    def decode(frame):
+        return _decode(frame, symbols=qr_only)
+
     return decode
 
 
@@ -74,6 +101,7 @@ def scan_multipart_from_camera(
     on_lcd_thumbnail: Callable[[Image.Image], None] | None = None,
     lcd_thumbnail_interval_s: float = 0.28,
     mono_s: Callable[[], float] | None = None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> bytes:
     """Block until all PW1 QR fragments are seen, then return assembled bytes.
 
@@ -83,6 +111,10 @@ def scan_multipart_from_camera(
     When ``on_lcd_thumbnail`` is set (e.g. bonnet TFT), decode frames drive the loop
     and a downscaled PIL thumbnail is emitted at ``lcd_thumbnail_interval_s`` intervals
     for a low-rate live view (caller pastes onto a framebuffer separately).
+
+    ``cancel_check`` is polled between camera frames; when it returns True the
+    loop raises :class:`ScanCancelled`. The bonnet flow uses this to drop the
+    scan when the operator presses **B**; CLI callers leave it ``None``.
     """
     from piwallet.runtime_logging import prepare_runtime_for_cli_camera_scan
 
@@ -106,6 +138,8 @@ def scan_multipart_from_camera(
     frame_no = 0
     try:
         while True:
+            if cancel_check is not None and cancel_check():
+                raise ScanCancelled("scan cancelled by caller")
             frame_no += 1
             frame = cam.capture_array("main")
             if on_lcd_thumbnail is not None:

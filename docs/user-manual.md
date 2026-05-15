@@ -5,7 +5,7 @@ SD card" to "I just signed and broadcast a transaction." It assumes
 you've already done the hardware bring-up in
 [Getting started](getting-started.md). The bonnet-driven UI for
 some of these steps is part of Phase 2 and is noted in each section;
-until it ships, the CLI on the Pi (and the companion PWA on the
+until it ships, the CLI on the Pi (and the companion web app on the
 phone) provides the same workflows.
 
 !!! warning "Alpha software"
@@ -209,25 +209,39 @@ The card now shows:
 Take the Pi to wherever the companion's screen is. Point the camera
 at the QR canvas.
 
-=== "Bonnet (Phase 2)"
+=== "Bonnet"
 
-    The bonnet shows "Scanning..." until the PW1 assembler
-    completes. Then it walks through the verification checks in
-    real time, painting a one-line status per check. If anything
-    fails, the bonnet stops at that line and shows the reason; you
-    can either retry the scan (if it was a fragment-corruption
-    issue) or abort.
+    From the wallet manage menu (the screen you reach by selecting
+    a wallet from the list), pick **"Sign transaction"**. The
+    bonnet opens a live camera preview with a status line beneath
+    it:
 
-    On success, the bonnet shows a **review** screen:
+    - **Aiming...** — the camera is settling and no `PW1|`
+      fragment has decoded yet.
+    - **frame N / M** — fragments are arriving; the count climbs
+      until N == M and the proposal is fully assembled.
 
-    - Recipient address (full, line-wrapped).
-    - Amount (sats and BSV).
-    - Fee (sats).
-    - Per-input `(height, root-prefix)` anchor pairs.
+    Press **B** at any time to abort the scan; long-press **B**
+    to quit the bonnet entirely.
 
-    Hold **A** to confirm. The Pi derives the per-input keys,
-    signs the transaction, and emits a `signed_tx` envelope as an
-    animated QR for the companion to scan.
+    Once assembly completes, the bonnet runs `verify_proposal`
+    and shows a **review** screen with:
+
+    - Total `In` / `Out` / `Fee` (sats).
+    - Input and output counts (output count flags whether change
+      is included).
+    - The wallet's network (`main` / `test`).
+
+    If verification rejected the proposal, the screen shows the
+    rejection reason instead of the summary, and pressing **A**
+    is a no-op.
+
+    On a clean proposal, press **A** to sign. The Pi derives the
+    per-input keys, builds the Atomic BEEF, wraps it in a
+    `signed_tx` envelope, and animates it back to the companion
+    as `PW1|` multipart QR frames at the same density used for
+    pairing. Press **A** or **B** when the companion confirms it
+    has the full set.
 
 === "CLI (today)"
 
