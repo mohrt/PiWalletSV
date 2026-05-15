@@ -38,6 +38,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from piwallet.bonnet.airgap_screen import AirgapScreen
 from piwallet.bonnet.change_pin import run_change_pin
 from piwallet.bonnet.companion_pairing import (
     OfferCompanionPairingScreen,
@@ -316,6 +317,26 @@ def _run_settings_loop(
         if result == "changed" and new_pin is not None:
             return screen.settings, "changed_pin", False, new_pin
         # "cancelled" - keep the saved settings, original PIN.
+        return screen.settings, "saved", False, pin
+    if screen.result == "airgap":
+        # Same value-row-draft-saving pattern as change_pin: persist
+        # any in-flight tweaks before opening the airgap diag, so an
+        # operator who fiddled with brightness and then tapped the
+        # airgap row doesn't lose their slider change. The airgap
+        # screen itself is read-only — it can return only "back" or
+        # "exit".
+        save_settings(screen.settings, settings_path)
+        display.set_brightness(screen.settings.brightness)
+        airgap = AirgapScreen()
+        run_screen(
+            display,
+            input_mgr,
+            airgap,
+            target_fps=target_fps,
+            idle_wake=idle_wake,
+        )
+        if airgap.result == "exit":
+            return screen.settings, "exit", True, pin
         return screen.settings, "saved", False, pin
     # "back": SettingsScreen has already reverted the live preview.
     return settings, "back", False, pin

@@ -210,8 +210,8 @@ def test_draw_at_maximum_brightness() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_settings_rows_include_brightness_then_sleep_timer_then_change_pin() -> None:
-    """Order is fixed — brightness first, sleep timer second, change PIN third.
+def test_settings_rows_include_brightness_then_sleep_timer_then_change_pin_then_airgap() -> None:
+    """Order is fixed — value rows first, then action rows.
 
     The Settings screen's row ordering is observable via cursor index;
     if a future edit reorders the rows, every existing test that
@@ -219,16 +219,27 @@ def test_settings_rows_include_brightness_then_sleep_timer_then_change_pin() -> 
     has to update too.
     """
     keys = [row.key for row in SETTINGS_ROWS]
-    assert keys == ["brightness", "sleep_timer", "change_pin"]
+    assert keys == ["brightness", "sleep_timer", "change_pin", "airgap"]
 
 
-def test_change_pin_row_is_an_action_row() -> None:
+def test_change_pin_and_airgap_are_action_rows() -> None:
     rows_by_key = {row.key: row for row in SETTINGS_ROWS}
     assert rows_by_key["change_pin"].is_action is True
+    assert rows_by_key["airgap"].is_action is True
     # Value rows must explicitly stay non-action so a future
     # refactor that flips defaults can't accidentally promote them.
     assert rows_by_key["brightness"].is_action is False
     assert rows_by_key["sleep_timer"].is_action is False
+
+
+def test_a_on_airgap_row_returns_airgap_result() -> None:
+    s = _make_screen(brightness=0.5)
+    target = next(i for i, r in enumerate(SETTINGS_ROWS) if r.key == "airgap")
+    while s.cursor != target:
+        s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.A))
+    assert s.done is True
+    assert s.result == "airgap"
 
 
 def test_format_sleep_timeout_ms_renders_each_preset() -> None:

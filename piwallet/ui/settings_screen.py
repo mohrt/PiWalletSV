@@ -71,7 +71,7 @@ from piwallet.ui.display import (
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.widgets import draw_text
 
-SettingsScreenResult = Literal["saved", "back", "exit", "change_pin"]
+SettingsScreenResult = Literal["saved", "back", "exit", "change_pin", "airgap"]
 
 #: Step size used by left/right and repeat-events when adjusting brightness.
 BRIGHTNESS_STEP: float = 0.05
@@ -139,6 +139,16 @@ SETTINGS_ROWS: tuple[SettingsRow, ...] = (
     SettingsRow(
         key="change_pin",
         label="Change PIN",
+        value_text=_action_arrow,
+        is_action=True,
+    ),
+    # Surfaces piwallet.diag.airgap as a one-tap "is this device
+    # actually quiet on the airwaves right now?" check. Anchored
+    # below Change PIN because both are action rows; ordering them
+    # together keeps value rows and action rows visually separate.
+    SettingsRow(
+        key="airgap",
+        label="Airgap status",
         value_text=_action_arrow,
         is_action=True,
     ),

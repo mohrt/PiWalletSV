@@ -806,6 +806,61 @@ def firstboot_run(
         sys.exit(1)
 
 
+# ---- diagnostics -------------------------------------------------------
+
+
+@main.group(help="On-device diagnostics (airgap, etc.).")
+def diag() -> None:
+    pass
+
+
+@diag.command(
+    "airgap",
+    help=(
+        "Verify the device is fully air-gapped: no radio modules loaded, "
+        "rfkill blocked, no radio interfaces, no radio services running, "
+        "boot config disables wifi+bt, modules blacklisted in modprobe."
+    ),
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit the report as JSON for machine consumption.",
+)
+def diag_airgap(as_json: bool) -> None:
+    """Run the airgap diagnostic and exit non-zero on any conclusive failure.
+
+    Inconclusive checks (data source unavailable, e.g. running on a dev
+    laptop without ``/proc/modules``) are surfaced but do not flip the
+    exit code — that way the same command works for spot-checking
+    expected behaviour during development.
+    """
+    import json as _json
+
+    from piwallet.diag.airgap import check_airgap
+
+    report = check_airgap()
+    if as_json:
+        click.echo(_json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        sys.exit(0 if report.ok else 1)
+
+    headline = "PASS  air-gapped" if report.ok else "FAIL  BREACH"
+    click.echo(headline)
+    click.echo()
+    # Two-column layout: name left-aligned, status + detail on the right.
+    name_w = max(len(c.name) for c in report.checks)
+    for c in report.checks:
+        click.echo(f"  {c.name.ljust(name_w)}  {c.status}  {c.detail}")
+    if report.inconclusive:
+        click.echo()
+        click.echo(
+            f"note: {len(report.inconclusive)} check(s) inconclusive "
+            "(data source unavailable in this environment)."
+        )
+    sys.exit(0 if report.ok else 1)
+
+
 @main.command("bonnet", help="Run the full bonnet boot loop on the device.")
 @click.option(
     "--vault-path",
