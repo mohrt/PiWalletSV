@@ -8,7 +8,10 @@ site_url: https://piwalletsv.com/
 # the per-page "edit this page" pencil link to the matching markdown
 # source on the default branch.
 repo_url: https://github.com/mohrt/PiWalletSV
-repo_name: mohrt/PiWalletSV
+# Label shown next to the icon in the top-right repo button. Override
+# the default "owner/repo" so the button reads as "GitHub" — the icon
+# already identifies the host, the slug just adds noise.
+repo_name: GitHub
 edit_uri: edit/main/docs/
 copyright: >
   Copyright &copy; PiWalletSV contributors. Licensed under MIT.
