@@ -1,6 +1,15 @@
-# PiWallet bonnet logging (journald + libcamera)
+# PiWallet bonnet — systemd units & logging
 
-The app does **not** write rotating log files under `~/.piwallet` by default.
+This directory ships **two** unit files for two deployment modes:
+
+| File | Use it when | User | App location | Hardening |
+| ---- | ----------- | ---- | ------------ | --------- |
+| `piwallet-bonnet.service` | SD-card image (`provision-pi.sh` installs this) | `pwsv` | `/opt/piwallet` | Full (`ProtectSystem=strict`, `MemoryDenyWriteExecute`, capability set emptied, `PrivateNetwork=yes`, `ReadWritePaths=/home/pwsv/.piwallet`) |
+| `piwallet-bonnet.service.example` | Developer Pi where the source tree lives in `$HOME` and you run as your own user | dev's user (`pi` etc.) | `$HOME/PiWallet` | Minimal (just `Restart=always` + log-level env vars) |
+
+The production unit is the one that ships on the SD-card image. The example is the one you adapt by hand on a Pi you log into yourself.
+
+The app does **not** write rotating log files under `~/.piwallet` by default — everything goes through journald.
 
 ## What uses disk?
 
@@ -24,6 +33,4 @@ sudo cp deploy/systemd/journald-piwallet.conf.example \
 sudo systemctl restart systemd-journald
 ```
 
-## systemd unit snippet
-
-See `piwallet-bonnet.service.example` — copy/adapt to `/etc/systemd/system/` for production.
+`provision-pi.sh` installs the journald drop-in automatically when building an SD-card image.

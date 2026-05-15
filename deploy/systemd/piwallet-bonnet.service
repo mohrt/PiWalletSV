@@ -1,0 +1,128 @@
+# PiWalletSV bonnet UI — production systemd unit for SD-card images.
+#
+# Owns the console (Conflicts=getty@tty1.service), brings up the
+# bonnet display + camera, drives the disclaimer / vault-setup /
+# wallet-list flow, and restarts on crash with a 3-second backoff.
+#
+# Layout assumed by this unit:
+#   /opt/piwallet/                  app source, owned by root:root, ro for pwsv
+#   /opt/piwallet/.venv/            venv built with --system-site-packages
+#   /home/pwsv/.piwallet/           per-user state (vault.bin, settings.json,
+#                                   terms.json), owned by pwsv:pwsv, mode 0700
+#                                   — pre-created by provision-pi.sh
+#
+# Both paths are pinned by deploy/provision-pi.sh; do not relocate
+# without updating the provisioner. The companion .example unit
+# (piwallet-bonnet.service.example) covers the dev-laptop layout
+# where the source tree lives in $HOME.
+[Unit]
+Description=PiWalletSV bonnet UI
+Documentation=https://piwalletsv.com/operate/
+# Wait until /home is mounted before launching — vault state lives
+# under the pwsv home. We don't need the network (the device has
+# none) so no After=network-* dependency.
+After=local-fs.target
+# The bonnet drives the SPI panel directly; we don't want a getty
+# competing for tty1. Mask hciuart / wpa_supplicant separately in
+# provision-pi.sh — they're irrelevant here, listed only for clarity.
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=pwsv
+Group=pwsv
+# Supplementary groups for hardware access. spi/gpio for the bonnet
+# panel + buttons, video for /dev/video0 (camera), i2c for the
+# joystick controller, dialout sometimes shows up on rpi-imager
+# images for serial UARTs the user never uses — kept to avoid
+# surprises if someone enables UART for diagnostics.
+SupplementaryGroups=spi gpio video i2c dialout
+
+WorkingDirectory=/home/pwsv
+
+# libcamera and Picamera2 default to chatty INFO logging which
+# spams journald on every frame. The app process also pins these,
+# but pinning them in the unit too means an admin reading the unit
+# file sees the intent without grepping the source.
+Environment=LIBCAMERA_LOG_LEVELS=*:WARN
+Environment=PICAMERA2_LOG_LEVEL=0
+Environment=PIWALLET_LOG_LEVEL=WARNING
+
+# `piwallet bonnet` defaults to ~/.piwallet/vault.bin under the
+# invoking user's $HOME. Spelt out here so the unit reads cleanly
+# during ops review and so a moved $HOME doesn't silently relocate
+# the vault.
+ExecStart=/opt/piwallet/.venv/bin/piwallet bonnet \
+    --vault-path /home/pwsv/.piwallet/vault.bin
+
+Restart=always
+RestartSec=3
+# Cap restart storms — five failures within 60s probably means the
+# SPI panel cable is loose, not that another retry will help.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+# ---- hardening ----------------------------------------------------
+#
+# These directives narrow the kernel surface the process can touch.
+# All of them are inert on the bonnet's actual workload (drawing to
+# /dev/spidev0.0, reading /dev/input/event*, opening /dev/video0)
+# but block whole categories of post-exploit lateral movement.
+NoNewPrivileges=yes
+
+# /usr, /boot, /etc all become read-only for the process; only the
+# explicit ReadWritePaths below are mutable. This is the strictest
+# of the three ProtectSystem= levels.
+ProtectSystem=strict
+# The bonnet writes vault.bin / settings.json / terms.json into a
+# subdirectory of $HOME. ReadWritePaths whitelists exactly that
+# subdirectory and nothing else — the rest of /home/pwsv stays
+# read-only and other users' homes are completely hidden.
+ProtectHome=read-only
+ReadWritePaths=/home/pwsv/.piwallet
+
+# /tmp and /var/tmp become a private tmpfs invisible to other
+# services. Picamera2 writes a few transient files; this isolates
+# them.
+PrivateTmp=yes
+
+# Block module loading and sysctl writes — the Pi has Wi-Fi/BT
+# kernel modules blacklisted at the firmware level, but a
+# successful exploit in libcamera shouldn't be one modprobe away
+# from re-loading them.
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+
+# We need /dev/spidev*, /dev/video0, /dev/i2c-*, /dev/gpiochip* —
+# everything else (network sockets, /dev/mem, /dev/kmsg) is denied.
+# `closed` is the strictest setting that still allows AF_UNIX,
+# which the bonnet uses for the picamera2 -> libcamera handshake.
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+# Block exec stacks / mmap-rwx — defence in depth against Python's
+# ctypes being abused as a write+execute primitive. cffi and
+# libcamera's Python shim do not require RWX pages.
+MemoryDenyWriteExecute=yes
+
+# Pi is 64-bit ARM only. Refuse to enter a 32-bit syscall personality
+# (would be a red flag from a memory-corruption point of view).
+SystemCallArchitectures=native
+
+# Capabilities: the bonnet doesn't need any. Hardware access goes
+# through /dev nodes whose ownership is set by udev to the
+# spi/gpio/video/i2c groups (see provision-pi.sh). With these set
+# to the empty string, the process starts with the absolute minimum.
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
