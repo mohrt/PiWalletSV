@@ -1,6 +1,6 @@
 """Persistent global bonnet settings.
 
-Lives at ``~/.piwallet-dev/settings.json`` (or a caller-supplied path).
+Lives at ``~/.piwallet/settings.json`` (or a caller-supplied path).
 Carries non-sensitive operator preferences — currently just display
 brightness, with room for sleep timeout, panel rotation, frame rate
 limit, etc. as the UX matures.
@@ -87,8 +87,14 @@ class BonnetSettings:
 
 
 def default_settings_path() -> Path:
-    """Return ``~/.piwallet-dev/settings.json`` (the default location)."""
-    return Path.home() / ".piwallet-dev" / "settings.json"
+    """Return ``~/.piwallet/settings.json`` (the default location).
+
+    Re-exported here as part of the historical settings-module API;
+    the actual path lives in :mod:`piwallet.core.paths`.
+    """
+    from piwallet.core.paths import default_settings_path as _path
+
+    return _path()
 
 
 def load_settings(path: Path | None = None) -> BonnetSettings:

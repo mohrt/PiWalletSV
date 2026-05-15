@@ -27,6 +27,7 @@ from piwallet.core import envelope as env
 from piwallet.core import mnemonic as mnem
 from piwallet.core import sign as sgn
 from piwallet.core import verify as vfy
+from piwallet.core.paths import default_vault_path
 from piwallet.core.vault import (
     Vault,
     VaultError,
@@ -79,7 +80,7 @@ def mnemonic_validate() -> None:
 @click.option(
     "--vault-path",
     type=click.Path(dir_okay=False, path_type=Path),
-    default=Path.home() / ".piwallet-dev" / "vault.bin",
+    default=default_vault_path(),
     show_default=True,
     help="Path to the encrypted vault file.",
 )
@@ -187,7 +188,7 @@ def vault_export_xpub(ctx: click.Context, wallet_id: str) -> None:
 @click.option(
     "--vault-path",
     type=click.Path(dir_okay=False, path_type=Path),
-    default=Path.home() / ".piwallet-dev" / "vault.bin",
+    default=default_vault_path(),
     show_default=True,
 )
 @click.option("--wallet-id", required=True, help="Wallet id to export.")
@@ -481,7 +482,7 @@ def qr_scan_camera(
 @click.option(
     "--vault-path",
     type=click.Path(dir_okay=False, path_type=Path),
-    default=Path.home() / ".piwallet-dev" / "vault.bin",
+    default=default_vault_path(),
     show_default=True,
 )
 @click.option("--wallet-id", required=True, help="Wallet to sign with.")
@@ -726,7 +727,7 @@ def firstboot() -> None:
     "--state-path",
     type=click.Path(dir_okay=False, path_type=Path),
     default=None,
-    help="Path to the terms state file. Defaults to ~/.piwallet-dev/terms.json.",
+    help="Path to the terms state file. Defaults to ~/.piwallet/terms.json.",
 )
 def firstboot_status(state_path: Path | None) -> None:
     from piwallet.firstboot.terms import (
@@ -755,7 +756,7 @@ def firstboot_status(state_path: Path | None) -> None:
     "--state-path",
     type=click.Path(dir_okay=False, path_type=Path),
     default=None,
-    help="Path to the terms state file. Defaults to ~/.piwallet-dev/terms.json.",
+    help="Path to the terms state file. Defaults to ~/.piwallet/terms.json.",
 )
 @click.option(
     "--display",
@@ -809,20 +810,20 @@ def firstboot_run(
 @click.option(
     "--vault-path",
     type=click.Path(dir_okay=False, path_type=Path),
-    default=Path.home() / ".piwallet-dev" / "vault.bin",
+    default=default_vault_path(),
     show_default=True,
 )
 @click.option(
     "--terms-path",
     type=click.Path(dir_okay=False, path_type=Path),
     default=None,
-    help="Override the disclaimer state file. Defaults to ~/.piwallet-dev/terms.json.",
+    help="Override the disclaimer state file. Defaults to ~/.piwallet/terms.json.",
 )
 @click.option(
     "--settings-path",
     type=click.Path(dir_okay=False, path_type=Path),
     default=None,
-    help="Override the global settings file. Defaults to ~/.piwallet-dev/settings.json.",
+    help="Override the global settings file. Defaults to ~/.piwallet/settings.json.",
 )
 @click.option(
     "--display",

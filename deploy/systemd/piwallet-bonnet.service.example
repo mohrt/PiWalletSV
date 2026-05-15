@@ -1,6 +1,9 @@
 # Example: adjust paths/User= for your Pi image, then install to
 # /etc/systemd/system/piwallet-bonnet.service && systemctl enable --now piwallet-bonnet
 #
+# A production-hardened version of this unit ships with the SD-card
+# image (see deploy/provision-pi.sh). This .example is for developer
+# Pis where the source tree lives in $HOME and runs as the dev user.
 [Unit]
 Description=PiWalletSV bonnet UI
 After=network-pre.target graphical.target
@@ -14,7 +17,9 @@ WorkingDirectory=/home/pi
 Environment=LIBCAMERA_LOG_LEVELS=*:WARN
 Environment=PICAMERA2_LOG_LEVEL=0
 Environment=PIWALLET_LOG_LEVEL=WARNING
-ExecStart=/home/pi/PiWallet/.venv/bin/piwallet bonnet --vault-path /home/pi/.piwallet-dev/vault.bin
+# `piwallet bonnet` defaults to ~/.piwallet/vault.bin; pass it
+# explicitly so the unit reads cleanly during ops review.
+ExecStart=/home/pi/PiWallet/.venv/bin/piwallet bonnet --vault-path /home/pi/.piwallet/vault.bin
 Restart=always
 RestartSec=3
 

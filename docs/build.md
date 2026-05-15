@@ -149,14 +149,14 @@ reboots and is owned by the `pi` user. The convention used throughout
 the docs and the systemd example is:
 
 ```
-/home/pi/.piwallet-dev/vault.bin
+/home/pi/.piwallet/vault.bin
 ```
 
 Create the directory and the empty vault:
 
 ```bash
-mkdir -p ~/.piwallet-dev
-piwallet vault --vault-path ~/.piwallet-dev/vault.bin init
+mkdir -p ~/.piwallet
+piwallet vault --vault-path ~/.piwallet/vault.bin init
 ```
 
 `vault init` is interactive: it prompts for a PIN (4-12 digits),
@@ -170,7 +170,7 @@ something to display:
 
 ```bash
 piwallet mnemonic new | piwallet vault \
-    --vault-path ~/.piwallet-dev/vault.bin add --label "First wallet"
+    --vault-path ~/.piwallet/vault.bin add --label "First wallet"
 ```
 
 Save the mnemonic somewhere offline. The CLI does not store it — the
@@ -198,7 +198,7 @@ Verify the full boot path works under your user before wiring up
 systemd:
 
 ```bash
-./scripts/run_bonnet.sh --vault-path ~/.piwallet-dev/vault.bin
+./scripts/run_bonnet.sh --vault-path ~/.piwallet/vault.bin
 ```
 
 You should see the disclaimer (only if not yet accepted), the PIN

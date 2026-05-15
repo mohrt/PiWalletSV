@@ -102,7 +102,7 @@ normal use.
 ## Vault stewardship
 
 The encrypted vault is a single file (typically
-`~/.piwallet-dev/vault.bin`). Treat it as the source of truth for
+`~/.piwallet/vault.bin`). Treat it as the source of truth for
 what wallets exist on the device. The mnemonic is the source of
 truth for the *funds* — the vault is destroyed by a wipe; the
 mnemonic is not.
@@ -113,7 +113,7 @@ mnemonic is not.
 only:
 
 ```bash
-piwallet vault --vault-path ~/.piwallet-dev/vault.bin list
+piwallet vault --vault-path ~/.piwallet/vault.bin list
 ```
 
 This is safe to run from a script (a backup-monitoring job, for
@@ -142,7 +142,7 @@ Two ways:
 
 ```bash
 sudo systemctl stop piwallet-bonnet
-shred -uz ~/.piwallet-dev/vault.bin
+shred -uz ~/.piwallet/vault.bin
 sudo systemctl start piwallet-bonnet
 ```
 
@@ -155,9 +155,9 @@ A "factory reset" is wipe + remove the disclaimer state + reinitialise:
 
 ```bash
 sudo systemctl stop piwallet-bonnet
-shred -uz ~/.piwallet-dev/vault.bin
-rm -f ~/.piwallet-dev/terms.json
-piwallet vault --vault-path ~/.piwallet-dev/vault.bin init
+shred -uz ~/.piwallet/vault.bin
+rm -f ~/.piwallet/terms.json
+piwallet vault --vault-path ~/.piwallet/vault.bin init
 piwallet firstboot run --headless
 sudo systemctl start piwallet-bonnet
 ```
@@ -177,7 +177,7 @@ or the CLI:
 
 ```bash
 echo "various crime subway february cradle runway symptom snap muffin deny first pole" \
-    | piwallet vault --vault-path ~/.piwallet-dev/vault.bin add --label "Restored"
+    | piwallet vault --vault-path ~/.piwallet/vault.bin add --label "Restored"
 ```
 
 Both paths run the same checksum check and produce the same encrypted
@@ -218,6 +218,16 @@ sudo systemctl start piwallet-bonnet
 
 A signed-tarball workflow ships with v0.1; until then you're trusting
 your own copy.
+
+### Upgrading from a pre-rename dev install
+
+Earlier developer builds stored state under `~/.piwallet-dev/`. The
+bonnet's boot loop now performs a one-shot rename to `~/.piwallet/`
+on first start after an update — provided the canonical directory
+doesn't already exist. The rename is logged at `WARNING` level so it
+shows up in `journalctl -u piwallet-bonnet`. Custom `--vault-path`
+arguments pointing at `~/.piwallet-dev/...` will need to be updated
+to the new path; the bonnet's defaults already follow the rename.
 
 ## Time stewardship
 
@@ -284,7 +294,7 @@ Almost always an SPI handshake issue:
 acceptance. If it doesn't, the `terms.json` file isn't writable:
 
 ```bash
-ls -la ~/.piwallet-dev/
+ls -la ~/.piwallet/
 piwallet firstboot status
 ```
 
@@ -315,7 +325,7 @@ ownership won't conflict, but the user experience is confusing
 
 ```bash
 sudo systemctl stop piwallet-bonnet
-piwallet vault --vault-path ~/.piwallet-dev/vault.bin init
+piwallet vault --vault-path ~/.piwallet/vault.bin init
 sudo systemctl start piwallet-bonnet
 ```
 

@@ -12,7 +12,7 @@ flows see the [User manual](user-manual.md); for installation see
 ## Conventions
 
 - The default `--vault-path` everywhere is
-  `~/.piwallet-dev/vault.bin`. Set it explicitly in a script.
+  `~/.piwallet/vault.bin`. Set it explicitly in a script.
 - Anything that needs the PIN reads it interactively (`--no-input`
   is not supported, by design).
 - **Stdout encoding:** the rule is *hex when a human is in the loop,
@@ -82,7 +82,7 @@ applies to every subcommand:
 
 | Group option | Type | Default | Required | Notes |
 |---|---|---|---|---|
-| `--vault-path` | path | `~/.piwallet-dev/vault.bin` | no | Path to the encrypted vault file. **Specified on the *group*, not the subcommand**: `piwallet vault --vault-path X <sub>`. Parent directory is created if missing. |
+| `--vault-path` | path | `~/.piwallet/vault.bin` | no | Path to the encrypted vault file. **Specified on the *group*, not the subcommand**: `piwallet vault --vault-path X <sub>`. Parent directory is created if missing. |
 
 Every wallet subcommand inherits this `--vault-path`; the examples
 below show it explicitly so they're copy-paste safe.
@@ -360,7 +360,7 @@ piwallet sign --hex 8a07b3f1... --wallet-id <id>
 | Option | Type | Default | Required | Notes |
 |---|---|---|---|---|
 | `--hex` | text | *(none)* | conditional | Read the proposal as hex instead of from a file. Use `--hex -` to read hex from stdin (the recommended SSH-paste form — handles arbitrarily long blobs without quoting headaches). Whitespace inside the hex (newlines from a wrapped paste, tabs, spaces) is stripped before decoding. Mutually exclusive with `proposal_path`. |
-| `--vault-path` | path | `~/.piwallet-dev/vault.bin` | no | Path to the vault. *(Note: this is a per-command option here, not the group-level option from `piwallet vault`. They have the same default but live at different scopes.)* |
+| `--vault-path` | path | `~/.piwallet/vault.bin` | no | Path to the vault. *(Note: this is a per-command option here, not the group-level option from `piwallet vault`. They have the same default but live at different scopes.)* |
 | `--wallet-id` | text | *(none)* | **yes** | UUID of the wallet to sign with. The wallet's xpub fingerprint must match the proposal's `wallet_fp`; mismatches exit `1` with `FINGERPRINT MISMATCH` on stderr. |
 | `-o`, `--output` | path | *(none)* | no | Write the **raw signed_tx envelope bytes** to this file. When omitted, the envelope is printed as hex on stdout (terminal-safe; the canonical form for the SSH-paste workflow). |
 | `--max-fee-rate-satskb` | integer | `10000` | no | Reject proposals whose `feeRate` exceeds this cap (sats per kB). Defaults to 10 sat/byte — a hard ceiling against rogue companions trying to drain a wallet via an inflated fee. Lower it for paranoid setups; raise only if you've verified the fee in the on-screen summary. |
@@ -450,7 +450,7 @@ debugging.
 
 ```bash
 piwallet bonnet                                              # uses defaults
-piwallet bonnet --vault-path /home/pi/.piwallet-dev/vault.bin
+piwallet bonnet --vault-path /home/pi/.piwallet/vault.bin
 piwallet bonnet --display headless --input fake              # for screenshots
 ```
 

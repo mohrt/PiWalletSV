@@ -1,6 +1,6 @@
 """Disclaimer acceptance state.
 
-Persists a tiny JSON document at ``~/.piwallet-dev/terms.json`` (or a
+Persists a tiny JSON document at ``~/.piwallet/terms.json`` (or a
 caller-supplied path) recording which disclaimer version the operator
 has accepted, when they accepted it, and a per-device random ID. The
 file is *not* sensitive material - it carries no secrets, only a
@@ -40,8 +40,14 @@ class TermsState:
 
 
 def default_state_path() -> Path:
-    """Return ``~/.piwallet-dev/terms.json`` (the default location)."""
-    return Path.home() / ".piwallet-dev" / "terms.json"
+    """Return ``~/.piwallet/terms.json`` (the default location).
+
+    Re-exported here as part of the historical firstboot API; the
+    actual path lives in :mod:`piwallet.core.paths`.
+    """
+    from piwallet.core.paths import default_terms_path
+
+    return default_terms_path()
 
 
 def load_state(path: Path | None = None) -> TermsState | None:

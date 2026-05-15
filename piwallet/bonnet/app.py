@@ -345,13 +345,21 @@ def run_bonnet(
              change attempt.
 
     ``settings_path`` overrides the location of the persistent global
-    settings JSON file (default: ``~/.piwallet-dev/settings.json``).
+    settings JSON file (default: ``~/.piwallet/settings.json``).
     Settings are loaded on entry and persisted only when the operator
     saves changes from the Settings screen.
     """
+    from piwallet.core.paths import migrate_legacy_dev_dir
     from piwallet.runtime_logging import prepare_runtime_for_bonnet
 
     prepare_runtime_for_bonnet()
+
+    # One-shot migration for developer Pis that still have the legacy
+    # `~/.piwallet-dev/` directory from before the rename. No-op on a
+    # freshly-flashed image (canonical dir is created later by the
+    # vault-setup flow) and no-op once it's run. Logged either way so
+    # journald captures the fact for the operator.
+    migrate_legacy_dev_dir()
 
     own_display = display is None
     own_input = input_mgr is None

@@ -49,7 +49,7 @@ If you want a true "fresh device" walkthrough, move your existing
 vault out of the way first:
 
 ```sh
-mv ~/.piwallet-dev/vault.bin ~/.piwallet-dev/vault.bin.bak 2>/dev/null || true
+mv ~/.piwallet/vault.bin ~/.piwallet/vault.bin.bak 2>/dev/null || true
 .venv/bin/piwallet vault init
 .venv/bin/piwallet bonnet
 ```

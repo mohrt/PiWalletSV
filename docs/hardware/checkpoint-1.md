@@ -91,8 +91,8 @@ shred -u /tmp/m.txt
 
 (Or use an existing vault you've already set up.)
 
-The vault lives at `~/.piwallet-dev/vault.bin` by default; the
-disclaimer state lives at `~/.piwallet-dev/terms.json`. Wiping
+The vault lives at `~/.piwallet/vault.bin` by default; the
+disclaimer state lives at `~/.piwallet/terms.json`. Wiping
 that directory resets the device to a "first boot" state.
 
 ## 5. Run the bonnet
@@ -111,7 +111,7 @@ The display should:
 4. When you hold A for ~700 ms, fill a small red bar at the
    bottom of the modal; on release-after-completion the disclaimer
    exits with `accepted v1` recorded in
-   `~/.piwallet-dev/terms.json`.
+   `~/.piwallet/terms.json`.
 5. Show the **Enter PIN** screen with 6 empty cells.
 6. UP/DOWN cycles the active cell digit; LEFT/RIGHT moves
    between cells; A confirms.

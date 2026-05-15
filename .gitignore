@@ -32,6 +32,10 @@ coverage.xml
 vault.bin
 vault.bin.bak
 *.vault
+.piwallet/
+# Kept for transitional protection: a developer with an existing
+# ~/.piwallet-dev/ that gets auto-migrated by the bonnet on first
+# boot. Drop after a release or two once nobody has the old layout.
 .piwallet-dev/
 .piwallet/
 

@@ -3,7 +3,7 @@
 #
 # Usage:
 #   ./scripts/run_bonnet.sh
-#   ./scripts/run_bonnet.sh --vault-path /home/pi/.piwallet-dev/vault.bin
+#   ./scripts/run_bonnet.sh --vault-path /home/pi/.piwallet/vault.bin
 # Optional: ln -s /path/to/PiWallet/scripts/run_bonnet.sh ~/bin/piwallet-bonnet
 set -euo pipefail
 
