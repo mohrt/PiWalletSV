@@ -431,8 +431,10 @@ export function mountScannerPage(root: HTMLElement): () => void {
         `saving will create a new ${thisNet} entry alongside it.`;
       $pairSave.disabled = false;
     } else {
-      $pairStatus.textContent =
-        `Pi reported label "${env.label}". You can rename it before saving.`;
+      const isImport = env.label === "Imported wallet";
+      $pairStatus.textContent = isImport
+        ? "Enter a label for this wallet, then save."
+        : `Pi reported label "${env.label}". You can rename it before saving.`;
       $pairSave.disabled = false;
     }
   }
@@ -452,9 +454,11 @@ export function mountScannerPage(root: HTMLElement): () => void {
       $pairStatus.classList.remove("error");
       const netSuffix = rec.network === "test" ? " (TESTNET)" : "";
       $pairStatus.textContent =
-        `saved as "${rec.label}" — ${rec.fingerprint} on ${rec.path}${netSuffix}.`;
-      $pairOpenList.hidden = false;
+        `saved "${rec.label}"${netSuffix} — opening wallets…`;
       $pairLabel.disabled = true;
+      setTimeout(() => {
+        window.location.hash = "#/wallets";
+      }, 800);
     } catch (e) {
       $pairStatus.classList.add("error");
       const msg = e instanceof WalletStoreError ? e.message : (e as Error).message;
