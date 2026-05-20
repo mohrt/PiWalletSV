@@ -101,6 +101,11 @@ export function mountScannerPage(root: HTMLElement): () => void {
 
       <section id="broadcastCard" class="card broadcast-card" hidden>
         <h2>Broadcast signed transaction</h2>
+        <ol class="sign-steps" id="signSteps">
+          <li class="sign-step done" id="step-scan">Scanned</li>
+          <li class="sign-step active" id="step-broadcast">Broadcast</li>
+          <li class="sign-step" id="step-done">Done</li>
+        </ol>
         <p id="broadcastTxid" class="broadcast-txid"></p>
         <p id="broadcastMeta" class="muted-line"></p>
         <div class="actions">
@@ -111,6 +116,9 @@ export function mountScannerPage(root: HTMLElement): () => void {
             class="primary-link" hidden>View on WhatsOnChain</a>
         </div>
         <p id="broadcastStatus" class="muted-line"></p>
+        <p id="broadcastSuccess" class="broadcast-success" hidden>
+          ✓ Transaction accepted by the BSV network.
+        </p>
       </section>
 
       <section id="resultCard" class="card" hidden>
@@ -499,6 +507,30 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $broadcastExplorer.removeAttribute("href");
   }
 
+  function setSignStep(step: "scan" | "broadcast" | "done" | "error"): void {
+    const $scan = root.querySelector<HTMLElement>("#step-scan");
+    const $broadcast = root.querySelector<HTMLElement>("#step-broadcast");
+    const $done = root.querySelector<HTMLElement>("#step-done");
+    if (!$scan || !$broadcast || !$done) return;
+    // Reset all
+    for (const el of [$scan, $broadcast, $done]) {
+      el.className = "sign-step";
+    }
+    if (step === "scan") {
+      $scan.classList.add("active");
+    } else if (step === "broadcast") {
+      $scan.classList.add("done");
+      $broadcast.classList.add("active");
+    } else if (step === "done") {
+      $scan.classList.add("done");
+      $broadcast.classList.add("done");
+      $done.classList.add("done");
+    } else if (step === "error") {
+      $scan.classList.add("done");
+      $broadcast.classList.add("error");
+    }
+  }
+
   async function onBroadcast(): Promise<void> {
     if (!signedTx || broadcasting) return;
     broadcasting = true;
@@ -506,18 +538,18 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $broadcastBtn.textContent = "Broadcasting…";
     $broadcastStatus.classList.remove("error");
     $broadcastStatus.textContent = "Submitting to WhatsOnChain…";
-    // Build (or rebuild, if the network changed) a WocClient pointing
-    // at the right BSV main/test base for this signed_tx. In dev this
-    // resolves to a same-origin proxy path (see effectiveWocBase) so
-    // self-signed-cert phones don't choke on cross-origin fetch.
+    setSignStep("broadcast");
+
     const baseUrl = effectiveWocBase(signedTxNetwork);
     if (!woc || woc.baseUrl !== baseUrl.replace(/\/+$/, "")) {
       woc = new WocClient({ baseUrl });
     }
     try {
       const txid = await woc.broadcastRaw(signedTxRawHex);
-      $broadcastStatus.textContent = `accepted by WoC mempool · txid ${txid}`;
-      // Pi-side txid must match what WoC echoes back.
+      setSignStep("done");
+      const $success = root.querySelector<HTMLElement>("#broadcastSuccess");
+      if ($success) $success.hidden = false;
+      $broadcastStatus.textContent = `txid: ${txid}`;
       if (txid.toLowerCase() !== signedTxId.toLowerCase()) {
         $broadcastStatus.classList.add("error");
         $broadcastStatus.textContent =
@@ -531,6 +563,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
       $broadcastExplorer.hidden = false;
       $broadcastBtn.textContent = "Broadcasted";
     } catch (e) {
+      setSignStep("error");
       $broadcastStatus.classList.add("error");
       let msg: string;
       if (e instanceof WocError) {
