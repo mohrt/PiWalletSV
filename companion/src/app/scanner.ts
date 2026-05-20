@@ -23,6 +23,7 @@ import {
   bytesToHex,
   decodeEnvelope,
 } from "../lib/envelope.js";
+import { xpubFingerprint, DerivationError } from "../lib/derive.js";
 import { extractHexFromPaste } from "../lib/hex-paste.js";
 import { renderHeader } from "./nav.js";
 import { MultipartAssembler, MultipartQrError } from "../pw1.js";
@@ -83,6 +84,28 @@ export function mountScannerPage(root: HTMLElement): () => void {
             <button id="pasteHexClear" type="button">Clear</button>
           </div>
           <p id="pasteHexStatus" class="muted-line"></p>
+        </details>
+      </section>
+
+      <section class="card paste-hex-card">
+        <details>
+          <summary>Or paste xpub (import from another companion)</summary>
+          <p class="muted-line">
+            Paste a BIP32 account-level extended public key to import a
+            watch-only wallet without scanning the Pi. The key must start
+            with <code>xpub</code> (mainnet) or <code>tpub</code> (testnet)
+            and correspond to the BIP44 path <code>m/44'/236'/0'</code>.
+          </p>
+          <textarea id="pasteXpub" class="hex-blob" rows="3"
+            placeholder="xpub6…"
+            spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
+          <div class="actions">
+            <button id="pasteXpubImport" class="primary" type="button">
+              Import xpub
+            </button>
+            <button id="pasteXpubClear" type="button">Clear</button>
+          </div>
+          <p id="pasteXpubStatus" class="muted-line"></p>
         </details>
       </section>
 
@@ -156,6 +179,10 @@ export function mountScannerPage(root: HTMLElement): () => void {
   const $download = root.querySelector<HTMLButtonElement>("#download")!;
   const $copyView = root.querySelector<HTMLButtonElement>("#copyView")!;
   const $copyB64 = root.querySelector<HTMLButtonElement>("#copyB64")!;
+  const $pasteXpub = root.querySelector<HTMLTextAreaElement>("#pasteXpub")!;
+  const $pasteXpubImport = root.querySelector<HTMLButtonElement>("#pasteXpubImport")!;
+  const $pasteXpubClear = root.querySelector<HTMLButtonElement>("#pasteXpubClear")!;
+  const $pasteXpubStatus = root.querySelector<HTMLElement>("#pasteXpubStatus")!;
   const $pairCard = root.querySelector<HTMLElement>("#pairCard")!;
   const $pairStatus = root.querySelector<HTMLElement>("#pairStatus")!;
   const $pairLabel = root.querySelector<HTMLInputElement>("#pairLabel")!;
@@ -918,6 +945,67 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $pasteHex.value = "";
     setPasteStatus("");
     $pasteHex.focus();
+  });
+
+  // ── xpub paste import ───────────────────────────────────────────────────
+  function setXpubStatus(msg: string, isError = false): void {
+    $pasteXpubStatus.textContent = msg;
+    $pasteXpubStatus.classList.toggle("error", isError);
+  }
+
+  async function onPasteXpubImport(): Promise<void> {
+    const raw = $pasteXpub.value.trim();
+    if (!raw) {
+      setXpubStatus("paste an xpub key first", true);
+      return;
+    }
+
+    // Detect network from BIP32 version prefix
+    let network: NetworkT;
+    if (raw.startsWith("xpub") || raw.startsWith("xprv")) {
+      network = "main";
+    } else if (raw.startsWith("tpub") || raw.startsWith("tprv")) {
+      network = "test";
+    } else {
+      setXpubStatus(
+        "unrecognised key prefix — expected xpub… (mainnet) or tpub… (testnet)",
+        true,
+      );
+      return;
+    }
+
+    let fp: Uint8Array;
+    try {
+      fp = xpubFingerprint(raw);
+    } catch (e) {
+      setXpubStatus(
+        `invalid xpub: ${e instanceof DerivationError ? e.message : (e as Error).message}`,
+        true,
+      );
+      return;
+    }
+
+    setXpubStatus("xpub valid — fill in a label and save below.");
+
+    // Reuse the QR-scan pair card with a synthetic XpubExportT-like object
+    await showPairCard({
+      kind: KIND_XPUB,
+      xpub: raw,
+      path: "m/44'/236'/0'",
+      label: "Imported wallet",
+      fingerprint: fp,
+      network,
+    });
+  }
+
+  $pasteXpubImport.addEventListener("click", () => {
+    void onPasteXpubImport();
+  });
+  $pasteXpubClear.addEventListener("click", () => {
+    $pasteXpub.value = "";
+    setXpubStatus("");
+    hidePairCard();
+    $pasteXpub.focus();
   });
 
   return () => {
