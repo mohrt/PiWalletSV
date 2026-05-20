@@ -21,7 +21,7 @@
 import type { NetworkT } from "./envelope.js";
 
 export const BITAILS_MAINNET_BASE = "https://api.bitails.io";
-export const BITAILS_TESTNET_BASE = "https://test.bitails.io";
+export const BITAILS_TESTNET_BASE = "https://test-api.bitails.io";
 
 /**
  * Same-origin path used when the companion is served from the Vite
@@ -45,10 +45,14 @@ export function bitailsBaseForNetwork(network: NetworkT): string {
 /**
  * Resolve the Bitails base URL the companion should fetch from.
  *
- * - Dev + mainnet  → Vite proxy `/bitails`  (avoids self-signed-cert CORS)
- * - Dev + testnet  → direct `test.bitails.io` (rare; acceptable in dev)
- * - Prod + mainnet → direct `api.bitails.io`  (CORS headers present)
- * - Prod + testnet → CloudFront proxy `/bitails-test` (injects CORS header)
+ * - Dev + mainnet  → Vite proxy `/bitails`       (avoids self-signed-cert CORS)
+ * - Dev + testnet  → direct `test-api.bitails.io` (has CORS headers; OK in dev)
+ * - Prod + mainnet → direct `api.bitails.io`       (CORS headers present)
+ * - Prod + testnet → direct `test-api.bitails.io`  (CORS headers present)
+ *
+ * The CloudFront `/bitails-test` behavior remains in the infra as a fallback
+ * in case test-api.bitails.io ever drops its CORS headers, but the companion
+ * does not route through it by default.
  */
 export function effectiveBitailsBase(
   network: NetworkT,
@@ -56,7 +60,6 @@ export function effectiveBitailsBase(
 ): string {
   const dev = options.dev ?? import.meta.env.DEV;
   if (dev && network === "main") return BITAILS_DEV_PROXY_PATH;
-  if (!dev && network === "test") return BITAILS_TESTNET_PROXY_PATH;
   return bitailsBaseForNetwork(network);
 }
 
