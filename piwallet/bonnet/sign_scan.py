@@ -36,6 +36,7 @@ from PIL import Image
 from piwallet.bonnet.companion_pairing import pairing_pw1_lines  # noqa: F401  # re-exported for tests
 from piwallet.camera_lcd import paste_cover
 from piwallet.core import derivation as deriv
+from piwallet.core.settings import BonnetSettings
 from piwallet.core import envelope as env
 from piwallet.core import sign as sgn
 from piwallet.core import verify as vfy
@@ -257,6 +258,10 @@ ConfirmResult = Literal["sign", "cancel", "exit"]
 class ConfirmProposalScreen:
     """Show a verified proposal summary; **A** signs, **B** cancels.
 
+    The default view shows the amounts that matter: how much is being
+    sent and the fee.  Hold B toggles an advanced view with the raw
+    in/out totals, input/output counts, and network label.
+
     Verification (:func:`verify_proposal`) runs in :meth:`__post_init__`
     so a tampered or malformed proposal fails *before* the screen
     invites the operator to sign.
@@ -269,6 +274,7 @@ class ConfirmProposalScreen:
     title: str = "Sign transaction?"
     done: bool = False
     result: ConfirmResult | None = None
+    advanced: bool = False
     verified: vfy.VerifiedProposal | None = field(init=False, default=None)
     verify_error: str | None = field(init=False, default=None)
 
@@ -291,8 +297,8 @@ class ConfirmProposalScreen:
         b = event.button
         k = event.kind
         if b == Button.B and k == EventKind.LONG:
-            self.done = True
-            self.result = "exit"
+            # Toggle the advanced detail view; do not quit.
+            self.advanced = not self.advanced
             return
         if b == Button.B and k == EventKind.PRESS:
             self.done = True
@@ -311,7 +317,17 @@ class ConfirmProposalScreen:
 
     # -- rendering ---------------------------------------------------
 
+    def _send_sats(self, v: vfy.VerifiedProposal) -> int:
+        """Sum of all non-change outputs — the amount actually leaving the wallet."""
+        return sum(
+            sats
+            for idx, (_script, sats) in enumerate(v.outputs)
+            if idx != v.change_index
+        )
+
     def draw(self, fb: FrameBuffer) -> None:
+        from piwallet.ui.widgets import wrap_text_lines
+
         fb.clear(COLOR_BG)
         title_h = 22
         fb.draw.rectangle((0, 0, DISPLAY_WIDTH, title_h), fill=(20, 20, 32))
@@ -335,9 +351,6 @@ class ConfirmProposalScreen:
                 color=COLOR_DANGER,
                 anchor="mm",
             )
-            # Wrap the verifier's reason across up to 3 lines.
-            from piwallet.ui.widgets import wrap_text_lines
-
             lines = wrap_text_lines(self.verify_error, max_chars=30)[:6]
             y = title_h + 36
             for ln in lines:
@@ -349,7 +362,7 @@ class ConfirmProposalScreen:
                 fb,
                 DISPLAY_WIDTH // 2,
                 _FOOTER_Y,
-                "B back   hold B quit",
+                "B back",
                 size=10,
                 color=COLOR_DIM,
                 anchor="mm",
@@ -358,33 +371,35 @@ class ConfirmProposalScreen:
 
         assert self.verified is not None
         v = self.verified
-        # Two-column rows: label on the left, value on the right, so
-        # large amounts like "1234567 sat" stay legible.
-        rows = [
-            ("In",     f"{v.total_in:,} sat"),
-            ("Out",    f"{v.total_out:,} sat"),
-            ("Fee",    f"{v.fee_sats:,} sat"),
-            ("Inputs", f"{len(v.inputs)}"),
-            (
-                "Outputs",
-                f"{len(v.outputs)}"
-                + (" (incl. change)" if v.change_index >= 0 else ""),
-            ),
-            ("Net", self.network),
-        ]
-        y = title_h + 14
+
+        if self.advanced:
+            rows = [
+                ("In",      f"{v.total_in:,} sat"),
+                ("Out",     f"{v.total_out:,} sat"),
+                ("Fee",     f"{v.fee_sats:,} sat"),
+                ("Inputs",  str(len(v.inputs))),
+                (
+                    "Outputs",
+                    str(len(v.outputs))
+                    + (" +chg" if v.change_index >= 0 else ""),
+                ),
+                ("Net",     self.network),
+            ]
+            footer = "hold B summary"
+        else:
+            rows = [
+                ("Send",    f"{self._send_sats(v):,} sat"),
+                ("Fee",     f"{v.fee_sats:,} sat"),
+                ("Net",     self.network),
+            ]
+            footer = "hold B detail"
+
+        y = title_h + 20
+        row_gap = 20
         for label, value in rows:
-            draw_text(fb, 12, y, label, size=11, color=COLOR_DIM, anchor="lm")
-            draw_text(
-                fb,
-                DISPLAY_WIDTH - 12,
-                y,
-                value,
-                size=11,
-                color=COLOR_FG,
-                anchor="rm",
-            )
-            y += 18
+            draw_text(fb, 12, y, label, size=12, color=COLOR_DIM, anchor="lm")
+            draw_text(fb, DISPLAY_WIDTH - 12, y, value, size=12, color=COLOR_FG, anchor="rm")
+            y += row_gap
 
         draw_text(
             fb,
@@ -399,7 +414,7 @@ class ConfirmProposalScreen:
             fb,
             DISPLAY_WIDTH // 2,
             _FOOTER_Y,
-            "hold B to quit",
+            footer,
             size=10,
             color=COLOR_DIM,
             anchor="mm",
@@ -445,9 +460,10 @@ def _preflight_camera_imports() -> str | None:
 
 def _make_default_worker(
     *,
-    capture_size: str = "1280x960",
+    capture_size: str = "640x480",
     interval_s: float = 0.35,
     settle_s: float = 1.0,
+    skip_autofocus: bool = False,
 ):
     """Factory returning a ``start_worker(state)`` callable.
 
@@ -488,6 +504,7 @@ def _make_default_worker(
                     size=capture_size,
                     interval_s=interval_s,
                     settle_s=settle_s,
+                    skip_autofocus=skip_autofocus,
                     on_progress=on_progress,
                     on_lcd_thumbnail=on_thumb,
                     cancel_check=cancel_check,
@@ -550,6 +567,7 @@ def run_sign_flow(
     idle_wake: IdleWakeTracker | None = None,
     start_worker=None,  # test seam
     max_fee_rate_satskb: int = 10_000,
+    settings: BonnetSettings | None = None,
 ) -> SignFlowResult:
     """Drive scan → confirm → sign → animate signed_tx.
 
@@ -574,7 +592,8 @@ def run_sign_flow(
                 hold_seconds=toast_seconds,
             )
             return "stay"
-        start_worker = _make_default_worker()
+        skip_af = settings is not None and settings.camera_type not in ("imx708", "auto")
+        start_worker = _make_default_worker(skip_autofocus=skip_af)
     scan = ScanProposalScreen(start_worker=start_worker)
     run_screen(display, input_mgr, scan, target_fps=target_fps, idle_wake=idle_wake)
 
@@ -654,8 +673,6 @@ def run_sign_flow(
     run_screen(
         display, input_mgr, confirm, target_fps=target_fps, idle_wake=idle_wake
     )
-    if confirm.result == "exit":
-        return "exit"
     if confirm.result != "sign":
         return "stay"
 
@@ -688,7 +705,12 @@ def run_sign_flow(
     # QR density (4 px/module on the 240 panel). Larger chunks would
     # shrink each module below the threshold a phone autofocus can
     # lock from arm's length.
-    pw1_lines = split_envelope_to_lines(signed_blob, max_encoded_chunk_chars=120)
+    # 100-char chunks + ~10-char header = ~110 bytes/frame → QR version 7
+    # (45×45 modules).  At the 200 px QR target that gives 4 px/module,
+    # which is the minimum a phone autofocus through TFT glow can reliably
+    # lock on.  (120-char chunks pushed frames to version 10 at 3 px/module
+    # which was the root cause of companion scanning failures.)
+    pw1_lines = split_envelope_to_lines(signed_blob, max_encoded_chunk_chars=100)
     qr = PairingMultipartQrScreen(pw1_lines, title="Signed tx")
     run_screen(display, input_mgr, qr, target_fps=target_fps, idle_wake=idle_wake)
     if qr.result == "exit":

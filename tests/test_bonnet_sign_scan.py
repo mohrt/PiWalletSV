@@ -194,11 +194,18 @@ def test_confirm_screen_b_cancels(real_proposal) -> None:
     assert screen.done and screen.result == "cancel"
 
 
-def test_confirm_screen_long_b_exits(real_proposal) -> None:
+def test_confirm_screen_long_b_toggles_advanced(real_proposal) -> None:
+    """Hold B switches to the advanced detail view and back; does not exit."""
     _blob, proposal, xpub = real_proposal
     screen = ConfirmProposalScreen(proposal=proposal, account_xpub_str=xpub)
+    assert screen.advanced is False
     screen.on_event(_press(Button.B, EventKind.LONG))
-    assert screen.done and screen.result == "exit"
+    assert not screen.done
+    assert screen.advanced is True
+    # Second hold B returns to summary view.
+    screen.on_event(_press(Button.B, EventKind.LONG))
+    assert screen.advanced is False
+    assert not screen.done
 
 
 def test_confirm_screen_rejects_a_when_verify_fails(real_proposal) -> None:
