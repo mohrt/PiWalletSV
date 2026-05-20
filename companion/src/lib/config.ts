@@ -32,3 +32,15 @@ export function docsUrl(path = ""): string {
   const trimmed = path.replace(/^\/+/, "");
   return trimmed ? `${DOCS_BASE_URL}/${trimmed}` : `${DOCS_BASE_URL}/`;
 }
+
+/**
+ * How many transaction history entries to show in the History tab
+ * before offering a "load more" button.
+ */
+export const HISTORY_PAGE_SIZE = 50;
+
+/**
+ * Price cache TTL in milliseconds. The fiat toggle fetches the BSV/USD
+ * rate from WoC and caches it this long before re-fetching.
+ */
+export const PRICE_CACHE_TTL_MS = 60_000;
