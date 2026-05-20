@@ -44,6 +44,16 @@ export default defineConfig({
         secure: true,
         rewrite: (p) => p.replace(/^\/woc-test/, "/v1/bsv/test"),
       },
+      // Bitails mainnet proxy — same reason as WoC above.
+      // Testnet (test.bitails.io) falls back to direct fetch; testnet
+      // dev usage is rare enough that a self-signed-cert warning there
+      // is acceptable.
+      "/bitails": {
+        target: "https://api.bitails.io",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (p) => p.replace(/^\/bitails/, ""),
+      },
     },
   },
   build: {
