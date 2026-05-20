@@ -623,7 +623,6 @@ class MnemonicEntryScreen:
             ListItem(f"{i + 1:>2}. {w}", value=("edit", i))
             for i, w in enumerate(self.words)
         ]
-        items.append(ListItem("Confirm wallet", value="confirm", disabled=not ok))
         self.review_view = ListView(
             items=items,
             title=title,
@@ -658,21 +657,35 @@ class MnemonicEntryScreen:
 
     def _review_on_event(self, event: Event) -> None:
         assert self.review_view is not None
-        if event.button == Button.B and event.kind == EventKind.LONG:
+        b = event.button
+        k = event.kind
+
+        if b == Button.B and k == EventKind.LONG:
             self.done = True
             self.result = None
             self.error = None
             return
-        self.review_view.on_event(event)
-        if self.review_view.confirmed is None:
+
+        # A = confirm the wallet (when checksum is valid). Never edit.
+        if b == Button.A and k == EventKind.PRESS:
+            if self.mnemonic_checksum_ok():
+                self._finalize_restore_success()
             return
-        payload = self.review_view.confirmed
+
+        # SELECT / RIGHT = edit the currently highlighted word.
+        if b in (Button.SELECT, Button.RIGHT) and k == EventKind.PRESS:
+            self.review_cursor = self.review_view.cursor
+            payload = self.review_view.items[self.review_view.cursor].value
+            if isinstance(payload, tuple) and payload[0] == "edit":
+                self._begin_edit_word(payload[1])
+            return
+
+        # UP / DOWN scroll the list.
+        self.review_view.on_event(event)
+        # Drain any accidental `confirmed` the ListView may have set
+        # (shouldn't happen now that A is intercepted above, but keep
+        # as a safety net).
         self.review_view.confirmed = None
-        self.review_cursor = self.review_view.cursor
-        if payload == "confirm":
-            self._finalize_restore_success()
-        elif isinstance(payload, tuple) and payload[0] == "edit":
-            self._begin_edit_word(payload[1])
 
     def _edit_on_event(self, event: Event) -> None:
         self.current.on_event(event)
@@ -733,13 +746,19 @@ class MnemonicEntryScreen:
     def draw(self, fb: FrameBuffer) -> None:
         if self.phase == "review" and self.review_view is not None:
             self.review_view.draw(fb)
+            ok = self.mnemonic_checksum_ok()
+            hint = (
+                "A save   SEL edit word   hold B cancel"
+                if ok
+                else "SEL edit word   hold B cancel"
+            )
             draw_text(
                 fb,
                 DISPLAY_WIDTH // 2,
                 DISPLAY_HEIGHT - 11,
-                "UP/DWN   A / R / Sel   hold B cancel",
+                hint,
                 size=10,
-                color=COLOR_DIM,
+                color=COLOR_OK if ok else COLOR_DANGER,
                 anchor="mm",
             )
             return

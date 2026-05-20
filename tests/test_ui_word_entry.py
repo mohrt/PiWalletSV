@@ -329,12 +329,9 @@ def _drive_word(screen: MnemonicEntryScreen, word: str) -> None:
 
 
 def _confirm_restore_review(screen: MnemonicEntryScreen) -> None:
-    """On restore review: highlight Confirm wallet and activate."""
+    """On restore review: press A to confirm directly (no list item needed)."""
     assert screen.phase == "review"
-    assert screen.review_view is not None
-    rv = screen.review_view
-    rv.cursor = len(rv.items) - 1
-    assert not rv.items[-1].disabled
+    assert screen.mnemonic_checksum_ok()
     screen.on_event(_evt(Button.A))
 
 
@@ -379,8 +376,13 @@ def test_restore_mode_invalid_checksum_review_then_cancel() -> None:
     assert s.phase == "review"
     assert not s.mnemonic_checksum_ok()
     assert s.review_view is not None
-    assert s.review_view.items[-1].disabled
+    # "Confirm wallet" is no longer a list item — only the 12 word rows exist.
+    assert len(s.review_view.items) == 12
     assert "✗" in s.review_view.title
+    # A does nothing when checksum is invalid.
+    s.on_event(_evt(Button.A))
+    assert s.phase == "review"
+    assert not s.done
     s.on_event(_evt(Button.B, EventKind.LONG))
     assert s.done is True
     assert s.result is None
@@ -406,11 +408,10 @@ def test_restore_review_edit_word_fixes_checksum() -> None:
         _drive_word(s, w)
     assert s.phase == "review"
     assert not s.mnemonic_checksum_ok()
-    for _ in range(11):
-        s.on_event(_evt(Button.DOWN))
+    # Navigate DOWN to put the cursor on word 12 (index 11), then edit via SELECT.
     assert s.review_view is not None
-    assert s.review_view.cursor == 11
-    s.on_event(_evt(Button.A))
+    s.review_view.cursor = 11
+    s.on_event(_evt(Button.SELECT))
     assert s.phase == "edit"
     _drive_word(s, "about")
     assert s.phase == "review"
