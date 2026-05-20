@@ -29,16 +29,26 @@ export const BITAILS_TESTNET_BASE = "https://test.bitails.io";
  */
 export const BITAILS_DEV_PROXY_PATH = "/bitails";
 
+/**
+ * Same-origin path used in production (CloudFront behavior that proxies
+ * test.bitails.io and injects Access-Control-Allow-Origin: *).
+ * test.bitails.io does not send CORS headers itself, so direct browser
+ * fetch() from a custom domain is blocked; routing through CloudFront
+ * sidesteps that without exposing any credentials.
+ */
+export const BITAILS_TESTNET_PROXY_PATH = "/bitails-test";
+
 export function bitailsBaseForNetwork(network: NetworkT): string {
   return network === "test" ? BITAILS_TESTNET_BASE : BITAILS_MAINNET_BASE;
 }
 
 /**
  * Resolve the Bitails base URL the companion should fetch from.
- * In dev (Vite), requests go through a same-origin proxy so WebKit
- * doesn't reject them from a self-signed-cert page.
- * NOTE: dev proxy is per-base — we proxy mainnet only; for testnet
- * in dev the caller falls back to the direct URL.
+ *
+ * - Dev + mainnet  → Vite proxy `/bitails`  (avoids self-signed-cert CORS)
+ * - Dev + testnet  → direct `test.bitails.io` (rare; acceptable in dev)
+ * - Prod + mainnet → direct `api.bitails.io`  (CORS headers present)
+ * - Prod + testnet → CloudFront proxy `/bitails-test` (injects CORS header)
  */
 export function effectiveBitailsBase(
   network: NetworkT,
@@ -46,6 +56,7 @@ export function effectiveBitailsBase(
 ): string {
   const dev = options.dev ?? import.meta.env.DEV;
   if (dev && network === "main") return BITAILS_DEV_PROXY_PATH;
+  if (!dev && network === "test") return BITAILS_TESTNET_PROXY_PATH;
   return bitailsBaseForNetwork(network);
 }
 
