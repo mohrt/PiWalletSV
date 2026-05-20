@@ -164,6 +164,88 @@ def vault_list(ctx: click.Context) -> None:
         )
 
 
+@vault.command(
+    "recover",
+    help=(
+        "Diagnose a corrupt vault and optionally replace it with a fresh empty one. "
+        "A healthy vault is reported as-is. A corrupt (unreadable) file can be "
+        "renamed to <vault>.corrupt and replaced with a new empty vault so the "
+        "operator can restore wallet(s) from their seed phrase(s)."
+    ),
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Skip the confirmation prompt and immediately rename + recreate.",
+)
+@click.pass_context
+def vault_recover(ctx: click.Context, force: bool) -> None:
+    import shutil
+
+    path = ctx.obj["vault_path"]
+    v = Vault(path)
+
+    if not v.exists:
+        click.echo(
+            f"No vault found at {path}. "
+            "Run `piwallet vault init` to create one."
+        )
+        return
+
+    if v.is_initialized:
+        wallets = v.list_wallets()
+        if not wallets:
+            click.echo(
+                "Vault is readable but empty (wiped or never populated). "
+                "Add wallets with `piwallet vault add` or the bonnet UI."
+            )
+        else:
+            click.echo(f"Vault appears healthy: {len(wallets)} wallet(s).")
+            for w in wallets:
+                net_label = "TESTNET" if w.network == "test" else "mainnet"
+                click.echo(
+                    f"  {w.id}  {w.fingerprint.hex()}  {w.label}  "
+                    f"{w.derivation_path}  {net_label}"
+                )
+        return
+
+    # Vault file exists but failed CBOR parsing — it is corrupt.
+    click.echo(
+        f"Vault at {path} exists but could not be parsed "
+        "(corrupt CBOR or truncated write).",
+        err=True,
+    )
+    click.echo(
+        "Recovery options:\n"
+        "  1. If you have your seed phrase(s), rename the file manually and\n"
+        f"     run `piwallet vault init` to start fresh.\n"
+        "  2. Run this command with --force (or confirm below) to rename the\n"
+        "     corrupt file automatically and create a new empty vault.",
+        err=True,
+    )
+
+    if not force and not click.confirm("Rename corrupt vault and create a fresh empty one?"):
+        click.echo("Aborted; vault file left untouched.", err=True)
+        sys.exit(1)
+
+    backup = path.with_suffix(".corrupt")
+    shutil.move(str(path), str(backup))
+    click.echo(f"Renamed corrupt vault → {backup}")
+
+    pin = click.prompt("New PIN (>=6 digits)", hide_input=True, confirmation_prompt=True)
+    try:
+        new_vault = Vault(path)
+        new_vault.create(pin=pin)
+    except VaultError as exc:
+        click.echo(f"ERROR creating vault: {exc}", err=True)
+        sys.exit(1)
+    click.echo(
+        f"Created fresh vault at {path}. "
+        "Restore your wallet(s) via the bonnet UI or `piwallet vault add`."
+    )
+
+
 @vault.command("export-xpub", help="Print the account xpub for a wallet.")
 @click.argument("wallet_id")
 @click.pass_context
@@ -369,7 +451,7 @@ def qr_split(input_path: Path | None, chunk_chars: int, output: Path | None) -> 
 
 
 @qr.command("scan-camera", help="Capture QR frames until a full PW1 payload is assembled (Pi).")
-@click.option("--size", default="1280x960", show_default=True, help="Capture resolution WxH.")
+@click.option("--size", default="640x480", show_default=True, help="Capture resolution WxH.")
 @click.option(
     "--interval",
     type=float,
@@ -378,11 +460,19 @@ def qr_split(input_path: Path | None, chunk_chars: int, output: Path | None) -> 
     help="Sleep between frames (seconds).",
 )
 @click.option(
+    "--settle",
+    type=float,
+    default=2.0,
+    show_default=True,
+    help="Seconds to wait after camera start before decoding (allow AGC/AEC to stabilise).",
+)
+@click.option(
     "--af",
     "autofocus",
     type=click.Choice(["continuous", "auto", "manual"]),
-    default="continuous",
+    default="manual",
     show_default=True,
+    help="Autofocus mode. Use 'manual' for fixed-focus cameras like OV5647.",
 )
 @click.option(
     "-o",
@@ -395,12 +485,22 @@ def qr_split(input_path: Path | None, chunk_chars: int, output: Path | None) -> 
     default=True,
     help="Print decoded envelope summary to stderr when done.",
 )
+@click.option(
+    "--save-frame",
+    "save_frame",
+    type=click.Path(dir_okay=False),
+    default=None,
+    help="Save the first captured frame as a JPEG to this path, then continue scanning. "
+    "Useful for diagnosing focus/exposure without a screen.",
+)
 def qr_scan_camera(
     size: str,
     interval: float,
+    settle: float,
     autofocus: str,
     output: Path | None,
     show: bool,
+    save_frame: str | None,
 ) -> None:
     """Requires Pi camera stack (picamera2) and pyzbar."""
 
@@ -413,8 +513,11 @@ def qr_scan_camera(
         blob = scan_multipart_from_camera(
             size=size,
             interval_s=interval,
+            settle_s=settle,
+            skip_autofocus=(autofocus == "manual"),
             autofocus=autofocus,
             on_progress=on_progress,
+            save_frame_path=save_frame,
         )
     except MultipartQrError as exc:
         click.echo(f"QR ASSEMBLY ERROR: {exc}", err=True)
@@ -809,7 +912,7 @@ def firstboot_run(
 # ---- diagnostics -------------------------------------------------------
 
 
-@main.group(help="On-device diagnostics (airgap, etc.).")
+@main.group(help="On-device diagnostics (airgap, display, GPIO, vault).")
 def diag() -> None:
     pass
 
@@ -859,6 +962,70 @@ def diag_airgap(as_json: bool) -> None:
             "(data source unavailable in this environment)."
         )
     sys.exit(0 if report.ok else 1)
+
+
+@diag.command(
+    "display",
+    help=(
+        "Check SPI device node, backlight GPIO, and attempt a test blit "
+        "to the ST7789 TFT panel. Returns non-zero on conclusive failure."
+    ),
+)
+def diag_display() -> None:
+    from piwallet.diag.display import run_all as display_checks
+
+    results = display_checks()
+    _diag_print_results(results)
+    sys.exit(0 if all(r.ok is not False for r in results) else 1)
+
+
+@diag.command(
+    "gpio",
+    help=(
+        "Read every bonnet joystick/button GPIO pin (BCM mode) and confirm "
+        "no IOError is raised. Returns non-zero on any conclusive failure."
+    ),
+)
+def diag_gpio() -> None:
+    from piwallet.diag.gpio import run_all as gpio_checks
+
+    results = gpio_checks()
+    _diag_print_results(results)
+    sys.exit(0 if all(r.ok is not False for r in results) else 1)
+
+
+@diag.command(
+    "vault",
+    help=(
+        "Check that the vault file is present, CBOR-parseable, and at a "
+        "supported version. PIN-free — no key material is decrypted."
+    ),
+)
+@click.option(
+    "--vault-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=default_vault_path(),
+    show_default=True,
+)
+def diag_vault(vault_path: Path) -> None:
+    from piwallet.diag.vault import run_all as vault_checks
+
+    results = vault_checks(vault_path)
+    _diag_print_results(results)
+    sys.exit(0 if all(r.ok is not False for r in results) else 1)
+
+
+def _diag_print_results(results: list) -> None:
+    """Shared table renderer for diag sub-commands."""
+    name_w = max((len(r.name) for r in results), default=10)
+    for r in results:
+        if r.ok is True:
+            status = "PASS"
+        elif r.ok is False:
+            status = "FAIL"
+        else:
+            status = "N/A "
+        click.echo(f"  {r.name.ljust(name_w)}  {status}  {r.detail}")
 
 
 @main.command("bonnet", help="Run the full bonnet boot loop on the device.")
