@@ -7,11 +7,10 @@ automatically and allows manual L/R to jump frames.
 Layout note
 -----------
 Title bar and footer are kept intentionally tiny so the QR ink can fill
-~196 px of the 240 x 240 panel. With the default 120-char chunking from
-:mod:`piwallet.bonnet.companion_pairing` this puts each frame at QR
-version 6 (41 modules) rendered at ~4 px per module — comfortably
-above the threshold a phone camera needs to autofocus through the
-TFT's backlight glow.
+~196 px of the 240 x 240 panel. With 100-char chunks and error="L" each
+frame lands at QR version 7 (45 modules, 45+4=49 bordered) rendered at
+floor(200/49)=4 px per module — comfortably above the threshold a phone
+camera needs to autofocus through the TFT's backlight glow.
 
 Controls
 --------
@@ -147,7 +146,7 @@ class PairingMultipartQrScreen:
         # they ate enough vertical space that the QR could only render at
         # 3 px per module on a 240 x 240 panel; phones struggled to lock
         # autofocus through the TFT glow at that density. One line at
-        # size=10 yields ~196 px for the QR (4 px per module on a v6).
+        # size=10 yields ~196 px for the QR (4 px per module on a v7).
         y_footer = DISPLAY_HEIGHT - 10
         eff_px = min(
             self.qr_target_px,
@@ -163,7 +162,7 @@ class PairingMultipartQrScreen:
                 line,
                 target_px=eff_px,
                 border=2,
-                error="M",
+                error="L",
             )
             qr_x = (DISPLAY_WIDTH - eff_px) // 2
             paste_qr(fb.image, qr_img, x=qr_x, y=qr_y)

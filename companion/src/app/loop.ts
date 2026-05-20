@@ -112,7 +112,7 @@ async function runRoundTrip(
 ): Promise<RoundTripResult> {
   try {
     const blob = await encodeEnvelope(env);
-    const lines = encodeMultipartLines(blob, 720);
+    const lines = encodeMultipartLines(blob);
     // shuffle so we exercise the assembler's out-of-order path too
     const shuffled = [...lines].reverse();
     const reassembled = joinMultipartLines(shuffled);

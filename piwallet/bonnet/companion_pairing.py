@@ -17,7 +17,7 @@ def pairing_pw1_lines(
     pin: str,
     wallet: WalletRecord,
     *,
-    chunk_chars: int = 120,
+    chunk_chars: int = 100,
 ) -> list[str]:
     """Return PW1 multipart lines for the gzip+CBOR ``xpub_export`` envelope.
 
@@ -25,24 +25,18 @@ def pairing_pw1_lines(
     can route the paired wallet to the correct base58check prefix and
     WhatsOnChain endpoint.
 
-    ``chunk_chars`` is deliberately small (120) so each rendered QR
-    stays at a low module count on the bonnet's 240x240 panel. We
-    arrived at 120 empirically:
+    ``chunk_chars`` targets 100 so each frame stays within QR version 7
+    (45×45 modules) when rendered with error="L".  At the ~196 px QR
+    target (see :class:`PairingMultipartQrScreen`) that gives 4 px per
+    module — comfortably above phone-scanner minimums through TFT glow.
+    The progression that led here:
 
-    * 720 chars: a single ~version-25 QR, ~1.5 px per module — phone
-      cameras could not autofocus on it through the TFT glow.
-    * 240 chars: 2 frames around version 8 (~3 px per module at a
-      147 px QR ink area) — the autofocus could lock but module-size
-      headroom was thin and phones at typical arm's length still
-      sometimes rejected frames.
-    * **120 chars** (current): 2-4 frames around version 6 (41
-      modules square). At the new ~196 px QR target (see
-      :class:`PairingMultipartQrScreen`) each module renders at
-      ~4 px which is comfortably above phone-scanner minimums and
-      survives glare from the TFT backlight.
-
-    The multipart animation cycles through 2-4 frames so the scanner
-    has multiple decode attempts per envelope.
+    * 720 chars → version 25, ~1.5 px/module, phones could not lock.
+    * 240 chars → version 8, ~3 px/module, marginal.
+    * 120 chars + error M → version 10, 3 px/module (57+4=61 bordered,
+      floor(200/61)=3), still marginal for signed-tx scanning.
+    * **100 chars + error L** (current): version 7, 4 px/module
+      (45+4=49 bordered, floor(200/49)=4) — reliably scannable.
     """
     xpub_str = vault.get_account_xpub(pin, wallet.id)
     payload = env.XpubExport(
