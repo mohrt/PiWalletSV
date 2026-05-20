@@ -1,5 +1,6 @@
 import "./app/styles.css";
 import { mountScannerPage } from "./app/scanner.js";
+import { mountSettingsPage } from "./app/settings-page.js";
 import { ensureTermsAccepted } from "./app/terms-modal.js";
 import { mountWalletDetailPage } from "./app/wallet-detail.js";
 import { mountWalletsPage } from "./app/wallets-page.js";
@@ -41,6 +42,8 @@ function render(): void {
     mounted = mountWalletsPage(app);
   } else if (route === "#/scan") {
     mounted = mountScannerPage(app);
+  } else if (route === "#/settings") {
+    mounted = mountSettingsPage(app);
   } else if (route.startsWith("#/wallets/")) {
     const id = route.slice("#/wallets/".length);
     mounted = mountWalletDetailPage(app, id);
