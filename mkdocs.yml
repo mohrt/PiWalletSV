@@ -134,29 +134,34 @@ extra:
 
 nav:
   - Home: index.md
-  - Download: download.md
-  - Purchase a kit: purchase.md
-  - Flash and first run: build-image.md
-  - Getting started: getting-started.md
-  - Build & deploy: build.md
-  - Operate: operate.md
-  - Architecture: architecture.md
-  - User manual: user-manual.md
-  - Recover without device: recover-without-device.md
-  - CLI reference: cli.md
-  - Develop: develop.md
-  - Security: security.md
-  - BRC alignment: brc-alignment.md
-  - Prior art: prior-art.md
+  - Setup:
+      - Download image: download.md
+      - Flash and first run: build-image.md
+      - Getting started (from source): getting-started.md
+      - Purchase a kit: purchase.md
+  - User guide:
+      - User manual: user-manual.md
+      - Recover without device: recover-without-device.md
+  - Operations:
+      - Build & deploy: build.md
+      - Operate: operate.md
+      - CLI reference: cli.md
+  - Reference:
+      - Architecture: architecture.md
+      - Security: security.md
+      - BRC alignment: brc-alignment.md
+      - Prior art: prior-art.md
+      - Protocol spec:
+          - Overview: protocol/README.md
+          - Derivation: protocol/derivation.md
+          - Envelopes: protocol/envelopes.md
+          - QR transport: protocol/qr-transport.md
+          - SPV requirements: protocol/spv.md
+          - Conformance: protocol/conformance.md
+  - Develop:
+      - Developer guide: develop.md
+      - Hardware tests:
+          - Checkpoint 1 (bonnet boot path): hardware/checkpoint-1.md
+          - Checkpoint 2 (word entry): hardware/checkpoint-2.md
+          - Checkpoint 3 (testnet round-trip): hardware/checkpoint-3.md
   - Disclaimer: disclaimer.md
-  - Protocol spec:
-      - Overview: protocol/README.md
-      - Derivation: protocol/derivation.md
-      - Envelopes: protocol/envelopes.md
-      - QR transport: protocol/qr-transport.md
-      - SPV requirements: protocol/spv.md
-      - Conformance: protocol/conformance.md
-  - Hardware tests:
-      - Checkpoint 1 (bonnet boot path): hardware/checkpoint-1.md
-      - Checkpoint 2 (word entry): hardware/checkpoint-2.md
-      - Checkpoint 3 (testnet round-trip): hardware/checkpoint-3.md
