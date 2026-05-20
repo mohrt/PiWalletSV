@@ -19,7 +19,7 @@ import {
   deriveAddressBatch,
 } from "../lib/derive.js";
 import { DOCS_BASE_URL } from "../lib/config.js";
-import { bytesToHex, encodeEnvelope } from "../lib/envelope.js";
+import { KIND_XPUB, bytesToHex, encodeEnvelope, hexToBytes } from "../lib/envelope.js";
 import { CoinSelectError, selectUtxosGreedy } from "../lib/coin-select.js";
 import { encodeMultipartLines } from "../pw1.js";
 import { ProofFetchError, fetchInputProof } from "../lib/proof-fetcher.js";
@@ -112,6 +112,11 @@ export function mountWalletDetailPage(
   let proposalLastFrameAt = 0;
   let proposalRaf: number | null = null;
 
+  let exportFrames: string[] | null = null;
+  let exportFrameIdx = 0;
+  let exportLastFrameAt = 0;
+  let exportRaf: number | null = null;
+
   root.innerHTML = `
     <main class="page">
       ${renderHeader("Wallet detail", "wallets")}
@@ -139,6 +144,9 @@ export function mountWalletDetailPage(
     wallet = withDefaults(rec);
     renderShell();
     void renderReceive();
+    // Auto-refresh UTXOs every time the wallet is opened so the
+    // spend flow always works from a current UTXO set.
+    void onRefreshBalance();
   }
 
   function renderError(html: string): void {
@@ -295,6 +303,30 @@ export function mountWalletDetailPage(
           </p>
           <ul id="receiveList" class="addr-list"></ul>
         </section>
+
+        <section class="card export-card">
+          <h2>Share wallet</h2>
+          <p class="muted-line">
+            Show an animated QR so another companion device can pair with
+            this wallet. Only the public key (xpub) is exported — no
+            spending key leaves this device.
+          </p>
+          <div class="actions">
+            <button id="exportShow" class="primary" type="button">Show export QR</button>
+          </div>
+          <div id="exportResult" hidden>
+            <canvas id="exportQr" width="320" height="320"></canvas>
+            <p class="muted-line">
+              Frame <span id="exportFrameIdx">0</span> /
+              <span id="exportFrameCount">0</span>
+              — scan from the companion's <a href="#/scan">Scan QR</a> page
+            </p>
+            <div class="actions">
+              <button id="exportToggle" type="button" class="primary">Pause</button>
+              <button id="exportHide" type="button">Hide</button>
+            </div>
+          </div>
+        </section>
       </main>
     `;
 
@@ -316,6 +348,13 @@ export function mountWalletDetailPage(
     $done.addEventListener("click", resetSendCard);
     const $copyHex = root.querySelector<HTMLButtonElement>("#copyProposalHex")!;
     $copyHex.addEventListener("click", () => void onCopyProposalHex());
+
+    const $exportShow = root.querySelector<HTMLButtonElement>("#exportShow")!;
+    $exportShow.addEventListener("click", () => void onShowExport());
+    const $exportToggle = root.querySelector<HTMLButtonElement>("#exportToggle")!;
+    $exportToggle.addEventListener("click", toggleExportAnimation);
+    const $exportHide = root.querySelector<HTMLButtonElement>("#exportHide")!;
+    $exportHide.addEventListener("click", hideExport);
 
     renderBalance();
   }
@@ -467,11 +506,27 @@ export function mountWalletDetailPage(
       };
       await setLastScan(wallet.id, snapshot);
       wallet.lastScan = snapshot;
+
+      // Auto-advance receive index: if the scan found receive addresses
+      // with UTXOs beyond the current pointer, move the pointer to
+      // lastReceiveUsed + 1 so the next address shown is always fresh.
+      const autoNext = result.lastReceiveUsed + 1;
+      const didAdvance = autoNext > wallet.nextReceiveIndex;
+      if (didAdvance) {
+        await setNextReceiveIndex(wallet.id, autoNext);
+        wallet.nextReceiveIndex = autoNext;
+      }
+
       renderBalance();
+      void renderReceive();
+      renderRecentList();
       if ($status) {
+        const advanceNote = didAdvance
+          ? ` · receive index → ${wallet.nextReceiveIndex}`
+          : "";
         $status.textContent =
           `Scan complete — ${result.utxos.length} UTXO(s), ` +
-          `${result.addressesScanned} addresses probed.`;
+          `${result.addressesScanned} addresses probed.${advanceNote}`;
       }
     } catch (e) {
       if (cancelled) return;
@@ -596,7 +651,7 @@ export function mountWalletDetailPage(
       });
 
       const blob = await encodeEnvelope(envelope);
-      const frames = encodeMultipartLines(blob, 720);
+      const frames = encodeMultipartLines(blob);
 
       proposalFrames = frames;
       proposalFrameIdx = 0;
@@ -678,6 +733,77 @@ export function mountWalletDetailPage(
       proposalFrameIdx = (proposalFrameIdx + 1) % proposalFrames.length;
     }
     proposalRaf = requestAnimationFrame(tickProposal);
+  }
+
+  async function onShowExport(): Promise<void> {
+    if (!wallet) return;
+    const envelope = {
+      kind: KIND_XPUB,
+      xpub: wallet.xpub,
+      path: wallet.path,
+      label: wallet.label,
+      fingerprint: hexToBytes(wallet.fingerprint),
+      network: wallet.network,
+    } as const;
+    const blob = await encodeEnvelope(envelope);
+    exportFrames = encodeMultipartLines(blob);
+    exportFrameIdx = 0;
+    exportLastFrameAt = 0;
+    const $result = root.querySelector<HTMLElement>("#exportResult")!;
+    const $count = root.querySelector<HTMLElement>("#exportFrameCount")!;
+    $result.hidden = false;
+    $count.textContent = String(exportFrames.length);
+    startExportAnimation();
+  }
+
+  function startExportAnimation(): void {
+    stopExportAnimation();
+    if (!exportFrames || exportFrames.length === 0) return;
+    const $toggle = root.querySelector<HTMLButtonElement>("#exportToggle");
+    if ($toggle) $toggle.textContent = "Pause";
+    exportRaf = requestAnimationFrame(tickExport);
+  }
+
+  function stopExportAnimation(): void {
+    if (exportRaf !== null) cancelAnimationFrame(exportRaf);
+    exportRaf = null;
+    const $toggle = root.querySelector<HTMLButtonElement>("#exportToggle");
+    if ($toggle) $toggle.textContent = "Resume";
+  }
+
+  function toggleExportAnimation(): void {
+    if (exportRaf !== null) stopExportAnimation();
+    else startExportAnimation();
+  }
+
+  function hideExport(): void {
+    stopExportAnimation();
+    exportFrames = null;
+    const $result = root.querySelector<HTMLElement>("#exportResult");
+    if ($result) $result.hidden = true;
+  }
+
+  function tickExport(now: number): void {
+    if (!exportFrames || cancelled) {
+      exportRaf = null;
+      return;
+    }
+    const interval = 1000 / 6; // 6 fps
+    if (now - exportLastFrameAt >= interval) {
+      exportLastFrameAt = now;
+      const $canvas = root.querySelector<HTMLCanvasElement>("#exportQr");
+      const $idx = root.querySelector<HTMLElement>("#exportFrameIdx");
+      if ($canvas && $idx) {
+        $idx.textContent = String(exportFrameIdx + 1);
+        void QRCode.toCanvas($canvas, exportFrames[exportFrameIdx], {
+          width: 320,
+          margin: 1,
+          errorCorrectionLevel: "M",
+        });
+      }
+      exportFrameIdx = (exportFrameIdx + 1) % exportFrames.length;
+    }
+    exportRaf = requestAnimationFrame(tickExport);
   }
 
   function resetSendCard(): void {
@@ -812,5 +938,6 @@ export function mountWalletDetailPage(
   return () => {
     cancelled = true;
     stopProposalAnimation();
+    stopExportAnimation();
   };
 }

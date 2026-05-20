@@ -33,6 +33,7 @@ import {
   findByFingerprintAndPath,
   listWallets,
 } from "../lib/wallets.js";
+import { ENVELOPE_VERSION } from "../lib/envelope.js";
 import type { NetworkT } from "../lib/envelope.js";
 import { WocClient, WocError, effectiveWocBase } from "../lib/woc.js";
 
@@ -276,7 +277,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
   function formatEnvelope(env: Envelope): string {
     const fp = env.kind === KIND_XPUB ? env.fingerprint : env.walletFp;
     const lines: string[] = [
-      `${env.kind === KIND_XPUB ? "xpub_export" : env.kind === KIND_PROPOSAL ? "unsigned_proposal" : "signed_tx"} v1`,
+      `${env.kind === KIND_XPUB ? "xpub_export" : env.kind === KIND_PROPOSAL ? "unsigned_proposal" : "signed_tx"} v${ENVELOPE_VERSION}`,
       `walletFp:    ${bytesToHex(fp)}`,
     ];
     if (env.kind === KIND_XPUB) {
@@ -531,7 +532,13 @@ export function mountScannerPage(root: HTMLElement): () => void {
       $broadcastBtn.textContent = "Broadcasted";
     } catch (e) {
       $broadcastStatus.classList.add("error");
-      const msg = e instanceof WocError ? e.message : (e as Error).message;
+      let msg: string;
+      if (e instanceof WocError) {
+        msg = e.message;
+        if (e.bodySnippet) msg += `\nWoC said: ${e.bodySnippet}`;
+      } else {
+        msg = (e as Error).message;
+      }
       $broadcastStatus.textContent = `broadcast failed: ${msg}`;
       $broadcastBtn.disabled = false;
       $broadcastBtn.textContent = "Retry broadcast";

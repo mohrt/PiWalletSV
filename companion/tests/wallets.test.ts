@@ -185,6 +185,65 @@ describe("wallets store", () => {
     ).rejects.toBeInstanceOf(WalletStoreError);
   });
 
+  it("setNextReceiveIndex advances the stored pointer", async () => {
+    const rec = await addWallet(DEMO);
+    expect(rec.nextReceiveIndex).toBeUndefined(); // fresh record has no pointer
+
+    await setNextReceiveIndex(rec.id, 3);
+    const after = await getWallet(rec.id);
+    expect(after?.nextReceiveIndex).toBe(3);
+  });
+
+  it("setNextReceiveIndex can be called again to advance further", async () => {
+    const rec = await addWallet(DEMO);
+    await setNextReceiveIndex(rec.id, 2);
+    await setNextReceiveIndex(rec.id, 5);
+    const after = await getWallet(rec.id);
+    expect(after?.nextReceiveIndex).toBe(5);
+  });
+
+  it("setNextReceiveIndex rejects negative and out-of-range values", async () => {
+    const rec = await addWallet(DEMO);
+    await expect(setNextReceiveIndex(rec.id, -1)).rejects.toBeInstanceOf(WalletStoreError);
+    await expect(setNextReceiveIndex(rec.id, 0x80000000)).rejects.toBeInstanceOf(WalletStoreError);
+    await expect(setNextReceiveIndex(rec.id, 1.5)).rejects.toBeInstanceOf(WalletStoreError);
+  });
+
+  it("auto-advance pattern: scan result drives nextReceiveIndex forward", async () => {
+    // Simulates what wallet-detail.ts does after scanWalletUtxos:
+    //   autoNext = lastReceiveUsed + 1
+    //   if (autoNext > wallet.nextReceiveIndex) setNextReceiveIndex(...)
+    const rec = await addWallet(DEMO);
+    await setNextReceiveIndex(rec.id, 0); // start at index 0
+
+    // Scan finds a UTXO at receive index 2 → autoNext = 3
+    const lastReceiveUsed = 2;
+    const autoNext = lastReceiveUsed + 1;
+    let wallet = await getWallet(rec.id);
+    if (autoNext > (wallet?.nextReceiveIndex ?? 0)) {
+      await setNextReceiveIndex(rec.id, autoNext);
+    }
+
+    wallet = await getWallet(rec.id);
+    expect(wallet?.nextReceiveIndex).toBe(3);
+  });
+
+  it("auto-advance pattern: does not regress when pointer is already ahead", async () => {
+    // Operator had manually advanced to index 5; scan only finds up to index 2.
+    const rec = await addWallet(DEMO);
+    await setNextReceiveIndex(rec.id, 5);
+
+    const lastReceiveUsed = 2;
+    const autoNext = lastReceiveUsed + 1; // 3
+    let wallet = await getWallet(rec.id);
+    if (autoNext > (wallet?.nextReceiveIndex ?? 0)) {
+      await setNextReceiveIndex(rec.id, autoNext);
+    }
+
+    wallet = await getWallet(rec.id);
+    expect(wallet?.nextReceiveIndex).toBe(5); // unchanged
+  });
+
   it("withDefaults backfills network='main' for legacy records", () => {
     const legacy = {
       id: "x",
