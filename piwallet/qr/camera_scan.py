@@ -93,20 +93,28 @@ def configure_autofocus(cam, controls_mod, mode: str = "continuous") -> None:
 def scan_multipart_from_camera(
     assembler: MultipartAssembler | None = None,
     *,
-    size: str = "1280x960",
+    size: str = "640x480",
     interval_s: float = 0.35,
     autofocus: str = "continuous",
-    settle_s: float = 1.0,
+    skip_autofocus: bool = False,
+    settle_s: float = 2.0,
     on_progress: ProgressCallback | None = None,
     on_lcd_thumbnail: Callable[[Image.Image], None] | None = None,
     lcd_thumbnail_interval_s: float = 0.28,
     mono_s: Callable[[], float] | None = None,
     cancel_check: Callable[[], bool] | None = None,
+    save_frame_path: str | None = None,
 ) -> bytes:
     """Block until all PW1 QR fragments are seen, then return assembled bytes.
 
     Press Ctrl+C to abort. Raises :class:`MultipartQrError` on conflicting
     fragments. Propagates ``RuntimeError`` when camera or pyzbar is missing.
+
+    Uses ``create_preview_configuration`` with ``RGB888`` so the sensor runs
+    in continuous video mode — important for fixed-focus sensors like the
+    OV5647 whose AGC/AEC settles faster and more reliably than in still mode,
+    and so ``capture_array`` always returns a 3-channel RGB array that pyzbar
+    can decode without format guessing.
 
     When ``on_lcd_thumbnail`` is set (e.g. bonnet TFT), decode frames drive the loop
     and a downscaled PIL thumbnail is emitted at ``lcd_thumbnail_interval_s`` intervals
@@ -115,6 +123,10 @@ def scan_multipart_from_camera(
     ``cancel_check`` is polled between camera frames; when it returns True the
     loop raises :class:`ScanCancelled`. The bonnet flow uses this to drop the
     scan when the operator presses **B**; CLI callers leave it ``None``.
+
+    ``save_frame_path`` writes the first captured frame as a JPEG before
+    starting QR decode — useful for diagnosing focus / exposure issues from
+    the CLI without needing a screen.
     """
     from piwallet.runtime_logging import prepare_runtime_for_cli_camera_scan
 
@@ -127,21 +139,35 @@ def scan_multipart_from_camera(
     w, h = _parse_size(size)
 
     cam = picamera_cls()
-    cam.configure(cam.create_still_configuration(main={"size": (w, h)}))
+    # Preview configuration keeps the sensor in continuous video mode:
+    # - RGB888 format is guaranteed (no 4-channel XBGR8888 surprises)
+    # - AGC/AEC tracks continuously so exposure stabilises in settle_s
+    # - Works on both OV5647 (fixed-focus) and autofocus sensors equally
+    cam.configure(
+        cam.create_preview_configuration(
+            main={"format": "RGB888", "size": (w, h)},
+        )
+    )
     cam.start()
-    configure_autofocus(cam, controls_mod, autofocus)
+    if not skip_autofocus:
+        configure_autofocus(cam, controls_mod, autofocus)
     time.sleep(settle_s)
 
     mono = mono_s if mono_s is not None else time.monotonic
     last_thumb_mono = mono() - lcd_thumbnail_interval_s
 
     frame_no = 0
+    _saved_frame = False
     try:
         while True:
             if cancel_check is not None and cancel_check():
                 raise ScanCancelled("scan cancelled by caller")
             frame_no += 1
             frame = cam.capture_array("main")
+            if save_frame_path is not None and not _saved_frame:
+                _saved_frame = True
+                Image.fromarray(frame).save(save_frame_path)
+                print(f"[camera] frame saved to {save_frame_path}", file=sys.stderr)
             if on_lcd_thumbnail is not None:
                 now = mono()
                 if now - last_thumb_mono >= lcd_thumbnail_interval_s:

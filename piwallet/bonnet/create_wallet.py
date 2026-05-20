@@ -17,6 +17,7 @@ from piwallet.bonnet.network_chooser import run_network_chooser
 from piwallet.core import derivation as deriv
 from piwallet.core import mnemonic as mnem
 from piwallet.core.mnemonic import MnemonicError
+from piwallet.core.settings import BonnetSettings
 from piwallet.core.vault import Vault, VaultError, WalletRecord
 from piwallet.ui.app import IdleWakeTracker, run_screen
 from piwallet.ui.display import Display
@@ -54,6 +55,7 @@ def run_create_wallet(
     hd_path: tuple[int, int] | None = None,
     network: deriv.Network | None = None,
     idle_wake: IdleWakeTracker | None = None,
+    settings: BonnetSettings | None = None,
 ) -> CreateWalletOutcome:
     """Walk the operator through wallet creation.
 
@@ -110,7 +112,8 @@ def run_create_wallet(
         if src == "csr":
             phrase = mnem.generate(wc)
         elif src == "camera":
-            caps = CameraEntropyScreen()
+            af = settings is None or settings.camera_type in ("imx708", "auto")
+            caps = CameraEntropyScreen(autofocus_continuous=af)
             run_screen(display, input_mgr, caps, target_fps=target_fps, idle_wake=idle_wake)
             if caps.result is None:
                 return CreateWalletOutcome(cancelled=True)

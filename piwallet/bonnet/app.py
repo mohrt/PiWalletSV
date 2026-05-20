@@ -474,6 +474,7 @@ def run_bonnet(
                     pin,
                     target_fps=target_fps,
                     idle_wake=idle_wake,
+                    settings=settings,
                 )
                 _surface_wallet_outcome(display, outcome3)
                 if outcome3.wallet is not None:
@@ -545,6 +546,7 @@ def run_bonnet(
                     active,
                     target_fps=target_fps,
                     idle_wake=idle_wake,
+                    settings=settings,
                 )
                 if mg == "exit":
                     return 0

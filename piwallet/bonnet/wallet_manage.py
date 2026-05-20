@@ -24,6 +24,7 @@ from typing import Literal
 
 from piwallet.bonnet.companion_pairing import pairing_pw1_lines
 from piwallet.bonnet.sign_scan import run_sign_flow
+from piwallet.core.settings import BonnetSettings
 from piwallet.bonnet.wallet_detail import WalletDetailScreen
 from piwallet.bonnet.wallet_info import WalletInfoScreen
 from piwallet.core import derivation as deriv
@@ -150,6 +151,7 @@ def run_wallet_manage(
     target_fps: int = 30,
     toast_seconds: float = 2.0,
     idle_wake: IdleWakeTracker | None = None,
+    settings: BonnetSettings | None = None,
 ) -> WalletManageResult:
     """Show manage menu and run the chosen sub-flow.
 
@@ -214,6 +216,7 @@ def run_wallet_manage(
                 target_fps=target_fps,
                 toast_seconds=toast_seconds,
                 idle_wake=idle_wake,
+                settings=settings,
             )
         except (VaultError, VaultWipedError) as exc:
             log.exception("run_sign_flow vault error")

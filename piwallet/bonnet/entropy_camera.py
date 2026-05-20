@@ -19,8 +19,8 @@ log = logging.getLogger(__name__)
 _ENTROPY_STILL_DEFAULT: tuple[int, int] = (1280, 960)
 
 # --- Size attempts (order matters) ------------------------------------------
-# IMX708 / Pi Camera Module 3 on vc4 usually rejects main+lores for our presets; that
-# wasted three Picamera2 cycles and libcamera spammed startup. Try preview+still first.
+# Some sensors (e.g. IMX708 on vc4) reject main+lores for these presets; that
+# wastes Picamera2 cycles and spams libcamera startup. Try preview+still first.
 _PREVIEW_STILL_FALLBACK_SIZES: list[tuple[int, int]] = [
     (640, 480),
     (480, 360),
@@ -76,7 +76,7 @@ class EntropyDualStreamCamera:
 
         last_err: BaseException | None = None
 
-        # --- 1) Preview + still (typical rpi/vc4 + IMX708 path) ---------------
+        # --- 1) Preview + still (works on most sensors including OV5647) ------
         for prev_sz in _PREVIEW_STILL_FALLBACK_SIZES:
             picam = None
             try:

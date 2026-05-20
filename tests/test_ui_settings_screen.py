@@ -210,7 +210,7 @@ def test_draw_at_maximum_brightness() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_settings_rows_include_brightness_then_sleep_timer_then_change_pin_then_airgap() -> None:
+def test_settings_rows_include_brightness_then_sleep_timer_then_camera_then_action_rows() -> None:
     """Order is fixed — value rows first, then action rows.
 
     The Settings screen's row ordering is observable via cursor index;
@@ -219,7 +219,7 @@ def test_settings_rows_include_brightness_then_sleep_timer_then_change_pin_then_
     has to update too.
     """
     keys = [row.key for row in SETTINGS_ROWS]
-    assert keys == ["brightness", "sleep_timer", "change_pin", "airgap"]
+    assert keys == ["brightness", "sleep_timer", "camera_type", "change_pin", "airgap"]
 
 
 def test_change_pin_and_airgap_are_action_rows() -> None:

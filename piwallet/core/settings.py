@@ -38,7 +38,7 @@ from piwallet.ui.display import (
 #: Version of the on-disk settings schema. Bump when adding required
 #: fields; load_settings will migrate older files forward by filling
 #: defaults.
-SETTINGS_SCHEMA_VERSION: int = 2
+SETTINGS_SCHEMA_VERSION: int = 3
 
 #: Sleep-timer presets surfaced in the Settings screen. Order is the
 #: cycle order under L/R input: 1 min -> 5 min -> off -> 1 min -> ...
@@ -46,11 +46,33 @@ SETTINGS_SCHEMA_VERSION: int = 2
 #: idle duration in milliseconds before the backlight goes off.
 SLEEP_TIMER_OPTIONS_MS: tuple[int, ...] = (60_000, 300_000, 0)
 
+#: Camera-type presets for the Settings cycle row.
+#: ``"ov5647"``  — Arducam OV5647 Mini, fixed-focus. Requires
+#:                 ``camera_auto_detect=0`` + ``dtoverlay=ov5647`` in
+#:                 ``/boot/firmware/config.txt``. Autofocus calls skipped.
+#: ``"imx708"``  — Raspberry Pi Camera Module 3 (IMX708), autofocus.
+#:                 Requires ``camera_auto_detect=1`` (default) or
+#:                 ``dtoverlay=imx708`` in config.txt.
+#: ``"auto"``    — Let libcamera auto-detect. Use for other cameras or
+#:                 when unsure. Autofocus attempted (silently ignored if
+#:                 not supported).
+CAMERA_TYPE_OPTIONS: tuple[str, ...] = ("ov5647", "imx708", "auto")
+
+#: Default camera type. OV5647 Mini is the recommended hardware.
+DEFAULT_CAMERA_TYPE: str = "ov5647"
+
 #: Default screen sleep timer. Five minutes is long enough that the
 #: bonnet doesn't blank during a multi-step recovery flow but short
 #: enough that a forgotten unlocked device dims well before sleeping
 #: hours of CPU on a wasted backlight.
 DEFAULT_SLEEP_TIMEOUT_MS: int = 300_000
+
+
+def _normalize_camera_type(raw: str) -> str:
+    """Snap ``raw`` to a known preset, defaulting to ``"ov5647"`` on garbage."""
+    if raw in CAMERA_TYPE_OPTIONS:
+        return raw
+    return DEFAULT_CAMERA_TYPE
 
 
 def _normalize_sleep_timeout_ms(raw: int) -> int:
@@ -76,6 +98,11 @@ class BonnetSettings:
     #: Idle duration before the backlight blanks. ``0`` disables sleep
     #: entirely (the panel stays lit until the bonnet exits).
     sleep_timeout_ms: int = DEFAULT_SLEEP_TIMEOUT_MS
+    #: Which camera module is installed. Controls whether autofocus
+    #: is attempted (OV5647 is fixed-focus; attempting AF only logs
+    #: a harmless error, but skipping it is cleaner). See
+    #: ``CAMERA_TYPE_OPTIONS`` for the valid values.
+    camera_type: str = DEFAULT_CAMERA_TYPE
 
     def with_brightness(self, level: float) -> BonnetSettings:
         """Return a copy with ``brightness`` clamped into the legal range."""
@@ -127,6 +154,9 @@ def load_settings(path: Path | None = None) -> BonnetSettings:
         sleep_timeout_ms=_normalize_sleep_timeout_ms(
             int(data.get("sleep_timeout_ms", DEFAULT_SLEEP_TIMEOUT_MS)),
         ),
+        camera_type=_normalize_camera_type(
+            str(data.get("camera_type", DEFAULT_CAMERA_TYPE)),
+        ),
     )
 
 
@@ -150,6 +180,8 @@ def save_settings(settings: BonnetSettings, path: Path | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 __all__ = [
+    "CAMERA_TYPE_OPTIONS",
+    "DEFAULT_CAMERA_TYPE",
     "DEFAULT_SLEEP_TIMEOUT_MS",
     "MAX_BRIGHTNESS",
     "MIN_BRIGHTNESS",

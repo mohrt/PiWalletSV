@@ -20,7 +20,7 @@ def tiny_jpeg() -> bytes:
 
 
 class FakeEntropyCam:
-    def __init__(self) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         self.closed = False
 
     def open(self) -> None:
@@ -44,8 +44,8 @@ class FakeEntropyCam:
 class TrackCam(FakeEntropyCam):
     constructed: ClassVar[list[Any]] = []
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
         TrackCam.constructed.append(self)
 
 
