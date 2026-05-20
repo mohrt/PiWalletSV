@@ -114,85 +114,23 @@ device signs anything.
 
 </div>
 
-## Want to use it?
+## Get started
 
 <div class="grid cards" markdown>
 
--   :material-sd: __[Download the image](download.md)__
+-   :material-sd: __[Build from image](download.md)__
 
-    The fastest path. Verify the signature, flash to a microSD, boot.
-    The image is a sealed appliance — no SSH, no Wi-Fi, no setup
-    rituals. Pair with the [Flash and first run](build-image.md)
-    guide.
+    The fastest path. Download the signed firmware image, flash it to
+    a microSD, and boot. Follow the [flash and first-run guide](build-image.md).
 
--   :material-rocket-launch: __[Get started from source](getting-started.md)__
+-   :material-source-branch: __[Build from scratch](getting-started.md)__
 
-    Bring up the bonnet, install the signer from a clone, run the
-    companion in a browser. Start here if you'd rather build the
-    image yourself or hack on the codebase.
+    Clone the repo, provision a Pi, and run the companion in a browser.
+    Start here if you want to inspect, modify, or contribute to the code.
 
--   :material-cellphone-information: __[Companion (live)]({{ companion_url }}/)__
+-   :material-shopping-outline: __[Purchase a complete kit](purchase.md)__
 
-    Open the web app in your browser. Pair a wallet, scan an unsigned
-    proposal, broadcast a signed transaction. Works on any phone,
-    tablet, or laptop with a camera and a modern browser.
-
--   :material-account-tie: __[User manual](user-manual.md)__
-
-    Pairing, receiving, sending, broadcasting, restoring — the same
-    journey a normal user takes.
-
--   :material-shield-key: __[Security briefing](security.md)__
-
-    Plain-language operator-facing trust model: what's on the network,
-    what isn't, and why the PIN-encrypted vault is not magic.
-
-</div>
-
-## Want to understand it?
-
-<div class="grid cards" markdown>
-
--   :material-shape: __[Architecture](architecture.md)__
-
-    The two-host design, the trust boundary, the data flow, and why
-    everything that crosses the air gap is gzipped CBOR over animated
-    QR.
-
--   :material-package-down: __[Build & deploy](build.md)__
-
-    Take a blank Pi from a freshly-flashed SD card to an autostarting
-    bonnet kiosk under systemd, with bounded journald logs.
-
--   :material-cog: __[Operate](operate.md)__
-
-    Day-to-day ops: logs, exit codes, vault stewardship, factory
-    reset, updates, and troubleshooting the deployment itself.
-
--   :material-console: __[CLI reference](cli.md)__
-
-    Every `piwallet` subcommand with options, exit codes, and
-    pipe-friendly examples.
-
--   :material-code-tags: __[Develop](develop.md)__
-
-    Repo layout, dev setup, testing matrix, fixture regeneration,
-    release checklist.
-
--   :material-file-document-multiple: __[Protocol spec](protocol/README.md)__
-
-    The wire formats, QR transport, derivation rules, and SPV
-    requirements that any compatible companion (or signer) must
-    follow.
-
--   :material-history: __[Prior art](prior-art.md)__
-
-    How PiWalletSV's design choices compare to existing air-gapped
-    BSV setups, and what that comparison tells us about future scope.
-
--   :material-link-variant: __[BRC alignment](brc-alignment.md)__
-
-    What of BRC-100 / BRC-95 / BRC-74 PiWalletSV implements, and what
-    it deliberately doesn't.
+    Pre-assembled kit with Pi, bonnet, camera, and pre-flashed SD card.
+    Coming soon.
 
 </div>

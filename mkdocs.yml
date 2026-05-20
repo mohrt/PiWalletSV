@@ -135,6 +135,7 @@ extra:
 nav:
   - Home: index.md
   - Download: download.md
+  - Purchase a kit: purchase.md
   - Flash and first run: build-image.md
   - Getting started: getting-started.md
   - Build & deploy: build.md
