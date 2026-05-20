@@ -102,3 +102,31 @@
     margin-top: 0.5rem;
   }
 }
+
+/* ---- Side nav: make top-level section labels stand out --------------- */
+/*
+ * mkdocs-material renders section headers as <span class="md-nav__link">
+ * inside an <li class="md-nav__item md-nav__item--section">. Without
+ * extra styling they look almost identical to page links. These rules
+ * give sections an uppercase label, slightly larger tracking, and a
+ * subtle separator so the hierarchy reads clearly at a glance.
+ */
+.md-nav--primary .md-nav__item--section > .md-nav__link,
+.md-nav--primary .md-nav__item--section > label.md-nav__link {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--md-default-fg-color--light);
+  margin-top: 1rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  pointer-events: none;   /* sections have no page of their own */
+  cursor: default;
+}
+
+/* Remove the top margin from the very first section */
+.md-nav--primary > .md-nav__list > .md-nav__item--section:first-child > .md-nav__link,
+.md-nav--primary > .md-nav__list > .md-nav__item--section:first-child > label.md-nav__link {
+  margin-top: 0.25rem;
+}
