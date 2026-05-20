@@ -119,31 +119,58 @@ automatically so you don't need to unzip first.
 
 === ":material-bash: macOS / Linux (CLI)"
 
+    **Prerequisites**
+
+    `xz` is needed to decompress `.img.xz`.
+    It is pre-installed on most Linux distros.
+    On macOS, install it with Homebrew:
+
     ```bash
-    # 1. Decompress the image (produces a .img file).
-    unxz piwalletsv-<VERSION>.img.xz
+    brew install xz
+    ```
 
-    # 2. Identify the SD card device.
-    #    macOS: look for a "disk" entry whose size matches the card.
-    diskutil list
+    **Identify your SD card**
 
-    #    Linux: look for an entry whose size matches the card.
-    lsblk
+    ```bash
+    diskutil list   # macOS — look for a disk whose size matches the card
+    lsblk           # Linux  — same idea
+    ```
 
-    # 3. On macOS, unmount the card's partitions before writing
-    #    (replace diskN with the correct disk number, e.g. disk4).
-    diskutil unmountDisk /dev/diskN          # macOS only
+    Note the device path: on macOS it will be something like `/dev/disk4`
+    (use the **raw** variant `/dev/rdisk4` for `dd`); on Linux
+    something like `/dev/sdb`.
 
-    # 4. Write the image.
-    #    macOS: use /dev/rdiskN (raw device) for much faster writes.
-    sudo dd if=piwalletsv-<VERSION>.img of=/dev/rdiskN bs=4m
-    #    Linux: use /dev/sdX (replace with your actual device).
-    sudo dd if=piwalletsv-<VERSION>.img of=/dev/sdX bs=4M status=progress conv=fsync
+    **Unmount (macOS only) — do this before writing**
 
-    # 5. Flush OS write buffers.
+    ```bash
+    diskutil unmountDisk /dev/diskN   # replace diskN with your disk, e.g. disk4
+    ```
+
+    **Write the image**
+
+    The pipe form decompresses on the fly, so you don't need free disk
+    space for the uncompressed `.img`:
+
+    ```bash
+    # macOS — /dev/rdiskN is the raw (fast) device
+    xz -dc piwalletsv-<VERSION>.img.xz | sudo dd of=/dev/rdiskN bs=4m
+
+    # Linux
+    xz -dc piwalletsv-<VERSION>.img.xz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
+    ```
+
+    Or decompress first if you prefer two separate steps:
+
+    ```bash
+    unxz piwalletsv-<VERSION>.img.xz          # produces .img alongside .img.xz
+    sudo dd if=piwalletsv-<VERSION>.img of=/dev/rdiskN bs=4m   # macOS
+    sudo dd if=piwalletsv-<VERSION>.img of=/dev/sdX bs=4M status=progress conv=fsync  # Linux
     sync
+    ```
 
-    # 6. macOS: eject cleanly.
+    **Eject (macOS)**
+
+    ```bash
     diskutil eject /dev/diskN
     ```
 
