@@ -19,10 +19,17 @@ The complete disclosure / reporting policy lives in the project's
   no telemetry, no analytics, no "sync" anywhere. Paired-wallet
   metadata (xpub, fingerprint, label, derivation path, cached UTXO
   snapshots) lives in your browser's `IndexedDB` and stays there.
-- **The only outbound calls** the companion makes are to
-  [WhatsOnChain](https://whatsonchain.com/) for UTXO discovery, Merkle
-  proofs, and broadcasting signed transactions. Those are
-  public-blockchain reads and writes — they do not leak your seed.
+- **The only outbound calls** the companion makes are to two
+  public blockchain APIs — neither receives anything private:
+    - [WhatsOnChain](https://whatsonchain.com/) for UTXO discovery,
+      Merkle proofs, fee rate recommendations, and broadcasting
+      signed transactions.
+    - [Bitails](https://bitails.io) for transaction history (the
+      History tab fetches per-address tx history with satoshi
+      deltas inline).
+  Both services see only public data: BSV addresses, transaction
+  IDs, and raw transaction hex. They never see your seed, PIN,
+  or private keys.
 - **Losing the browser profile is not a loss of funds.** The companion
   only holds *public* material; spending still requires the Pi (and
   ultimately your seed phrase).

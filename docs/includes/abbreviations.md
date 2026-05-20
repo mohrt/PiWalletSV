@@ -12,6 +12,7 @@
 -->
 
 *[BEEF]: Background Evaluation Extended Format — a BSV transaction bundled with the Merkle proofs that anchor it on-chain.
+*[Bitails]: A BSV blockchain data provider used by the companion for transaction history (api.bitails.io).
 *[BIP32]: Bitcoin Improvement Proposal 32 — hierarchical-deterministic (HD) key derivation.
 *[BIP39]: Bitcoin Improvement Proposal 39 — the human-readable seed-phrase standard.
 *[BIP44]: Bitcoin Improvement Proposal 44 — multi-account derivation paths layered on top of BIP32.
