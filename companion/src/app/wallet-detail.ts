@@ -1,14 +1,13 @@
 /**
  * Wallet detail page (`#/wallets/<id>`).
  *
- * Read-only view of a paired wallet plus the BIP32 receive flow:
+ * Tabs: Balance · Send · Receive · History · Share
  *
- * - Current receive address (m/0/<nextReceiveIndex>) shown as text + QR.
- * - "Next address" advances the on-disk pointer; "Previous" walks back.
- * - "Recent receive addresses" panel renders a window for visual context.
- *
- * Pure derivation; no network, no signing key. The Pi side is unaffected
- * by anything done here.
+ * Balance    – confirmed hero, pending sub-line, sats/fiat toggle, UTXO list.
+ * Send       – 5-step flow: recipient → amount → fee tier → review → QR.
+ * Receive    – current address QR + copy, prev/next, on-device verify badge.
+ * History    – transaction list via Bitails, newest first.
+ * Share      – animated xpub QR for pairing another companion.
  */
 import QRCode from "qrcode";
 
@@ -18,8 +17,13 @@ import {
   deriveAddress,
   deriveAddressBatch,
 } from "../lib/derive.js";
-import { DOCS_BASE_URL } from "../lib/config.js";
-import { KIND_XPUB, bytesToHex, encodeEnvelope, hexToBytes } from "../lib/envelope.js";
+import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
+import {
+  KIND_XPUB,
+  bytesToHex,
+  encodeEnvelope,
+  hexToBytes,
+} from "../lib/envelope.js";
 import { CoinSelectError, selectUtxosGreedy } from "../lib/coin-select.js";
 import { encodeMultipartLines } from "../pw1.js";
 import { ProofFetchError, fetchInputProof } from "../lib/proof-fetcher.js";
@@ -32,33 +36,33 @@ import { splitConfirmedPending } from "../lib/balance-split.js";
 import { scanWalletUtxos } from "../lib/utxo.js";
 import { WocClient, WocError, effectiveWocBase } from "../lib/woc.js";
 import {
+  BitailsClient,
+  effectiveBitailsBase,
+} from "../lib/bitails.js";
+import {
   type WalletRecord,
   getWallet,
   setLastScan,
+  setLastHistory,
+  setDisplayUnit,
   setNextReceiveIndex,
   withDefaults,
 } from "../lib/wallets.js";
+import { fetchWalletHistory, formatTxTimestamp } from "../lib/history.js";
+import {
+  DEFAULT_FEE_RATE_SATSKB,
+  type FeeRecommendation,
+  fetchFeeRecommendation,
+  formatFeeRate,
+} from "../lib/fee.js";
 import type { NetworkT } from "../lib/envelope.js";
 
 const RECENT_WINDOW = 8;
 const SATS_PER_BSV = 100_000_000;
 
-/**
- * Insert a newline every {@link width} chars. Used to format the
- * unsigned-proposal hex blob into manageable lines so a `cat <<'EOF'`
- * heredoc on the Pi side accepts the paste even from terminals that
- * silently truncate at column N. The CLI strips whitespace before
- * decoding ({@link _read_hex_blob} in `piwallet/cli.py`), so the
- * wrapping is purely cosmetic.
- */
-function wrapHex(hex: string, width: number): string {
-  if (width <= 0) return hex;
-  const lines: string[] = [];
-  for (let i = 0; i < hex.length; i += width) {
-    lines.push(hex.slice(i, i + width));
-  }
-  return lines.join("\n");
-}
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function escapeHtml(s: string): string {
   return s
@@ -96,6 +100,29 @@ function shortTxid(txid: string): string {
   return `${txid.slice(0, 8)}…${txid.slice(-8)}`;
 }
 
+function wrapHex(hex: string, width: number): string {
+  if (width <= 0) return hex;
+  const lines: string[] = [];
+  for (let i = 0; i < hex.length; i += width) {
+    lines.push(hex.slice(i, i + width));
+  }
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Send flow step type
+// ---------------------------------------------------------------------------
+
+type SendStep =
+  | { step: "form" }
+  | { step: "fee"; recipient: string; sats: number }
+  | { step: "review"; recipient: string; sats: number; feeRate: number; feeSats: number; changeSats: number }
+  | { step: "qr" };
+
+// ---------------------------------------------------------------------------
+// Main mount function
+// ---------------------------------------------------------------------------
+
 export function mountWalletDetailPage(
   root: HTMLElement,
   walletId: string,
@@ -105,8 +132,14 @@ export function mountWalletDetailPage(
     | (WalletRecord & { nextReceiveIndex: number; network: NetworkT })
     | null = null;
   let scanRunning = false;
+  let historyRunning = false;
   let woc: WocClient | null = null;
+  let bitails: BitailsClient | null = null;
   let sendBusy = false;
+  let sendStep: SendStep = { step: "form" };
+  let feeRec: FeeRecommendation | null = null;
+  let selectedFeeRate = DEFAULT_FEE_RATE_SATSKB;
+
   let proposalFrames: string[] | null = null;
   let proposalFrameIdx = 0;
   let proposalLastFrameAt = 0;
@@ -116,6 +149,15 @@ export function mountWalletDetailPage(
   let exportFrameIdx = 0;
   let exportLastFrameAt = 0;
   let exportRaf: number | null = null;
+
+  // Price cache for fiat toggle
+  let bsvUsdPrice: number | null = null;
+  let priceFetchedAt = 0;
+  let displayUnit: "sats" | "fiat" = "sats";
+
+  // Active tab
+  type Tab = "balance" | "send" | "receive" | "history" | "share";
+  let activeTab: Tab = "balance";
 
   root.innerHTML = `
     <main class="page">
@@ -142,10 +184,9 @@ export function mountWalletDetailPage(
       return;
     }
     wallet = withDefaults(rec);
+    displayUnit = rec.displayUnit ?? "sats";
     renderShell();
     void renderReceive();
-    // Auto-refresh UTXOs every time the wallet is opened so the
-    // spend flow always works from a current UTXO set.
     void onRefreshBalance();
   }
 
@@ -157,12 +198,17 @@ export function mountWalletDetailPage(
     `;
   }
 
+  // ---------------------------------------------------------------------------
+  // Shell
+  // ---------------------------------------------------------------------------
+
   function renderShell(): void {
     if (!wallet) return;
     const netBadge =
       wallet.network === "test"
         ? ' <span class="testnet-badge" title="This wallet is on BSV testnet (TBSV).">TESTNET</span>'
         : "";
+
     root.innerHTML = `
       <main class="page">
         ${renderHeader(escapeHtml(wallet.label), "wallets", netBadge)}
@@ -173,44 +219,44 @@ export function mountWalletDetailPage(
             ${wallet.network === "test" ? "BSV testnet" : "BSV mainnet"} ·
             paired ${new Date(wallet.addedAt).toLocaleString()}
           </p>
-          <p class="muted-line wallet-xpub-full" title="${escapeHtml(wallet.xpub)}">
-            xpub: ${escapeHtml(wallet.xpub)}
-          </p>
           <p><a href="#/wallets">← Back to wallets</a></p>
         </section>
 
-        <section class="card balance-card">
-          <h2>Balance</h2>
-          <div class="balance-row">
-            <div class="balance-figures">
-              <div class="balance-sats-row">
-                <span class="balance-sats" id="balanceSats">—</span>
-                <span class="balance-badge pending" id="balanceBadge"
-                  hidden
-                  title="Includes UTXOs that are in WoC's mempool but not yet confirmed in a block.">
-                  pending
-                </span>
-              </div>
-              <div class="balance-bsv muted-line" id="balanceBsv"></div>
-              <div class="muted-line balance-split" id="balanceSplit" hidden></div>
-              <div class="muted-line" id="balanceMeta"></div>
-            </div>
-            <div class="actions">
-              <button id="refreshBalance" class="primary" type="button">
-                Refresh balance
+        <nav class="tab-nav" role="tablist">
+          <button role="tab" data-tab="balance" class="${activeTab === "balance" ? "active" : ""}">Balance</button>
+          <button role="tab" data-tab="send" class="${activeTab === "send" ? "active" : ""}">Send</button>
+          <button role="tab" data-tab="receive" class="${activeTab === "receive" ? "active" : ""}">Receive</button>
+          <button role="tab" data-tab="history" class="${activeTab === "history" ? "active" : ""}">History</button>
+          <button role="tab" data-tab="share" class="${activeTab === "share" ? "active" : ""}">Share</button>
+        </nav>
+
+        <!-- Balance tab -->
+        <section id="tab-balance" class="card tab-panel${activeTab === "balance" ? " active" : ""}" role="tabpanel">
+          <div class="balance-hero-row">
+            <div class="balance-hero">
+              <button id="balanceToggle" class="balance-hero-value" type="button"
+                title="Tap to toggle sats / USD">
+                <span id="balanceHero">—</span>
               </button>
+              <div id="balancePending" class="balance-pending" hidden></div>
+              <div id="balanceBsv" class="muted-line balance-bsv"></div>
+            </div>
+            <div class="balance-actions">
+              <button id="refreshBalance" class="primary" type="button">Refresh</button>
             </div>
           </div>
-          <p class="muted-line" id="balanceStatus"></p>
+          <p class="muted-line" id="balanceMeta"></p>
+          <p class="muted-line balance-status" id="balanceStatus"></p>
           <details id="utxoDetails" hidden>
-            <summary>Show UTXOs (<span id="utxoCount">0</span>)</summary>
+            <summary>UTXOs (<span id="utxoCount">0</span>)</summary>
             <ul id="utxoList" class="utxo-list"></ul>
           </details>
         </section>
 
-        <section class="card send-card">
-          <h2>Send</h2>
-          <div id="sendForm">
+        <!-- Send tab -->
+        <section id="tab-send" class="card tab-panel${activeTab === "send" ? " active" : ""}" role="tabpanel">
+          <div id="sendStep-form">
+            <h2>Send</h2>
             <label class="field">
               <span>Recipient address</span>
               <input id="sendAddress" type="text" autocomplete="off"
@@ -218,24 +264,73 @@ export function mountWalletDetailPage(
             </label>
             <label class="field">
               <span>Amount (sats)</span>
-              <input id="sendSats" type="number" min="1" step="1"
-                placeholder="e.g. 10000" />
+              <div class="amount-row">
+                <input id="sendSats" type="number" min="1" step="1"
+                  placeholder="e.g. 10000" />
+                <button id="sendMax" type="button" class="send-max-btn">Max</button>
+              </div>
             </label>
-            <details class="advanced">
-              <summary>Advanced</summary>
-              <label class="field">
-                <span>Fee rate (sats/kB)</span>
-                <input id="sendFeeRate" type="number" min="0" step="1" value="500" />
-              </label>
-            </details>
+            <p class="muted-line" id="sendFormStatus"></p>
             <div class="actions">
-              <button id="buildProposal" type="button" class="primary">
-                Build proposal
-              </button>
+              <button id="sendNext" type="button" class="primary">Next →</button>
             </div>
-            <p class="muted-line" id="sendStatus"></p>
           </div>
-          <div id="sendResult" hidden>
+
+          <div id="sendStep-fee" hidden>
+            <h2>Select fee</h2>
+            <p class="muted-line" id="feeLoading">Loading fee rates…</p>
+            <div id="feeTiers" class="fee-tiers" hidden>
+              <label class="fee-tier">
+                <input type="radio" name="feeTier" value="economy" />
+                <span class="fee-tier-label">Economy</span>
+                <span class="fee-tier-rate" id="feeEconomy">—</span>
+                <span class="fee-tier-desc muted-line">slower, cheapest</span>
+              </label>
+              <label class="fee-tier selected">
+                <input type="radio" name="feeTier" value="standard" checked />
+                <span class="fee-tier-label">Standard</span>
+                <span class="fee-tier-rate" id="feeStandard">—</span>
+                <span class="fee-tier-desc muted-line">recommended</span>
+              </label>
+              <label class="fee-tier">
+                <input type="radio" name="feeTier" value="priority" />
+                <span class="fee-tier-label">Priority</span>
+                <span class="fee-tier-rate" id="feePriority">—</span>
+                <span class="fee-tier-desc muted-line">fastest confirmation</span>
+              </label>
+              <label class="fee-tier">
+                <input type="radio" name="feeTier" value="custom" />
+                <span class="fee-tier-label">Custom</span>
+                <input id="feeCustom" type="number" min="1" step="1"
+                  placeholder="${DEFAULT_FEE_RATE_SATSKB}"
+                  class="fee-custom-input" />
+                <span class="fee-tier-desc muted-line">sat/kB</span>
+              </label>
+            </div>
+            <div class="actions">
+              <button id="feeBack" type="button">← Back</button>
+              <button id="feeNext" type="button" class="primary">Review →</button>
+            </div>
+          </div>
+
+          <div id="sendStep-review" hidden>
+            <h2>Review</h2>
+            <table class="review-table">
+              <tr><td class="review-label">To</td><td id="reviewRecipient" class="review-value mono"></td></tr>
+              <tr><td class="review-label">Amount</td><td id="reviewAmount" class="review-value"></td></tr>
+              <tr><td class="review-label">Fee</td><td id="reviewFee" class="review-value"></td></tr>
+              <tr><td class="review-label">Total out</td><td id="reviewTotal" class="review-value"></td></tr>
+              <tr><td class="review-label">Change</td><td id="reviewChange" class="review-value"></td></tr>
+              <tr><td class="review-label">Fee rate</td><td id="reviewFeeRate" class="review-value"></td></tr>
+            </table>
+            <p class="muted-line" id="reviewStatus"></p>
+            <div class="actions">
+              <button id="reviewBack" type="button">← Back</button>
+              <button id="reviewConfirm" type="button" class="primary">Build QR →</button>
+            </div>
+          </div>
+
+          <div id="sendStep-qr" hidden>
             <p class="muted-line">
               Animated PW1 proposal — point the Pi camera at this canvas.
             </p>
@@ -243,7 +338,7 @@ export function mountWalletDetailPage(
             <p class="muted-line">
               Frame <span id="proposalFrameIdx">0</span> /
               <span id="proposalFrameCount">0</span> ·
-              <span id="proposalByteCount">0</span> bytes total
+              <span id="proposalByteCount">0</span> bytes
             </p>
             <div class="actions">
               <button id="proposalToggle" type="button" class="primary">Pause</button>
@@ -252,34 +347,22 @@ export function mountWalletDetailPage(
             <details class="advanced proposal-hex-details">
               <summary>Or sign over SSH (paste hex)</summary>
               <p class="muted-line">
-                Copy hex (single contiguous line — the textarea wraps
-                for readability only), then on the Pi run:
-              </p>
-              <pre class="ssh-snippet"><code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code></pre>
-              <p class="muted-line">
-                Or for very long paste-overs, use stdin:
-                <code>piwallet sign --hex - --wallet-id &lt;id&gt;</code>
-                and paste at the heredoc. Either way the Pi prints
-                signed_tx hex — paste that into the
-                <a href="#/scan">Scan</a> page's
-                "Paste hex" box to broadcast.
-                <a href="${DOCS_BASE_URL}/security/" target="_blank"
-                   rel="noopener noreferrer">Why is this safe?</a>
+                Copy hex then on the Pi run:
+                <code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code>
               </p>
               <textarea id="proposalHex" class="hex-blob" rows="6"
                 readonly spellcheck="false" autocorrect="off"></textarea>
               <div class="actions">
-                <button id="copyProposalHex" type="button" class="primary">
-                  Copy hex
-                </button>
+                <button id="copyProposalHex" type="button" class="primary">Copy hex</button>
               </div>
               <p class="muted-line" id="proposalHexStatus"></p>
             </details>
           </div>
         </section>
 
-        <section class="card receive-card">
-          <h2>Current receive address</h2>
+        <!-- Receive tab -->
+        <section id="tab-receive" class="card tab-panel${activeTab === "receive" ? " active" : ""}" role="tabpanel">
+          <h2>Receive</h2>
           <p class="muted-line" id="receivePath"></p>
           <div class="receive-row">
             <canvas id="receiveQr" width="240" height="240"></canvas>
@@ -293,23 +376,49 @@ export function mountWalletDetailPage(
               <p class="muted-line" id="receiveStatus"></p>
             </div>
           </div>
+          <div class="verify-callout" id="verifyCallout">
+            <p>
+              <strong>Verify on your Pi before using this address.</strong>
+              On the bonnet, navigate to the wallet and use the address
+              verification screen to confirm the address matches.
+              <a href="${DOCS_BASE_URL}/user-manual/" target="_blank"
+                 rel="noopener noreferrer">Why?</a>
+            </p>
+            <label class="verify-checkbox">
+              <input type="checkbox" id="verifyCheck" />
+              Verified on device ✓
+            </label>
+          </div>
+          <section class="receive-list-section">
+            <h3>Recent receive addresses</h3>
+            <p class="muted-line">
+              A window of 8 addresses around the current pointer (m/0/i).
+            </p>
+            <ul id="receiveList" class="addr-list"></ul>
+          </section>
         </section>
 
-        <section class="card receive-list-card">
-          <h2>Recent receive addresses</h2>
-          <p class="muted-line">
-            A window of 8 addresses around the current pointer (m/0/i).
-            Pure derivation — no network calls.
-          </p>
-          <ul id="receiveList" class="addr-list"></ul>
+        <!-- History tab -->
+        <section id="tab-history" class="card tab-panel${activeTab === "history" ? " active" : ""}" role="tabpanel">
+          <div class="history-header">
+            <h2>Transaction history</h2>
+            <button id="refreshHistory" class="primary" type="button">Refresh</button>
+          </div>
+          <p class="muted-line" id="historyStatus"></p>
+          <div id="historyEmpty" class="empty-state" hidden>
+            <p>No transaction history yet.</p>
+            <p class="muted-line">Click Refresh to fetch history from Bitails.</p>
+          </div>
+          <ul id="historyList" class="history-list"></ul>
         </section>
 
-        <section class="card export-card">
+        <!-- Share tab -->
+        <section id="tab-share" class="card tab-panel${activeTab === "share" ? " active" : ""}" role="tabpanel">
           <h2>Share wallet</h2>
           <p class="muted-line">
-            Show an animated QR so another companion device can pair with
-            this wallet. Only the public key (xpub) is exported — no
-            spending key leaves this device.
+            Show an animated QR so another companion can pair with this
+            wallet. Only the public key (xpub) is exported — no spending
+            key leaves this device.
           </p>
           <div class="actions">
             <button id="exportShow" class="primary" type="button">Show export QR</button>
@@ -330,116 +439,184 @@ export function mountWalletDetailPage(
       </main>
     `;
 
-    const $copy = root.querySelector<HTMLButtonElement>("#copyAddress")!;
-    const $prev = root.querySelector<HTMLButtonElement>("#prevIdx")!;
-    const $next = root.querySelector<HTMLButtonElement>("#nextIdx")!;
-    $copy.addEventListener("click", () => void onCopy());
-    $prev.addEventListener("click", () => void shiftIndex(-1));
-    $next.addEventListener("click", () => void shiftIndex(1));
+    bindEvents();
+    renderBalance();
+    renderHistory();
+  }
 
-    const $refresh = root.querySelector<HTMLButtonElement>("#refreshBalance")!;
-    $refresh.addEventListener("click", () => void onRefreshBalance());
+  // ---------------------------------------------------------------------------
+  // Tab switching
+  // ---------------------------------------------------------------------------
 
-    const $build = root.querySelector<HTMLButtonElement>("#buildProposal")!;
-    $build.addEventListener("click", () => void onBuildProposal());
-    const $toggle = root.querySelector<HTMLButtonElement>("#proposalToggle")!;
-    $toggle.addEventListener("click", toggleAnimation);
-    const $done = root.querySelector<HTMLButtonElement>("#proposalDone")!;
-    $done.addEventListener("click", resetSendCard);
-    const $copyHex = root.querySelector<HTMLButtonElement>("#copyProposalHex")!;
-    $copyHex.addEventListener("click", () => void onCopyProposalHex());
+  function bindEvents(): void {
+    root.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tab = btn.dataset.tab as Tab;
+        switchTab(tab);
+      });
+    });
 
-    const $exportShow = root.querySelector<HTMLButtonElement>("#exportShow")!;
-    $exportShow.addEventListener("click", () => void onShowExport());
-    const $exportToggle = root.querySelector<HTMLButtonElement>("#exportToggle")!;
-    $exportToggle.addEventListener("click", toggleExportAnimation);
-    const $exportHide = root.querySelector<HTMLButtonElement>("#exportHide")!;
-    $exportHide.addEventListener("click", hideExport);
+    // Balance tab
+    const $refresh = root.querySelector<HTMLButtonElement>("#refreshBalance");
+    $refresh?.addEventListener("click", () => void onRefreshBalance());
 
+    const $toggle = root.querySelector<HTMLButtonElement>("#balanceToggle");
+    $toggle?.addEventListener("click", () => void onToggleDisplayUnit());
+
+    // Send tab
+    root.querySelector<HTMLButtonElement>("#sendNext")
+      ?.addEventListener("click", () => void onSendNext());
+    root.querySelector<HTMLButtonElement>("#sendMax")
+      ?.addEventListener("click", onSendMax);
+    root.querySelector<HTMLButtonElement>("#feeBack")
+      ?.addEventListener("click", () => showSendStep("form"));
+    root.querySelector<HTMLButtonElement>("#feeNext")
+      ?.addEventListener("click", () => void onFeeNext());
+    root.querySelector<HTMLButtonElement>("#reviewBack")
+      ?.addEventListener("click", () => showSendStep("fee"));
+    root.querySelector<HTMLButtonElement>("#reviewConfirm")
+      ?.addEventListener("click", () => void onBuildProposal());
+    root.querySelector<HTMLButtonElement>("#proposalToggle")
+      ?.addEventListener("click", toggleAnimation);
+    root.querySelector<HTMLButtonElement>("#proposalDone")
+      ?.addEventListener("click", resetSendCard);
+    root.querySelector<HTMLButtonElement>("#copyProposalHex")
+      ?.addEventListener("click", () => void onCopyProposalHex());
+
+    // Fee tier radio — highlight selected
+    root.querySelectorAll<HTMLInputElement>('input[name="feeTier"]').forEach((r) => {
+      r.addEventListener("change", () => highlightSelectedTier());
+    });
+
+    // Receive tab
+    root.querySelector<HTMLButtonElement>("#copyAddress")
+      ?.addEventListener("click", () => void onCopy());
+    root.querySelector<HTMLButtonElement>("#prevIdx")
+      ?.addEventListener("click", () => void shiftIndex(-1));
+    root.querySelector<HTMLButtonElement>("#nextIdx")
+      ?.addEventListener("click", () => void shiftIndex(1));
+
+    // Verify checkbox — persist in localStorage keyed by wallet+address
+    root.querySelector<HTMLInputElement>("#verifyCheck")
+      ?.addEventListener("change", (e) => {
+        const addr = root.querySelector<HTMLElement>("#receiveAddress")?.textContent ?? "";
+        if (addr) {
+          const key = `piwallet.verified.${walletId}.${addr}`;
+          localStorage.setItem(key, (e.target as HTMLInputElement).checked ? "1" : "");
+        }
+      });
+
+    // History tab
+    root.querySelector<HTMLButtonElement>("#refreshHistory")
+      ?.addEventListener("click", () => void onRefreshHistory());
+
+    // Share tab
+    root.querySelector<HTMLButtonElement>("#exportShow")
+      ?.addEventListener("click", () => void onShowExport());
+    root.querySelector<HTMLButtonElement>("#exportToggle")
+      ?.addEventListener("click", toggleExportAnimation);
+    root.querySelector<HTMLButtonElement>("#exportHide")
+      ?.addEventListener("click", hideExport);
+  }
+
+  function switchTab(tab: Tab): void {
+    activeTab = tab;
+    root.querySelectorAll<HTMLElement>(".tab-panel").forEach((p) => {
+      p.classList.toggle("active", p.id === `tab-${tab}`);
+    });
+    root.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === tab);
+    });
+    // Lazy-load history when tab first opened
+    if (tab === "history" && wallet?.lastHistory == null && !historyRunning) {
+      void onRefreshHistory();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Balance
+  // ---------------------------------------------------------------------------
+
+  async function onToggleDisplayUnit(): Promise<void> {
+    if (!wallet) return;
+    const next = displayUnit === "sats" ? "fiat" : "sats";
+    displayUnit = next;
+    await setDisplayUnit(wallet.id, next).catch(() => {});
+    if (next === "fiat" && bsvUsdPrice === null) {
+      await fetchBsvPrice();
+    }
     renderBalance();
   }
 
-  async function onCopyProposalHex(): Promise<void> {
-    const $hex = root.querySelector<HTMLTextAreaElement>("#proposalHex");
-    const $status = root.querySelector<HTMLElement>("#proposalHexStatus");
-    if (!$hex || !$status) return;
-    // The textarea wraps the hex with newlines for readability — strip
-    // whitespace before copy so the clipboard payload is a single
-    // contiguous hex string. The CLI side tolerates either form, but
-    // the unwrapped version is friendlier in pipelines that don't
-    // expect embedded newlines.
-    const flat = $hex.value.replace(/\s+/g, "");
+  async function fetchBsvPrice(): Promise<void> {
+    if (!wallet) return;
+    const now = Date.now();
+    if (bsvUsdPrice !== null && now - priceFetchedAt < PRICE_CACHE_TTL_MS) return;
     try {
-      await navigator.clipboard.writeText(flat);
-      $status.classList.remove("error");
-      $status.textContent = `copied ${flat.length} hex chars (${flat.length / 2} bytes) to clipboard`;
-    } catch (e) {
-      // Older browsers / non-secure contexts (e.g. http on a LAN IP) —
-      // fall back to selecting the textarea so the operator can ⌘C.
-      $hex.focus();
-      $hex.select();
-      $status.classList.add("error");
-      $status.textContent =
-        `clipboard access denied (${(e as Error).message}); ` +
-        "selected the textarea — press ⌘C / Ctrl+C to copy";
+      if (!woc) woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
+      const url = `${woc.baseUrl}/exchangerate`;
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!resp.ok) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await resp.json()) as any;
+      const rate = data?.rate ?? data?.price ?? data?.USD ?? null;
+      if (typeof rate === "number" && rate > 0) {
+        bsvUsdPrice = rate;
+        priceFetchedAt = now;
+      }
+    } catch {
+      // silently ignore — fiat toggle will show "—"
     }
+  }
+
+  function formatBalance(sats: number): string {
+    if (displayUnit === "fiat") {
+      if (bsvUsdPrice === null) return "— USD";
+      const usd = (sats / SATS_PER_BSV) * bsvUsdPrice;
+      return `$${usd.toFixed(2)} USD`;
+    }
+    return formatSats(sats);
   }
 
   function renderBalance(): void {
     if (!wallet) return;
-    const $sats = root.querySelector<HTMLElement>("#balanceSats");
+    const $hero = root.querySelector<HTMLElement>("#balanceHero");
     const $bsv = root.querySelector<HTMLElement>("#balanceBsv");
     const $meta = root.querySelector<HTMLElement>("#balanceMeta");
-    const $badge = root.querySelector<HTMLElement>("#balanceBadge");
-    const $split = root.querySelector<HTMLElement>("#balanceSplit");
+    const $pending = root.querySelector<HTMLElement>("#balancePending");
     const $details = root.querySelector<HTMLDetailsElement>("#utxoDetails");
     const $count = root.querySelector<HTMLElement>("#utxoCount");
     const $list = root.querySelector<HTMLUListElement>("#utxoList");
-    if (
-      !$sats || !$bsv || !$meta || !$badge || !$split ||
-      !$details || !$count || !$list
-    )
+    if (!$hero || !$bsv || !$meta || !$pending || !$details || !$count || !$list)
       return;
 
     const scan = wallet.lastScan;
     if (!scan) {
-      $sats.textContent = "—";
+      $hero.textContent = "—";
       $bsv.textContent = "";
-      $meta.textContent =
-        "Not scanned yet. Click Refresh to query WhatsOnChain for UTXOs.";
-      $badge.hidden = true;
-      $split.hidden = true;
+      $meta.textContent = "Not scanned yet — click Refresh to query WhatsOnChain.";
+      $pending.hidden = true;
       $details.hidden = true;
       return;
     }
-    $sats.textContent = formatSats(scan.totalSats);
-    $bsv.textContent = formatBsv(scan.totalSats);
+
+    $hero.textContent = formatBalance(scan.totalSats);
+    $bsv.textContent =
+      displayUnit === "fiat"
+        ? formatSats(scan.totalSats)
+        : formatBsv(scan.totalSats);
     $meta.textContent =
       `${scan.utxos.length} UTXO${scan.utxos.length === 1 ? "" : "s"} · ` +
-      `scanned ${scan.addressesScanned} addresses · ` +
       `last refreshed ${relativeTimeFrom(scan.at)}`;
 
-    // Surface mempool UTXOs as a "pending" pill on the headline figure
-    // and (when mixed) a confirmed/pending split sub-line. The data
-    // flows through `WocClient.getUnspentBatch`, which merges confirmed
-    // + unconfirmed and tags mempool entries with height 0.
     const split = splitConfirmedPending(scan.utxos);
     if (split.hasPending) {
-      $badge.hidden = false;
-      // Tighten copy when *everything* is pending — saying "0
-      // confirmed + N pending" reads like noise; a single "pending"
-      // pill plus the headline figure is enough.
-      if (split.allPending) {
-        $split.hidden = true;
-      } else {
-        $split.hidden = false;
-        $split.textContent =
-          `${formatSats(split.confirmedSats)} confirmed · ` +
-          `${formatSats(split.pendingSats)} pending`;
-      }
+      $pending.hidden = false;
+      $pending.textContent = split.allPending
+        ? "unconfirmed"
+        : `+${formatSats(split.pendingSats)} unconfirmed`;
     } else {
-      $badge.hidden = true;
-      $split.hidden = true;
+      $pending.hidden = true;
     }
 
     $details.hidden = scan.utxos.length === 0;
@@ -477,7 +654,7 @@ export function mountWalletDetailPage(
     }
     if ($status) {
       $status.classList.remove("error");
-      $status.textContent = "Starting gap-limit scan (this can take a few seconds)…";
+      $status.textContent = "Starting gap-limit scan…";
     }
     if (!woc) {
       woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
@@ -490,7 +667,7 @@ export function mountWalletDetailPage(
           if (cancelled || !$status) return;
           const branchLabel = branch === RECEIVE_BRANCH ? "recv" : "change";
           $status.textContent =
-            `Probed ${branchLabel} m/${branch}/${index} ` +
+            `Probing ${branchLabel} m/${branch}/${index} ` +
             `(${address.slice(0, 6)}…${address.slice(-4)}) — ` +
             `${found} UTXO${found === 1 ? "" : "s"}`;
         },
@@ -507,9 +684,6 @@ export function mountWalletDetailPage(
       await setLastScan(wallet.id, snapshot);
       wallet.lastScan = snapshot;
 
-      // Auto-advance receive index: if the scan found receive addresses
-      // with UTXOs beyond the current pointer, move the pointer to
-      // lastReceiveUsed + 1 so the next address shown is always fresh.
       const autoNext = result.lastReceiveUsed + 1;
       const didAdvance = autoNext > wallet.nextReceiveIndex;
       if (didAdvance) {
@@ -521,12 +695,10 @@ export function mountWalletDetailPage(
       void renderReceive();
       renderRecentList();
       if ($status) {
-        const advanceNote = didAdvance
-          ? ` · receive index → ${wallet.nextReceiveIndex}`
-          : "";
         $status.textContent =
           `Scan complete — ${result.utxos.length} UTXO(s), ` +
-          `${result.addressesScanned} addresses probed.${advanceNote}`;
+          `${result.addressesScanned} addresses probed.` +
+          (didAdvance ? ` · receive index → ${wallet.nextReceiveIndex}` : "");
       }
     } catch (e) {
       if (cancelled) return;
@@ -539,75 +711,276 @@ export function mountWalletDetailPage(
       scanRunning = false;
       if ($refresh) {
         $refresh.disabled = false;
-        $refresh.textContent = "Refresh balance";
+        $refresh.textContent = "Refresh";
       }
     }
   }
 
-  async function onBuildProposal(): Promise<void> {
-    if (!wallet || sendBusy) return;
+  // ---------------------------------------------------------------------------
+  // History
+  // ---------------------------------------------------------------------------
+
+  function renderHistory(): void {
+    if (!wallet) return;
+    const $list = root.querySelector<HTMLUListElement>("#historyList");
+    const $empty = root.querySelector<HTMLElement>("#historyEmpty");
+    const $status = root.querySelector<HTMLElement>("#historyStatus");
+    if (!$list || !$empty) return;
+
+    const snap = wallet.lastHistory;
+    if (!snap) {
+      $empty.hidden = false;
+      $list.innerHTML = "";
+      if ($status) $status.textContent = "";
+      return;
+    }
+    $empty.hidden = snap.entries.length > 0;
+    if ($status) {
+      $status.textContent =
+        `${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"} · ` +
+        `last fetched ${relativeTimeFrom(snap.at)}`;
+    }
+    $list.innerHTML = "";
+    for (const tx of snap.entries) {
+      const li = document.createElement("li");
+      const isReceive = tx.deltaSats >= 0;
+      const isPending = tx.blockHeight === 0;
+      li.className = `history-row ${isReceive ? "receive" : "send"}${isPending ? " pending" : ""}`;
+      const network = wallet.network ?? "main";
+      const explorerBase = network === "test"
+        ? "https://test.whatsonchain.com/tx/"
+        : "https://whatsonchain.com/tx/";
+      li.innerHTML = `
+        <div class="history-top">
+          <span class="history-delta ${isReceive ? "positive" : "negative"}">
+            ${isReceive ? "+" : ""}${formatSats(tx.deltaSats)}
+          </span>
+          <span class="history-time muted-line">${escapeHtml(formatTxTimestamp(tx.timestamp))}</span>
+        </div>
+        <div class="history-meta muted-line">
+          <a href="${explorerBase}${escapeHtml(tx.txid)}" target="_blank"
+             rel="noopener noreferrer">${escapeHtml(shortTxid(tx.txid))}</a>
+          ${isPending
+            ? '<span class="utxo-pending-tag">unconfirmed</span>'
+            : `· block ${tx.blockHeight}`}
+        </div>
+      `;
+      $list.appendChild(li);
+    }
+  }
+
+  async function onRefreshHistory(): Promise<void> {
+    if (!wallet || historyRunning) return;
+    historyRunning = true;
+    const $btn = root.querySelector<HTMLButtonElement>("#refreshHistory");
+    const $status = root.querySelector<HTMLElement>("#historyStatus");
+    if ($btn) { $btn.disabled = true; $btn.textContent = "Fetching…"; }
+    if ($status) { $status.classList.remove("error"); $status.textContent = "Fetching history from Bitails…"; }
+
+    if (!bitails) {
+      bitails = new BitailsClient({ baseUrl: effectiveBitailsBase(wallet.network) });
+    }
+
+    try {
+      const snap = await fetchWalletHistory(wallet.xpub, bitails, {
+        network: wallet.network,
+        lastReceiveUsed: wallet.lastScan?.lastReceiveUsed,
+        lastChangeUsed: wallet.lastScan?.lastChangeUsed,
+        onProgress: (done, total) => {
+          if (cancelled || !$status) return;
+          $status.textContent = `Fetching history (${done}/${total} addresses)…`;
+        },
+      });
+      if (cancelled) return;
+      await setLastHistory(wallet.id, snap);
+      wallet.lastHistory = snap;
+      renderHistory();
+      if ($status) {
+        $status.textContent =
+          `${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"} · ` +
+          `last fetched just now`;
+      }
+    } catch (e) {
+      if (cancelled) return;
+      if ($status) {
+        $status.classList.add("error");
+        $status.textContent = `history fetch failed: ${(e as Error).message}`;
+      }
+    } finally {
+      historyRunning = false;
+      if ($btn) { $btn.disabled = false; $btn.textContent = "Refresh"; }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Send flow
+  // ---------------------------------------------------------------------------
+
+  function showSendStep(step: "form" | "fee" | "review" | "qr"): void {
+    const steps = ["form", "fee", "review", "qr"];
+    for (const s of steps) {
+      const el = root.querySelector<HTMLElement>(`#sendStep-${s}`);
+      if (el) el.hidden = s !== step;
+    }
+  }
+
+  function onSendMax(): void {
+    if (!wallet?.lastScan) return;
+    const $sats = root.querySelector<HTMLInputElement>("#sendSats");
+    if (!$sats) return;
+    const feeRate = selectedFeeRate;
+    // Estimate fee for all UTXOs → 2 outputs (recipient + change)
+    const totalIn = wallet.lastScan.utxos.reduce((a, u) => a + u.sats, 0);
+    const estimatedFee = Math.ceil((wallet.lastScan.utxos.length * 148 + 2 * 34 + 10) * feeRate / 1000);
+    const maxSend = Math.max(0, totalIn - estimatedFee);
+    $sats.value = String(maxSend);
+  }
+
+  async function onSendNext(): Promise<void> {
+    if (!wallet) return;
     const $addr = root.querySelector<HTMLInputElement>("#sendAddress")!;
-    const $sats = root.querySelector<HTMLInputElement>("#sendSats")!;
-    const $feeRate = root.querySelector<HTMLInputElement>("#sendFeeRate")!;
-    const $btn = root.querySelector<HTMLButtonElement>("#buildProposal")!;
-    const $status = root.querySelector<HTMLElement>("#sendStatus")!;
+    const $satsInput = root.querySelector<HTMLInputElement>("#sendSats")!;
+    const $status = root.querySelector<HTMLElement>("#sendFormStatus")!;
     $status.classList.remove("error");
 
     const recipient = $addr.value.trim();
-    // `<input type="number">` returns "" when the field is empty *or*
-    // when the user typed something the browser couldn't parse as a
-    // number (e.g. a comma in some locales). Treat both as "missing"
-    // and use a clearer message than "must be a positive integer",
-    // which is misleading when the field is just blank — the
-    // placeholder text reads like a value, so users sometimes click
-    // Build proposal without typing anything.
-    const satsRaw = $sats.value.trim();
+    const satsRaw = $satsInput.value.trim();
     const sats = parseInt(satsRaw, 10);
-    const feeRate = parseInt($feeRate.value, 10);
 
     if (!recipient) {
       $status.classList.add("error");
       $status.textContent = "enter a recipient address";
       return;
     }
-    if (satsRaw === "") {
+    if (satsRaw === "" || !Number.isInteger(sats) || sats <= 0) {
       $status.classList.add("error");
-      $status.textContent = "enter an amount to send (in sats)";
-      $sats.focus();
-      return;
-    }
-    if (!Number.isInteger(sats) || sats <= 0) {
-      $status.classList.add("error");
-      $status.textContent = `amount must be a positive whole number of sats (got "${satsRaw}")`;
-      $sats.focus();
+      $status.textContent = satsRaw === ""
+        ? "enter an amount in sats"
+        : `amount must be a positive whole number (got "${satsRaw}")`;
+      $satsInput.focus();
       return;
     }
     if (!wallet.lastScan || wallet.lastScan.utxos.length === 0) {
       $status.classList.add("error");
-      $status.textContent =
-        "no UTXOs known. Click Refresh balance first.";
+      $status.textContent = "no UTXOs known — switch to the Balance tab and click Refresh first";
       return;
     }
 
+    sendStep = { step: "fee", recipient, sats };
+    showSendStep("fee");
+    void loadFeeRates();
+  }
+
+  async function loadFeeRates(): Promise<void> {
+    if (!wallet) return;
+    const $loading = root.querySelector<HTMLElement>("#feeLoading");
+    const $tiers = root.querySelector<HTMLElement>("#feeTiers");
+    if (!woc) woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
+
+    try {
+      feeRec = await fetchFeeRecommendation(woc);
+    } catch {
+      feeRec = null;
+    }
+
+    const economy = feeRec?.economy ?? DEFAULT_FEE_RATE_SATSKB;
+    const standard = feeRec?.standard ?? DEFAULT_FEE_RATE_SATSKB;
+    const priority = feeRec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
+
+    const $eco = root.querySelector<HTMLElement>("#feeEconomy");
+    const $std = root.querySelector<HTMLElement>("#feeStandard");
+    const $pri = root.querySelector<HTMLElement>("#feePriority");
+    if ($eco) $eco.textContent = formatFeeRate(economy);
+    if ($std) $std.textContent = formatFeeRate(standard);
+    if ($pri) $pri.textContent = formatFeeRate(priority);
+
+    selectedFeeRate = standard;
+    if ($loading) $loading.hidden = true;
+    if ($tiers) $tiers.hidden = false;
+  }
+
+  function highlightSelectedTier(): void {
+    root.querySelectorAll<HTMLElement>(".fee-tier").forEach((el) => {
+      const radio = el.querySelector<HTMLInputElement>("input[type=radio]");
+      el.classList.toggle("selected", !!radio?.checked);
+    });
+  }
+
+  async function onFeeNext(): Promise<void> {
+    if (sendStep.step !== "fee") return;
+    if (!wallet?.lastScan) return;
+
+    const selected = root.querySelector<HTMLInputElement>('input[name="feeTier"]:checked')?.value;
+    let rate: number;
+    if (selected === "economy") rate = feeRec?.economy ?? DEFAULT_FEE_RATE_SATSKB;
+    else if (selected === "standard") rate = feeRec?.standard ?? DEFAULT_FEE_RATE_SATSKB;
+    else if (selected === "priority") rate = feeRec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
+    else {
+      // custom
+      const $custom = root.querySelector<HTMLInputElement>("#feeCustom");
+      rate = parseInt($custom?.value ?? "", 10);
+      if (!Number.isInteger(rate) || rate <= 0) rate = DEFAULT_FEE_RATE_SATSKB;
+    }
+    selectedFeeRate = rate;
+
+    // Estimate fee and change for the review screen
+    let feeSats = 0;
+    let changeSats = 0;
+    try {
+      const sel = selectUtxosGreedy(wallet.lastScan.utxos, sendStep.sats, rate);
+      feeSats = sel.feeSats;
+      changeSats = sel.changeSats;
+    } catch {
+      // Use rough estimate if coin select fails (will re-run on confirm)
+      const estimatedBytes = wallet.lastScan.utxos.length * 148 + 2 * 34 + 10;
+      feeSats = Math.ceil(estimatedBytes * rate / 1000);
+      changeSats = 0;
+    }
+
+    sendStep = { step: "review", recipient: sendStep.recipient, sats: sendStep.sats, feeRate: rate, feeSats, changeSats };
+    showSendStep("review");
+    renderReview();
+  }
+
+  function renderReview(): void {
+    if (sendStep.step !== "review") return;
+    const $recipient = root.querySelector<HTMLElement>("#reviewRecipient");
+    const $amount = root.querySelector<HTMLElement>("#reviewAmount");
+    const $fee = root.querySelector<HTMLElement>("#reviewFee");
+    const $total = root.querySelector<HTMLElement>("#reviewTotal");
+    const $change = root.querySelector<HTMLElement>("#reviewChange");
+    const $rate = root.querySelector<HTMLElement>("#reviewFeeRate");
+    if ($recipient) $recipient.textContent = sendStep.recipient;
+    if ($amount) $amount.textContent = formatSats(sendStep.sats);
+    if ($fee) $fee.textContent = formatSats(sendStep.feeSats);
+    if ($total) $total.textContent = formatSats(sendStep.sats + sendStep.feeSats);
+    if ($change) $change.textContent = sendStep.changeSats > 0
+      ? `${formatSats(sendStep.changeSats)} (to your change address)`
+      : "none (send max)";
+    if ($rate) $rate.textContent = formatFeeRate(sendStep.feeRate);
+  }
+
+  async function onBuildProposal(): Promise<void> {
+    if (!wallet || sendBusy || sendStep.step !== "review") return;
+    const $status = root.querySelector<HTMLElement>("#reviewStatus")!;
+    const $confirm = root.querySelector<HTMLButtonElement>("#reviewConfirm")!;
+    $status.classList.remove("error");
+
     sendBusy = true;
-    $btn.disabled = true;
-    $btn.textContent = "Building…";
+    $confirm.disabled = true;
+    $confirm.textContent = "Building…";
     $status.textContent = "Selecting UTXOs…";
 
     try {
       const selection = selectUtxosGreedy(
-        wallet.lastScan.utxos,
-        sats,
-        feeRate,
+        wallet.lastScan!.utxos,
+        sendStep.sats,
+        sendStep.feeRate,
       );
       $status.textContent =
-        `Selected ${selection.inputs.length} UTXO(s) ` +
-        `(${selection.totalInputSats.toLocaleString()} sats). ` +
-        `Fetching SPV proofs…`;
+        `Selected ${selection.inputs.length} UTXO(s). Fetching SPV proofs…`;
 
-      if (!woc) {
-        woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
-      }
+      if (!woc) woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
       const proofs = [];
       for (let i = 0; i < selection.inputs.length; i++) {
         const u = selection.inputs[i];
@@ -617,21 +990,8 @@ export function mountWalletDetailPage(
         proofs.push({ utxo: u, proof });
       }
 
-      // The proposal anchors the merkle root for each unique input
-      // block (carried inside the InputProof above). No extra header
-      // fetches are needed here — `fetchInputProof` already pulled
-      // each block's header from WoC and self-checked the path.
-      const nextChangeIdx = (wallet.lastScan.lastChangeUsed ?? -1) + 1;
-      const changeDerived = deriveAddress(
-        wallet.xpub,
-        CHANGE_BRANCH,
-        nextChangeIdx,
-        wallet.network,
-      );
-      const changeAddress = changeDerived.address;
-      const changeDerivation: [number, number] = [CHANGE_BRANCH, nextChangeIdx];
-      const changeSats = selection.changeSats;
-
+      const nextChangeIdx = (wallet.lastScan!.lastChangeUsed ?? -1) + 1;
+      const changeDerived = deriveAddress(wallet.xpub, CHANGE_BRANCH, nextChangeIdx, wallet.network);
       const envelope = buildUnsignedProposal({
         walletFingerprintHex: wallet.fingerprint,
         inputs: proofs.map(({ utxo, proof }) => ({
@@ -641,12 +1001,12 @@ export function mountWalletDetailPage(
           derivation: utxo.derivation,
           proof,
         })),
-        recipientAddress: recipient,
-        recipientSats: sats,
-        changeAddress,
-        changeSats,
-        changeDerivation,
-        feeRateSatskb: feeRate,
+        recipientAddress: sendStep.recipient,
+        recipientSats: sendStep.sats,
+        changeAddress: changeDerived.address,
+        changeSats: selection.changeSats,
+        changeDerivation: [CHANGE_BRANCH, nextChangeIdx],
+        feeRateSatskb: sendStep.feeRate,
         locktime: 0,
       });
 
@@ -656,24 +1016,16 @@ export function mountWalletDetailPage(
       proposalFrames = frames;
       proposalFrameIdx = 0;
       proposalLastFrameAt = 0;
-      const $count = root.querySelector<HTMLElement>("#proposalFrameCount")!;
-      const $bytes = root.querySelector<HTMLElement>("#proposalByteCount")!;
-      $count.textContent = String(frames.length);
-      $bytes.textContent = String(blob.length);
+      const $frameCount = root.querySelector<HTMLElement>("#proposalFrameCount");
+      const $byteCount = root.querySelector<HTMLElement>("#proposalByteCount");
+      if ($frameCount) $frameCount.textContent = String(frames.length);
+      if ($byteCount) $byteCount.textContent = String(blob.length);
 
-      // Hex form of the same envelope, for the SSH copy-paste bridge.
-      // Wrapped to 64 chars/line so a `cat <<EOF` on the Pi receives
-      // the paste cleanly even from terminals that don't auto-soft-wrap.
-      // The CLI strips whitespace before decoding so wrapping is free.
-      const $proposalHex = root.querySelector<HTMLTextAreaElement>(
-        "#proposalHex",
-      )!;
-      $proposalHex.value = wrapHex(bytesToHex(blob), 64);
+      const $proposalHex = root.querySelector<HTMLTextAreaElement>("#proposalHex");
+      if ($proposalHex) $proposalHex.value = wrapHex(bytesToHex(blob), 64);
 
-      const $form = root.querySelector<HTMLElement>("#sendForm")!;
-      const $result = root.querySelector<HTMLElement>("#sendResult")!;
-      $form.hidden = true;
-      $result.hidden = false;
+      showSendStep("qr");
+      sendStep = { step: "qr" };
       startProposalAnimation();
     } catch (e) {
       $status.classList.add("error");
@@ -687,14 +1039,15 @@ export function mountWalletDetailPage(
       $status.textContent = `build failed: ${msg}`;
     } finally {
       sendBusy = false;
-      $btn.disabled = false;
-      $btn.textContent = "Build proposal";
+      $confirm.disabled = false;
+      $confirm.textContent = "Build QR →";
     }
   }
 
+  // QR animation helpers (proposal)
   function startProposalAnimation(): void {
     stopProposalAnimation();
-    if (!proposalFrames || proposalFrames.length === 0) return;
+    if (!proposalFrames?.length) return;
     const $toggle = root.querySelector<HTMLButtonElement>("#proposalToggle");
     if ($toggle) $toggle.textContent = "Pause";
     proposalRaf = requestAnimationFrame(tickProposal);
@@ -713,11 +1066,8 @@ export function mountWalletDetailPage(
   }
 
   function tickProposal(now: number): void {
-    if (!proposalFrames || cancelled) {
-      proposalRaf = null;
-      return;
-    }
-    const interval = 1000 / 6; // 6 fps — same default as the encoder page.
+    if (!proposalFrames || cancelled) { proposalRaf = null; return; }
+    const interval = 1000 / 6;
     if (now - proposalLastFrameAt >= interval) {
       proposalLastFrameAt = now;
       const $canvas = root.querySelector<HTMLCanvasElement>("#proposalQr");
@@ -725,9 +1075,7 @@ export function mountWalletDetailPage(
       if ($canvas && $idx) {
         $idx.textContent = String(proposalFrameIdx + 1);
         void QRCode.toCanvas($canvas, proposalFrames[proposalFrameIdx], {
-          width: 320,
-          margin: 1,
-          errorCorrectionLevel: "M",
+          width: 320, margin: 1, errorCorrectionLevel: "M",
         });
       }
       proposalFrameIdx = (proposalFrameIdx + 1) % proposalFrames.length;
@@ -735,91 +1083,36 @@ export function mountWalletDetailPage(
     proposalRaf = requestAnimationFrame(tickProposal);
   }
 
-  async function onShowExport(): Promise<void> {
-    if (!wallet) return;
-    const envelope = {
-      kind: KIND_XPUB,
-      xpub: wallet.xpub,
-      path: wallet.path,
-      label: wallet.label,
-      fingerprint: hexToBytes(wallet.fingerprint),
-      network: wallet.network,
-    } as const;
-    const blob = await encodeEnvelope(envelope);
-    exportFrames = encodeMultipartLines(blob);
-    exportFrameIdx = 0;
-    exportLastFrameAt = 0;
-    const $result = root.querySelector<HTMLElement>("#exportResult")!;
-    const $count = root.querySelector<HTMLElement>("#exportFrameCount")!;
-    $result.hidden = false;
-    $count.textContent = String(exportFrames.length);
-    startExportAnimation();
-  }
-
-  function startExportAnimation(): void {
-    stopExportAnimation();
-    if (!exportFrames || exportFrames.length === 0) return;
-    const $toggle = root.querySelector<HTMLButtonElement>("#exportToggle");
-    if ($toggle) $toggle.textContent = "Pause";
-    exportRaf = requestAnimationFrame(tickExport);
-  }
-
-  function stopExportAnimation(): void {
-    if (exportRaf !== null) cancelAnimationFrame(exportRaf);
-    exportRaf = null;
-    const $toggle = root.querySelector<HTMLButtonElement>("#exportToggle");
-    if ($toggle) $toggle.textContent = "Resume";
-  }
-
-  function toggleExportAnimation(): void {
-    if (exportRaf !== null) stopExportAnimation();
-    else startExportAnimation();
-  }
-
-  function hideExport(): void {
-    stopExportAnimation();
-    exportFrames = null;
-    const $result = root.querySelector<HTMLElement>("#exportResult");
-    if ($result) $result.hidden = true;
-  }
-
-  function tickExport(now: number): void {
-    if (!exportFrames || cancelled) {
-      exportRaf = null;
-      return;
+  async function onCopyProposalHex(): Promise<void> {
+    const $hex = root.querySelector<HTMLTextAreaElement>("#proposalHex");
+    const $status = root.querySelector<HTMLElement>("#proposalHexStatus");
+    if (!$hex || !$status) return;
+    const flat = $hex.value.replace(/\s+/g, "");
+    try {
+      await navigator.clipboard.writeText(flat);
+      $status.classList.remove("error");
+      $status.textContent = `copied ${flat.length / 2} bytes to clipboard`;
+    } catch (e) {
+      $hex.focus();
+      $hex.select();
+      $status.classList.add("error");
+      $status.textContent = `clipboard denied — selected for manual copy (${(e as Error).message})`;
     }
-    const interval = 1000 / 6; // 6 fps
-    if (now - exportLastFrameAt >= interval) {
-      exportLastFrameAt = now;
-      const $canvas = root.querySelector<HTMLCanvasElement>("#exportQr");
-      const $idx = root.querySelector<HTMLElement>("#exportFrameIdx");
-      if ($canvas && $idx) {
-        $idx.textContent = String(exportFrameIdx + 1);
-        void QRCode.toCanvas($canvas, exportFrames[exportFrameIdx], {
-          width: 320,
-          margin: 1,
-          errorCorrectionLevel: "M",
-        });
-      }
-      exportFrameIdx = (exportFrameIdx + 1) % exportFrames.length;
-    }
-    exportRaf = requestAnimationFrame(tickExport);
   }
 
   function resetSendCard(): void {
     stopProposalAnimation();
     proposalFrames = null;
     proposalFrameIdx = 0;
-    const $form = root.querySelector<HTMLElement>("#sendForm");
-    const $result = root.querySelector<HTMLElement>("#sendResult");
-    const $status = root.querySelector<HTMLElement>("#sendStatus");
-    if ($form) $form.hidden = false;
-    if ($result) $result.hidden = true;
-    if ($status) {
-      $status.classList.remove("error");
-      $status.textContent = "";
-    }
+    sendStep = { step: "form" };
+    showSendStep("form");
+    const $status = root.querySelector<HTMLElement>("#sendFormStatus");
+    if ($status) { $status.classList.remove("error"); $status.textContent = ""; }
   }
+
+  // ---------------------------------------------------------------------------
+  // Receive
+  // ---------------------------------------------------------------------------
 
   async function renderReceive(): Promise<void> {
     if (!wallet || cancelled) return;
@@ -836,25 +1129,27 @@ export function mountWalletDetailPage(
     const $canvas = root.querySelector<HTMLCanvasElement>("#receiveQr")!;
     const $status = root.querySelector<HTMLElement>("#receiveStatus")!;
     const $prev = root.querySelector<HTMLButtonElement>("#prevIdx")!;
+    const $verifyCheck = root.querySelector<HTMLInputElement>("#verifyCheck");
 
     $path.textContent = `${wallet.path} / ${derived.subPath}`;
     $addr.textContent = derived.address;
     $prev.disabled = idx === 0;
     $status.textContent =
-      idx === 0
-        ? "this is the first address (index 0)"
-        : `address #${idx} on the receive branch`;
+      idx === 0 ? "first address (index 0)" : `address #${idx} on receive branch`;
+
+    // Restore verification state from localStorage
+    if ($verifyCheck) {
+      const key = `piwallet.verified.${walletId}.${derived.address}`;
+      $verifyCheck.checked = localStorage.getItem(key) === "1";
+    }
 
     try {
       await QRCode.toCanvas($canvas, derived.address, {
-        margin: 1,
-        width: 240,
-        errorCorrectionLevel: "M",
+        margin: 1, width: 240, errorCorrectionLevel: "M",
       });
     } catch (e) {
       $status.textContent = `qr render error: ${(e as Error).message}`;
     }
-
     renderRecentList();
   }
 
@@ -863,11 +1158,7 @@ export function mountWalletDetailPage(
     const center = wallet.nextReceiveIndex;
     const start = Math.max(0, center - Math.floor(RECENT_WINDOW / 2));
     const batch = deriveAddressBatch(
-      wallet.xpub,
-      RECEIVE_BRANCH,
-      start,
-      RECENT_WINDOW,
-      wallet.network,
+      wallet.xpub, RECEIVE_BRANCH, start, RECENT_WINDOW, wallet.network,
     );
     const $list = root.querySelector<HTMLUListElement>("#receiveList")!;
     $list.innerHTML = "";
@@ -884,16 +1175,11 @@ export function mountWalletDetailPage(
     $list.querySelectorAll<HTMLButtonElement>("button.copy").forEach((b) => {
       b.addEventListener("click", () => {
         const v = b.dataset.address ?? "";
-        void navigator.clipboard
-          .writeText(v)
-          .then(() => {
-            const orig = b.textContent;
-            b.textContent = "copied!";
-            setTimeout(() => {
-              b.textContent = orig;
-            }, 1200);
-          })
-          .catch(() => {});
+        void navigator.clipboard.writeText(v).then(() => {
+          const orig = b.textContent;
+          b.textContent = "copied!";
+          setTimeout(() => { b.textContent = orig; }, 1200);
+        }).catch(() => {});
       });
     });
   }
@@ -925,15 +1211,87 @@ export function mountWalletDetailPage(
       if ($btn) {
         const orig = $btn.textContent;
         $btn.textContent = "copied!";
-        setTimeout(() => {
-          if ($btn) $btn.textContent = orig;
-        }, 1200);
+        setTimeout(() => { if ($btn) $btn.textContent = orig; }, 1200);
       }
     } catch (e) {
       const $s = root.querySelector<HTMLElement>("#receiveStatus");
       if ($s) $s.textContent = `clipboard error: ${(e as Error).message}`;
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Share / export QR
+  // ---------------------------------------------------------------------------
+
+  async function onShowExport(): Promise<void> {
+    if (!wallet) return;
+    const envelope = {
+      kind: KIND_XPUB,
+      xpub: wallet.xpub,
+      path: wallet.path,
+      label: wallet.label,
+      fingerprint: hexToBytes(wallet.fingerprint),
+      network: wallet.network,
+    } as const;
+    const blob = await encodeEnvelope(envelope);
+    exportFrames = encodeMultipartLines(blob);
+    exportFrameIdx = 0;
+    exportLastFrameAt = 0;
+    const $result = root.querySelector<HTMLElement>("#exportResult")!;
+    const $count = root.querySelector<HTMLElement>("#exportFrameCount")!;
+    $result.hidden = false;
+    $count.textContent = String(exportFrames.length);
+    startExportAnimation();
+  }
+
+  function startExportAnimation(): void {
+    stopExportAnimation();
+    if (!exportFrames?.length) return;
+    const $toggle = root.querySelector<HTMLButtonElement>("#exportToggle");
+    if ($toggle) $toggle.textContent = "Pause";
+    exportRaf = requestAnimationFrame(tickExport);
+  }
+
+  function stopExportAnimation(): void {
+    if (exportRaf !== null) cancelAnimationFrame(exportRaf);
+    exportRaf = null;
+    const $toggle = root.querySelector<HTMLButtonElement>("#exportToggle");
+    if ($toggle) $toggle.textContent = "Resume";
+  }
+
+  function toggleExportAnimation(): void {
+    if (exportRaf !== null) stopExportAnimation();
+    else startExportAnimation();
+  }
+
+  function hideExport(): void {
+    stopExportAnimation();
+    exportFrames = null;
+    const $result = root.querySelector<HTMLElement>("#exportResult");
+    if ($result) $result.hidden = true;
+  }
+
+  function tickExport(now: number): void {
+    if (!exportFrames || cancelled) { exportRaf = null; return; }
+    const interval = 1000 / 6;
+    if (now - exportLastFrameAt >= interval) {
+      exportLastFrameAt = now;
+      const $canvas = root.querySelector<HTMLCanvasElement>("#exportQr");
+      const $idx = root.querySelector<HTMLElement>("#exportFrameIdx");
+      if ($canvas && $idx) {
+        $idx.textContent = String(exportFrameIdx + 1);
+        void QRCode.toCanvas($canvas, exportFrames[exportFrameIdx], {
+          width: 320, margin: 1, errorCorrectionLevel: "M",
+        });
+      }
+      exportFrameIdx = (exportFrameIdx + 1) % exportFrames.length;
+    }
+    exportRaf = requestAnimationFrame(tickExport);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Teardown
+  // ---------------------------------------------------------------------------
 
   return () => {
     cancelled = true;
