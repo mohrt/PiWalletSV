@@ -65,6 +65,22 @@ function hash160(pub: Uint8Array): Uint8Array {
   return ripemd160(sha256(pub));
 }
 
+/**
+ * Compute the 4-byte self-fingerprint from a bare account xpub string.
+ * Matches the Pi's `hash160(pubkey)[:4]` used in `xpub_export` envelopes.
+ * Throws `DerivationError` if the xpub is not valid BIP32.
+ */
+export function xpubFingerprint(accountXpub: string): Uint8Array {
+  let key: HDKey;
+  try {
+    key = HDKey.fromExtendedKey(accountXpub);
+  } catch (e) {
+    throw new DerivationError(`invalid xpub: ${(e as Error).message}`);
+  }
+  if (!key.publicKey) throw new DerivationError("HDKey returned no public key");
+  return hash160(key.publicKey).slice(0, 4);
+}
+
 /** Encode a 20-byte HASH160 as a P2PKH base58check address. */
 export function encodeP2pkhAddress(
   h160: Uint8Array,
