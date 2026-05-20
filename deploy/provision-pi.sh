@@ -319,7 +319,12 @@ step_boot_config() {
     # Hardware enables.
     ensure_line "dtparam=spi=on"        "$BOOT_CFG"
     ensure_line "dtparam=i2c_arm=on"    "$BOOT_CFG"
-    ensure_line "camera_auto_detect=1"  "$BOOT_CFG"
+    # Arducam OV5647 Mini (B0033) has no EEPROM so camera_auto_detect=1
+    # finds nothing. Disable auto-detect and load the ov5647 overlay
+    # explicitly. If you swap to an official Pi camera with an EEPROM
+    # (Module 3, HQ Camera), flip these two lines.
+    ensure_line "camera_auto_detect=0"  "$BOOT_CFG"
+    ensure_line "dtoverlay=ov5647"      "$BOOT_CFG"
 
     # Audio off. dtparam=audio=off matches raspi-config; setting
     # it twice is harmless because ensure_line is idempotent.

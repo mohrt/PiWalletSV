@@ -30,8 +30,16 @@ sudo apt install -y python3-venv python3-dev \
     rpicam-apps python3-picamera2 python3-libcamera \
     libzbar0t64
 
-# Enable SPI (bonnet) and reboot.
+# Enable SPI (bonnet).
 sudo raspi-config nonint do_spi 0
+
+# Arducam OV5647 Mini has no EEPROM — disable auto-detect and load
+# the ov5647 overlay explicitly.  Add these two lines to config.txt:
+sudo tee -a /boot/firmware/config.txt <<'EOF'
+camera_auto_detect=0
+dtoverlay=ov5647
+EOF
+
 sudo reboot
 ```
 
@@ -39,8 +47,14 @@ After it comes back, sanity-check that the kernel sees both peripherals:
 
 ```sh
 ls /dev/spidev0.*                 # expect /dev/spidev0.0 and /dev/spidev0.1
-rpicam-hello --list-cameras       # expect e.g. "imx708" listed
+rpicam-hello --list-cameras       # expect "ov5647" or "arducam" listed
 ```
+
+!!! note "Official Pi cameras"
+    If you swap to a Pi Camera Module 3 or HQ Camera (which have an
+    on-board EEPROM), replace the two lines above with
+    `camera_auto_detect=1` instead. The OV5647 and the EEPROM cameras
+    use mutually exclusive detection methods.
 
 !!! note "libcamera tool rename on Trixie"
     On Pi OS Trixie the libcamera CLI tools were renamed:
@@ -77,15 +91,17 @@ plus the GPIO HAL.
 
 ## 4. Seed a vault (one-time)
 
-The bonnet boot loop expects a vault to already exist. From the SSH
-session, create one with a known PIN and add a single wallet:
+The bonnet boot loop handles first-boot vault creation on-screen — if no
+vault exists it walks the operator through picking a PIN twice before
+reaching the wallet list. To skip the on-screen setup and pre-seed a
+vault from the CLI:
 
 ```sh
 .venv/bin/piwallet vault init
 # enter PIN (e.g. 123456) twice
 
 .venv/bin/piwallet mnemonic new --words 12 > /tmp/m.txt
-.venv/bin/piwallet wallet add --label daily < /tmp/m.txt
+.venv/bin/piwallet vault add --label daily < /tmp/m.txt
 shred -u /tmp/m.txt
 ```
 
@@ -94,6 +110,10 @@ shred -u /tmp/m.txt
 The vault lives at `~/.piwallet/vault.bin` by default; the
 disclaimer state lives at `~/.piwallet/terms.json`. Wiping
 that directory resets the device to a "first boot" state.
+
+If the vault file becomes corrupt, use `piwallet vault recover` to
+diagnose it and optionally rename the corrupt file and create a fresh
+empty vault.
 
 ## 5. Run the bonnet
 
@@ -116,13 +136,18 @@ The display should:
 6. UP/DOWN cycles the active cell digit; LEFT/RIGHT moves
    between cells; A confirms.
 7. After confirming the correct PIN, show the **Wallets** list
-   with the wallet you added in step 4. UP/DOWN navigates;
-   A drills in.
-8. The **wallet detail** screen shows a crisp QR code for the
+   with any pre-seeded wallets. UP/DOWN navigates; A drills in.
+   The list also has **New wallet**, **Restore wallet**, and
+   **Settings** rows.
+8. The **New / Restore wallet** flows walk through: word count →
+   network (mainnet/testnet) → HD path → entropy / word entry →
+   label → success banner. After saving, the device offers to
+   display the companion-pairing QR.
+9. The **wallet detail** screen shows a crisp QR code for the
    m/0/0 receive address plus the address text in two lines.
    LEFT/RIGHT step the receive index; A advances.
-9. Single-press B returns to the wallet list. Long-press B from
-   either screen exits the bonnet app (back to the shell).
+10. Single-press B returns to the wallet list. Long-press B from
+    the wallet list exits the bonnet app (back to the shell).
 
 ## 6. Things to write down
 
@@ -143,14 +168,12 @@ The display should:
   ``piwallet/ui/display.py::ST7789Display``. Sanity script tunable via
   ``scripts/bonnet_sanity.py --y-offset``.
 
-## 7. Known gaps surfaced here
+## 7. Remaining gaps
 
-The screens below are explicit TODOs:
+The screens below are not yet wired into the bonnet UI:
 
-- Word entry (BIP39 mnemonic create / restore on the bonnet).
-- Two-tier vault format upgrade.
-- Scan-proposal / display-signed-tx flow on the bonnet
-  (currently CLI-only).
+- Scan-proposal / display-signed-tx flow (currently CLI-only via
+  `piwallet sign` and `piwallet verify`).
 
 If anything in the checklist above misbehaves, the per-screen
 fixes live next to the screen code:
@@ -160,6 +183,9 @@ fixes live next to the screen code:
 - Unlock screen: `piwallet/bonnet/unlock.py`
 - Wallet list: `piwallet/bonnet/wallet_list.py`
 - Wallet detail: `piwallet/bonnet/wallet_detail.py`
+- Create / restore flows: `piwallet/bonnet/create_wallet.py`, `piwallet/bonnet/restore_wallet.py`
+- Companion pairing: `piwallet/bonnet/companion_pairing.py`
+- Settings: `piwallet/ui/settings_screen.py`
 - Boot loop: `piwallet/bonnet/app.py`
 - Display driver: `piwallet/ui/display.py`
 - Input backend: `piwallet/ui/input.py`

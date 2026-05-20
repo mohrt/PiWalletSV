@@ -307,7 +307,10 @@ asking the Pi to re-sign.
 
 ## 9. Restore from mnemonic
 
-Lost a vault, replaced a SD card, switching devices?
+Lost a vault, replaced a SD card, switching devices? If you need to
+recover funds without access to the device at all, see
+[Recover without device](recover-without-device.md) for step-by-step
+instructions using iancoleman.io/bip39/ or ElectrumSV.
 
 === "Bonnet (Phase 2)"
 

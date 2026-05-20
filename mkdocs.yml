@@ -141,6 +141,7 @@ nav:
   - Operate: operate.md
   - Architecture: architecture.md
   - User manual: user-manual.md
+  - Recover without device: recover-without-device.md
   - CLI reference: cli.md
   - Develop: develop.md
   - Security: security.md
