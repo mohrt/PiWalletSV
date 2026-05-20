@@ -92,13 +92,20 @@ export function mountScannerPage(root: HTMLElement): () => void {
           <summary>Or paste xpub (import from another companion)</summary>
           <p class="muted-line">
             Paste a BIP32 account-level extended public key to import a
-            watch-only wallet without scanning the Pi. The key must start
-            with <code>xpub</code> (mainnet) or <code>tpub</code> (testnet)
-            and correspond to the BIP44 path <code>m/44'/236'/0'</code>.
+            watch-only wallet without scanning the Pi. BSV uses the
+            <code>xpub</code> prefix for both networks, so select the
+            correct network below.
           </p>
           <textarea id="pasteXpub" class="hex-blob" rows="3"
             placeholder="xpub6…"
             spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
+          <label class="field">
+            <span>Network</span>
+            <select id="pasteXpubNetwork">
+              <option value="main">Mainnet (BSV)</option>
+              <option value="test">Testnet (TBSV)</option>
+            </select>
+          </label>
           <div class="actions">
             <button id="pasteXpubImport" class="primary" type="button">
               Import xpub
@@ -180,6 +187,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
   const $copyView = root.querySelector<HTMLButtonElement>("#copyView")!;
   const $copyB64 = root.querySelector<HTMLButtonElement>("#copyB64")!;
   const $pasteXpub = root.querySelector<HTMLTextAreaElement>("#pasteXpub")!;
+  const $pasteXpubNetwork = root.querySelector<HTMLSelectElement>("#pasteXpubNetwork")!;
   const $pasteXpubImport = root.querySelector<HTMLButtonElement>("#pasteXpubImport")!;
   const $pasteXpubClear = root.querySelector<HTMLButtonElement>("#pasteXpubClear")!;
   const $pasteXpubStatus = root.querySelector<HTMLElement>("#pasteXpubStatus")!;
@@ -960,19 +968,15 @@ export function mountScannerPage(root: HTMLElement): () => void {
       return;
     }
 
-    // Detect network from BIP32 version prefix
-    let network: NetworkT;
-    if (raw.startsWith("xpub") || raw.startsWith("xprv")) {
-      network = "main";
-    } else if (raw.startsWith("tpub") || raw.startsWith("tprv")) {
-      network = "test";
-    } else {
+    if (!raw.startsWith("xpub") && !raw.startsWith("tpub")) {
       setXpubStatus(
-        "unrecognised key prefix — expected xpub… (mainnet) or tpub… (testnet)",
+        "unrecognised key — expected a BIP32 extended public key (xpub… or tpub…)",
         true,
       );
       return;
     }
+
+    const network = $pasteXpubNetwork.value as NetworkT;
 
     let fp: Uint8Array;
     try {
