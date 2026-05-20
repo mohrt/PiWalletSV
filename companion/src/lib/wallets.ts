@@ -12,12 +12,13 @@
 
 import type { NetworkT } from "./envelope.js";
 import type { WalletUtxo } from "./utxo.js";
+import type { HistorySnapshot } from "./history.js";
 
 const DB_NAME = "piwallet-companion";
 const DB_VERSION = 1;
 const STORE = "wallets";
 
-export const WALLET_SCHEMA_VERSION = 1;
+export const WALLET_SCHEMA_VERSION = 2;
 
 export interface WalletRecord {
   /** UUIDv4 generated on save. */
@@ -52,6 +53,16 @@ export interface WalletRecord {
    * existing pairings would have stored mainnet addresses regardless.
    */
   network?: NetworkT;
+  /**
+   * Cached transaction history from the last Bitails fetch (schema v2+).
+   * Optional; the wallet works without it (History tab shows "not fetched").
+   */
+  lastHistory?: HistorySnapshot;
+  /**
+   * User's preferred display unit: "sats" or "fiat".
+   * Persisted so the toggle survives page reloads.
+   */
+  displayUnit?: "sats" | "fiat";
 }
 
 /** Cached output of the gap-limit UTXO scan, persisted per wallet. */
@@ -298,6 +309,36 @@ export async function setNextReceiveIndex(
     );
     if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
     cur.nextReceiveIndex = index;
+    await txPromise(store.put(cur), "put");
+  });
+}
+
+export async function setLastHistory(
+  id: string,
+  snapshot: HistorySnapshot,
+): Promise<void> {
+  await withStore("readwrite", async (store) => {
+    const cur = await txPromise<WalletRecord | undefined>(
+      store.get(id) as IDBRequest<WalletRecord | undefined>,
+      "get",
+    );
+    if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
+    cur.lastHistory = snapshot;
+    await txPromise(store.put(cur), "put");
+  });
+}
+
+export async function setDisplayUnit(
+  id: string,
+  unit: "sats" | "fiat",
+): Promise<void> {
+  await withStore("readwrite", async (store) => {
+    const cur = await txPromise<WalletRecord | undefined>(
+      store.get(id) as IDBRequest<WalletRecord | undefined>,
+      "get",
+    );
+    if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
+    cur.displayUnit = unit;
     await txPromise(store.put(cur), "put");
   });
 }
