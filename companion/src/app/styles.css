@@ -848,3 +848,546 @@ body.terms-locked {
   flex: 0 0 auto;
 }
 
+/* =========================================================================
+   Tab navigation
+   ========================================================================= */
+
+.tab-nav {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.3rem;
+}
+
+.tab-nav button {
+  flex: 1 1 auto;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.45rem 0.75rem;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.tab-nav button:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+  filter: none;
+}
+
+.tab-nav button.active {
+  background: var(--accent);
+  color: #0b0f15;
+  font-weight: 700;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+/* =========================================================================
+   Balance hero
+   ========================================================================= */
+
+.balance-hero-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.balance-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.balance-hero-value {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-size: 2rem;
+  font-weight: 700;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.balance-hero-value:hover:not(:disabled) {
+  color: var(--accent-strong);
+  filter: none;
+}
+
+.balance-pending {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #e3b86c;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.balance-bsv {
+  font-size: 0.88rem;
+  color: var(--accent);
+  margin: 0;
+}
+
+.balance-status {
+  margin-top: 0.5rem;
+}
+
+.balance-actions {
+  flex: 0 0 auto;
+}
+
+/* =========================================================================
+   Mainnet badge (green counterpart to testnet amber)
+   ========================================================================= */
+
+.mainnet-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(88, 196, 122, 0.18);
+  border: 1px solid rgba(88, 196, 122, 0.4);
+  color: #58c47a;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+
+/* =========================================================================
+   Wallet list card redesign
+   ========================================================================= */
+
+.wallet-card-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.wallet-card-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.wallet-balance {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9rem;
+  color: var(--accent);
+  margin-left: auto;
+}
+
+.wallet-card-meta {
+  font-size: 0.75rem;
+}
+
+.wallet-card-actions {
+  margin-top: 0.25rem;
+}
+
+/* Inline rename / remove strips */
+
+.inline-rename,
+.inline-remove {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.inline-rename .rename-input {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+}
+
+.remove-confirm-msg {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* =========================================================================
+   Send flow
+   ========================================================================= */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.6rem 0;
+}
+
+.field > span {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.field input[type="text"],
+.field input[type="number"] {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.95rem;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.amount-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.amount-row input {
+  flex: 1;
+}
+
+.send-max-btn {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+/* Fee tier picker */
+
+.fee-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+}
+
+.fee-tier {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 100ms;
+}
+
+.fee-tier.selected,
+.fee-tier:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(79, 156, 255, 0.07);
+}
+
+.fee-tier input[type="radio"] {
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.fee-tier-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  min-width: 5rem;
+}
+
+.fee-tier-rate {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.85rem;
+  color: var(--accent);
+  min-width: 7rem;
+}
+
+.fee-tier-desc {
+  font-size: 0.78rem;
+  margin: 0;
+  flex: 1;
+}
+
+.fee-custom-input {
+  width: 6rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+}
+
+/* Review table */
+
+.review-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.review-table td {
+  padding: 0.4rem 0.25rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.review-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  width: 5.5rem;
+  min-width: 5.5rem;
+}
+
+.review-value {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  word-break: break-all;
+}
+
+.review-value.mono {
+  font-size: 0.82rem;
+}
+
+/* =========================================================================
+   Receive tab
+   ========================================================================= */
+
+.receive-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: flex-start;
+  margin-top: 0.5rem;
+}
+
+#tab-receive canvas {
+  background: white;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+
+.receive-detail {
+  flex: 1 1 240px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.receive-list-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.receive-list-section h3 {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin: 0 0 0.25rem;
+}
+
+/* On-device verify callout */
+
+.verify-callout {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(212, 158, 63, 0.08);
+  border: 1px solid rgba(212, 158, 63, 0.3);
+  font-size: 0.85rem;
+}
+
+.verify-callout p {
+  margin: 0 0 0.5rem;
+  line-height: 1.45;
+}
+
+.verify-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #58c47a;
+}
+
+.verify-checkbox input[type="checkbox"] {
+  accent-color: #58c47a;
+}
+
+/* =========================================================================
+   History tab
+   ========================================================================= */
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.history-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 0.85rem;
+}
+
+.history-row.receive {
+  border-left: 3px solid rgba(88, 196, 122, 0.6);
+}
+
+.history-row.send {
+  border-left: 3px solid rgba(255, 107, 107, 0.5);
+}
+
+.history-row.pending {
+  opacity: 0.8;
+}
+
+.history-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.history-delta {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.history-delta.positive {
+  color: #58c47a;
+}
+
+.history-delta.negative {
+  color: var(--danger);
+}
+
+.history-time {
+  font-size: 0.78rem;
+}
+
+.history-meta {
+  font-size: 0.78rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* =========================================================================
+   Signing step indicator (scanner broadcast card)
+   ========================================================================= */
+
+.sign-steps {
+  display: flex;
+  gap: 0;
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  counter-reset: step;
+}
+
+.sign-step {
+  flex: 1;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.25rem;
+  border-bottom: 2px solid var(--border);
+  color: var(--muted);
+  transition: border-color 200ms, color 200ms;
+}
+
+.sign-step.done {
+  border-color: #58c47a;
+  color: #58c47a;
+}
+
+.sign-step.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sign-step.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.broadcast-success {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #58c47a;
+  margin: 0.5rem 0 0;
+}
+
+/* =========================================================================
+   Settings page
+   ========================================================================= */
+
+.field select {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  width: 100%;
+}
+
+.field select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
