@@ -50,13 +50,26 @@ release-key fingerprint. Anything else means the file has been
 tampered with in transit, or someone has replaced the website.
 **Do not flash an unverified image.**
 
+## Flash the image
+
+!!! tip "Jump straight to the flashing guide"
+    The [Flash and first run](build-image.md#step-2-flash-the-image)
+    page has step-by-step instructions for every platform:
+
+    - **Windows** — Raspberry Pi Imager or balenaEtcher (GUI, no command line needed)
+    - **macOS** — Raspberry Pi Imager via GUI or `brew`, or `dd` from the terminal
+    - **Linux** — `dd` from the terminal, or Raspberry Pi Imager via `apt` / Flatpak
+
+    Both recommended GUI tools handle `.img.xz` decompression
+    automatically — no need to unzip the file first.
+
 ## Next steps
 
-Once the image is verified:
+Once the image is verified and flashed:
 
-- Read the [Flash and first run](build-image.md) guide for step-by-
-  step flashing, first-boot disclaimer, vault setup, airgap
-  verification, and a TESTNET smoke test.
+- Follow [Flash and first run](build-image.md) for first-boot
+  setup: disclaimer, PIN, wallet creation, airgap check, and a
+  TESTNET smoke test.
 - See the [User manual](user-manual.md) for routine use after the
   device is set up.
 

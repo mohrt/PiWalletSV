@@ -58,42 +58,100 @@ supply-chain attacks reach end-user devices.
 
 ## Step 2 &mdash; Flash the image
 
-=== "Raspberry Pi Imager (easiest)"
+Pick the tab for your operating system. All recommended tools are free
+and open source; they handle decompression of the `.img.xz` file
+automatically so you don't need to unzip first.
 
-    1. Install [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
-    2. Click **&ldquo;Choose OS&rdquo; &rarr; &ldquo;Use custom&rdquo;** and pick the verified
-       `.img.xz` file. Imager handles the decompression for you.
-    3. Click **&ldquo;Choose storage&rdquo;** and pick your SD card.
-    4. Skip the &ldquo;OS customisation&rdquo; dialog &mdash; PiWalletSV does not
-       use SSH or Wi-Fi credentials, and any keys you add would be
-       baked into the on-device root filesystem.
-    5. Click **Write** and wait. Imager will verify after writing;
-       let it finish.
+=== ":fontawesome-brands-windows: Windows"
 
-=== "Linux / macOS dd"
+    **Recommended: [Raspberry Pi Imager](https://www.raspberrypi.com/software/)**
+    (official, open source, easiest option on any platform)
+
+    1. Download and install Raspberry Pi Imager from
+       [raspberrypi.com/software](https://www.raspberrypi.com/software/).
+    2. Launch Imager. Under **Raspberry Pi Device** choose
+       *No filtering* (or pick *Raspberry Pi Zero 2 W*).
+    3. Under **Operating System** click
+       **&ldquo;Use custom&rdquo;** and select the verified `.img.xz` file.
+       Imager decompresses it for you — you do not need 7-Zip or
+       any other tool.
+    4. Under **Storage** pick your microSD card. Double-check the
+       drive letter — Imager will erase it entirely.
+    5. Click **Next**. When prompted about OS customisation, choose
+       **&ldquo;No&rdquo;** — PiWalletSV is a sealed appliance and does not
+       use SSH, Wi-Fi credentials, or any custom hostname.
+    6. Click **Yes** to confirm the write, then wait. Imager
+       verifies the written data automatically; let it finish before
+       ejecting the card.
+
+    **Alternative: [balenaEtcher](https://etcher.balena.io/)**
+    (also open source; slightly simpler UI, no device-filter step)
+
+    1. Download and install balenaEtcher.
+    2. Click **Flash from file** and select the verified `.img.xz`.
+    3. Click **Select target** and pick your SD card.
+    4. Click **Flash!** and wait for the verification pass to complete.
+
+=== ":fontawesome-brands-apple: macOS (GUI)"
+
+    **Recommended: [Raspberry Pi Imager](https://www.raspberrypi.com/software/)**
+
+    Install via the download page *or* with Homebrew:
 
     ```bash
-    # Decompress.
-    unxz piwalletsv-<VERSION>.img.xz
-
-    # Identify the SD card device. On Linux this is usually
-    # /dev/sdX (NOT a partition); on macOS /dev/rdiskN. Triple-check
-    # that you're targeting the SD card and not your system disk.
-    lsblk          # Linux
-    diskutil list  # macOS
-
-    # Write the image. Replace /dev/sdX with the actual device.
-    sudo dd if=piwalletsv-<VERSION>.img of=/dev/sdX bs=4M status=progress conv=fsync
-    sync
+    brew install --cask raspberry-pi-imager
     ```
 
-=== "Cross-platform with balenaEtcher"
+    Then follow the same steps as the Windows tab above. Imager on
+    macOS requests administrator permission to write to the SD card
+    via a standard system prompt — grant it.
 
-    1. Install [balenaEtcher](https://etcher.balena.io/).
-    2. Click **Flash from file** and pick the verified `.img.xz`.
-       Etcher decompresses transparently.
-    3. Pick your SD card under **Select target**.
-    4. Click **Flash**.
+    **Alternative: [balenaEtcher](https://etcher.balena.io/)**
+
+    ```bash
+    brew install --cask balenaetcher
+    ```
+
+    1. Click **Flash from file** → select the `.img.xz`.
+    2. Click **Select target** → pick the SD card disk (e.g. `disk4`,
+       not a partition like `disk4s1`).
+    3. Click **Flash!**
+
+=== ":material-bash: macOS / Linux (CLI)"
+
+    ```bash
+    # 1. Decompress the image (produces a .img file).
+    unxz piwalletsv-<VERSION>.img.xz
+
+    # 2. Identify the SD card device.
+    #    macOS: look for a "disk" entry whose size matches the card.
+    diskutil list
+
+    #    Linux: look for an entry whose size matches the card.
+    lsblk
+
+    # 3. On macOS, unmount the card's partitions before writing
+    #    (replace diskN with the correct disk number, e.g. disk4).
+    diskutil unmountDisk /dev/diskN          # macOS only
+
+    # 4. Write the image.
+    #    macOS: use /dev/rdiskN (raw device) for much faster writes.
+    sudo dd if=piwalletsv-<VERSION>.img of=/dev/rdiskN bs=4m
+    #    Linux: use /dev/sdX (replace with your actual device).
+    sudo dd if=piwalletsv-<VERSION>.img of=/dev/sdX bs=4M status=progress conv=fsync
+
+    # 5. Flush OS write buffers.
+    sync
+
+    # 6. macOS: eject cleanly.
+    diskutil eject /dev/diskN
+    ```
+
+    !!! danger "Triple-check the device path"
+        `dd` has no undo. Writing to the wrong device will silently
+        overwrite your system disk or another drive. Verify
+        `diskutil list` / `lsblk` output carefully before running the
+        write command.
 
 ## Step 3 &mdash; Assemble the hardware
 
