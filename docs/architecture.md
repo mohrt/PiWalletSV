@@ -26,14 +26,16 @@ flowchart TB
 
   subgraph online["Online companion (PWA)"]
     direction TB
-    backend[("WhatsOnChain<br/>or alternative<br/>block explorer")]
+    woc[("WhatsOnChain<br/>UTXOs · proofs · fees<br/>broadcast")]
+    bitails[("Bitails<br/>tx history")]
     scan["UTXO scan<br/>(gap-limit 20)"]
     select["greedy coin selection"]
     proof["proof fetcher<br/>(TSC + per-block header)"]
     build["build unsigned_proposal<br/>(+ headerAnchors map)"]
     bcast["broadcast (Atomic BEEF)"]
-    backend --> scan --> select --> proof --> build
-    bcast --> backend
+    woc --> scan --> select --> proof --> build
+    bcast --> woc
+    bitails --> history["tx history tab"]
   end
 
   build -- "PW1 multipart QR<br/>(animated)" --> verify
@@ -110,16 +112,21 @@ A real send looks like this:
 3. **Send.**
     - User taps "Send" on the wallet detail page, enters a
       recipient address and amount.
-    - Companion runs a gap-limit UTXO scan to refresh balances.
-      Confirmation status comes straight from the block-explorer's
-      response; PiWalletSV trusts the explorer for "this UTXO is
-      in block N at merkle root R" rather than independently
-      validating a header chain (see
+    - Companion runs a gap-limit UTXO scan to refresh balances,
+      using WhatsOnChain's bulk unspent endpoints (up to 20
+      addresses per POST). Confirmation status comes straight from
+      the WoC response; PiWalletSV trusts the explorer for "this
+      UTXO is in block N at merkle root R" rather than
+      independently validating a header chain (see
       [SPV requirements](protocol/spv.md) §1).
+    - Live fee rates are fetched from WoC's
+      `GET /feerecommendation` and presented as Economy / Standard
+      / Priority tiers (100 sat/kB BSV recommended default; used
+      as fallback when the endpoint is unreachable).
     - Greedy coin selection picks from the confirmed UTXOs and
       computes the fee under a P2PKH byte model.
     - For each selected UTXO, the proof fetcher calls
-      `/tx/<txid>/proof/tsc` on the backend, translates the TSC
+      `/tx/<txid>/proof/tsc` on WhatsOnChain, translates the TSC
       proof into a `MerklePath` (`@bsv/sdk` format), pulls the
       block's header (and merkle root) by hash, self-checks that
       the path computes to the declared root, and assembles a
@@ -160,10 +167,16 @@ A real send looks like this:
       splits the Atomic BEEF wrapper to recover the subject TXID
       + raw tx, displays the txid + amount, and offers a
       "Broadcast" button.
-    - On click, the companion `POST`s the raw hex to the chosen
-      block-explorer's broadcast endpoint, surfaces the returned
-      txid, and warns if it differs from the one the Atomic BEEF
-      wrapper declared (a hint at tx malleability).
+    - On click, the companion `POST`s the raw hex to
+      WhatsOnChain's broadcast endpoint (`POST /tx/raw`), surfaces
+      the returned txid, and warns if it differs from the one the
+      Atomic BEEF wrapper declared (a hint at tx malleability).
+    - Transaction history (the History tab on the wallet detail
+      page) is fetched separately from
+      [Bitails](https://bitails.io) via `POST /address/history/multi`,
+      which returns per-tx satoshi deltas inline without requiring
+      additional tx lookups. This does not consume WoC quota and
+      runs independently of the send/receive flow.
 
 The user never sees a master key, never enters a password into a
 networked machine, and never authorises a payment without seeing the
@@ -215,14 +228,17 @@ device is the recovery channel.
 │       │   ├── envelope.ts       # CBOR + gzip codec (mirrors Python, v2)
 │       │   ├── pw1.ts            # PW1 framing
 │       │   ├── derive.ts         # BIP32 + P2PKH (scure + noble)
-│       │   ├── woc.ts            # block-explorer client (injectable fetch)
-│       │   ├── utxo.ts           # gap-limit scanner
+│       │   ├── woc.ts            # WhatsOnChain client — UTXOs, proofs, fees, broadcast
+│       │   ├── bitails.ts        # Bitails client — tx history with inline sat amounts
+│       │   ├── utxo.ts           # gap-limit scanner (WoC bulk unspent)
+│       │   ├── history.ts        # tx history fetcher (Bitails bulk history)
+│       │   ├── fee.ts            # fee rate recommendation (WoC /feerecommendation)
 │       │   ├── coin-select.ts    # greedy P2PKH coin selection + dust
 │       │   ├── proof-fetcher.ts  # TSC → MerklePath + per-block header lookup + BEEF
 │       │   ├── proposal.ts       # build_unsigned_proposal (+ headerAnchors map)
-│       │   ├── wallets.ts        # IndexedDB store
+│       │   ├── wallets.ts        # IndexedDB store (schema v2)
 │       │   └── terms.ts          # disclaimer acceptance state
-│       └── app/                  # UI pages: scan / wallets / detail / loop
+│       └── app/                  # UI pages: wallets / detail / scan / settings
 │
 ├── tests/                        # Python tests + canonical fixtures
 │   └── fixtures/

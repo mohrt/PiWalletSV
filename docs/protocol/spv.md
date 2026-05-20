@@ -39,8 +39,14 @@ and full BRC-67 strong SPV. The Pi:
   takes those entries on faith.
 
 The companion sources each entry by fetching the block's header
-from a trusted block-explorer source (WhatsOnChain by default). A
-malicious companion or a compromised explorer can therefore at most
+from [WhatsOnChain](https://whatsonchain.com/) (`GET /block/{hash}/header`
+and `GET /tx/{txid}/proof/tsc`). WhatsOnChain is also used for
+UTXO scanning, fee rate recommendations, and broadcasting.
+Transaction history is fetched separately from
+[Bitails](https://bitails.io) (`POST /address/history/multi`),
+which is not involved in SPV verification.
+
+A malicious companion or a compromised explorer can therefore at most
 cause the Pi to sign a transaction whose inputs do not exist on
 chain. The broadcast then fails: there is nothing to spend. The
 user's keys, funds, and change re-derivation are unaffected. There
