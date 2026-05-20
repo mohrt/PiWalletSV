@@ -135,10 +135,11 @@ extra:
 nav:
   - Home: index.md
   - Setup:
-      - Download image: download.md
-      - Flash and first run: build-image.md
-      - Getting started (from source): getting-started.md
-      - Purchase a kit: purchase.md
+      - Build from image:
+          - Download image: download.md
+          - Flash and first run: build-image.md
+      - Build from scratch: getting-started.md
+      - Purchase kit: purchase.md
   - User guide:
       - User manual: user-manual.md
       - Recover without device: recover-without-device.md
