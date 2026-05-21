@@ -323,6 +323,11 @@ button:hover:not(:disabled) {
   align-items: flex-start;
 }
 
+.scan-card-desc {
+  width: 100%;
+  margin: 0 0 0.5rem;
+}
+
 .scan-card video {
   background: #000;
   border-radius: 8px;
