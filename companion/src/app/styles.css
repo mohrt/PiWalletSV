@@ -1214,7 +1214,12 @@ button.danger-outline:hover {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 0.85rem;
   color: var(--accent);
-  min-width: 7rem;
+  flex: 1;
+  text-align: right;
+}
+
+.fee-tier-custom {
+  flex-wrap: wrap;
 }
 
 .fee-tier-desc {
