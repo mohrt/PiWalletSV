@@ -11,6 +11,7 @@
  */
 import { Transaction } from "@bsv/sdk";
 import jsQR from "jsqr";
+import { type Pw1ScanHandle, startPw1Scan } from "../lib/camera-scan-pw1.js";
 
 import {
   type Envelope,
@@ -65,9 +66,7 @@ export function mountScannerPage(
       <!-- ── Add wallet tab ─────────────────────────────────────────── -->
       <div id="scanTab-wallet"${initialTab !== "wallet" ? ' hidden' : ''}>
         <section class="card scan-card">
-          <p class="muted-line" style="margin-bottom:0.5rem">
-            Create a wallet on the Pi, then scan the QR code.
-          </p>
+          <p class="muted-line scan-card-desc">Scan xpub from the Pi or other companion wallet.</p>
           <video id="video" playsinline muted autoplay></video>
           <div class="scan-status">
             <p id="status">camera idle — click Start to grant access</p>
@@ -116,14 +115,21 @@ export function mountScannerPage(
 
       <!-- ── Submit signed TX tab ───────────────────────────────────── -->
       <div id="scanTab-tx"${initialTab !== "tx" ? ' hidden' : ''}>
+        <section class="card scan-card">
+          <p class="muted-line scan-card-desc">Scan the signed QR from the Pi.</p>
+          <video id="txVideo" playsinline muted autoplay></video>
+          <div class="scan-status">
+            <p id="txStatus">camera idle — click Start to grant access</p>
+            <p id="txProgress" class="muted-line"></p>
+            <div class="actions">
+              <button id="txStart" class="primary" type="button">Start camera</button>
+              <button id="txStop" type="button">Stop</button>
+            </div>
+          </div>
+        </section>
+
         <section class="card paste-hex-card">
-          <h2>Paste signed transaction hex</h2>
-          <p class="muted-line">
-            After signing on the Pi via SSH, paste the hex output from
-            <code>piwallet sign --hex …</code> here to broadcast it.
-            Whitespace, newlines, and a leading <code>signed_tx:</code>
-            prefix are all accepted.
-          </p>
+          <h2>Or paste signed TX hex</h2>
           <textarea id="pasteHex" class="hex-blob" rows="6"
             placeholder="paste signed_tx hex here…"
             spellcheck="false" autocorrect="off"></textarea>
@@ -238,8 +244,9 @@ export function mountScannerPage(
     root.querySelectorAll<HTMLButtonElement>("[data-scan-tab]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.scanTab === tab);
     });
-    // Release camera when leaving the wallet tab
+    // Release cameras when switching tabs
     if (tab !== "wallet" && scanning) releaseCamera();
+    if (tab !== "tx") stopTxCamera();
   }
 
   root.querySelectorAll<HTMLButtonElement>("[data-scan-tab]").forEach((btn) => {
@@ -278,6 +285,7 @@ export function mountScannerPage(
   let signedTxId = "";
   let woc: WocClient | null = null;
   let broadcasting = false;
+  let txCameraHandle: Pw1ScanHandle | null = null;
 
   $stop.disabled = true;
   $reset.disabled = true;
@@ -832,6 +840,57 @@ export function mountScannerPage(
     $stop.disabled = true;
   }
 
+  // ── TX tab camera ──────────────────────────────────────────────────────────
+
+  const $txVideo = root.querySelector<HTMLVideoElement>("#txVideo")!;
+  const $txStatus = root.querySelector<HTMLElement>("#txStatus")!;
+  const $txProgress = root.querySelector<HTMLElement>("#txProgress")!;
+  const $txStart = root.querySelector<HTMLButtonElement>("#txStart")!;
+  const $txStop = root.querySelector<HTMLButtonElement>("#txStop")!;
+
+  function stopTxCamera(): void {
+    txCameraHandle?.stop();
+    txCameraHandle = null;
+    $txStart.disabled = false;
+    $txStop.disabled = true;
+  }
+
+  $txStop.disabled = true;
+
+  $txStart.addEventListener("click", () => void (async () => {
+    stopTxCamera();
+    $txStatus.textContent = "Starting camera…";
+    $txProgress.textContent = "";
+    $txStart.disabled = true;
+    $txStop.disabled = false;
+    txCameraHandle = await startPw1Scan(
+      $txVideo,
+      (received, total) => {
+        $txProgress.textContent = total
+          ? `Frame ${received} / ${total}`
+          : received > 0 ? `${received} frame${received > 1 ? "s" : ""} received…` : "";
+      },
+      async (bytes) => {
+        stopTxCamera();
+        $txStatus.textContent = "Decoded — loading…";
+        $txProgress.textContent = "";
+        void showResult(bytes);
+      },
+      (err) => {
+        $txStatus.textContent = err;
+        $txStart.disabled = false;
+        $txStop.disabled = true;
+      },
+    );
+    if (txCameraHandle) $txStatus.textContent = "Scanning for signed TX…";
+  })());
+
+  $txStop.addEventListener("click", () => {
+    stopTxCamera();
+    $txStatus.textContent = "camera stopped";
+    $txProgress.textContent = "";
+  });
+
   function resetAll(): void {
     asm = new MultipartAssembler();
     result = null;
@@ -1074,6 +1133,7 @@ export function mountScannerPage(
 
   return () => {
     releaseCamera();
+    stopTxCamera();
     if (lastDownloadUrl) {
       URL.revokeObjectURL(lastDownloadUrl);
       lastDownloadUrl = null;
