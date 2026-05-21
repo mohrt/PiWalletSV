@@ -155,7 +155,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
         <div class="wallet-card-actions actions">
           <a class="primary-link" href="#/wallets/${w.id}/send">Send</a>
           <a class="primary-link" href="#/wallets/${w.id}/receive">Receive</a>
-          <a class="primary-link" href="#/wallets/${w.id}">More…</a>
+          <a class="wallet-more-link" href="#/wallets/${w.id}">More…</a>
         </div>
       `;
       $list.appendChild(li);

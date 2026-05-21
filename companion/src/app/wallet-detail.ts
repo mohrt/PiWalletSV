@@ -289,6 +289,9 @@ export function mountWalletDetailPage(
 
         <!-- Send tab -->
         <section id="tab-send" class="card tab-panel${activeTab === "send" ? " active" : ""}" role="tabpanel">
+          <p class="send-balance-line muted-line">
+            Balance: <span id="sendBalanceHero">—</span>
+          </p>
           <div id="sendStep-form">
             <h2>Send</h2>
             <label class="field">
@@ -880,6 +883,8 @@ export function mountWalletDetailPage(
     if (!$hero || !$bsv || !$meta || !$pending || !$details || !$count || !$list)
       return;
 
+    const $sendBal = root.querySelector<HTMLElement>("#sendBalanceHero");
+
     const scan = wallet.lastScan;
     if (!scan) {
       $hero.textContent = "—";
@@ -887,9 +892,11 @@ export function mountWalletDetailPage(
       $meta.textContent = "Not scanned yet — click Refresh to query WhatsOnChain.";
       $pending.hidden = true;
       $details.hidden = true;
+      if ($sendBal) $sendBal.textContent = "—";
       return;
     }
 
+    if ($sendBal) $sendBal.textContent = formatBalance(scan.totalSats);
     $hero.textContent = formatBalance(scan.totalSats);
     $bsv.textContent =
       displayUnit === "sats" ? formatBsv(scan.totalSats) :
