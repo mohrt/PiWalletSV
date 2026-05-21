@@ -5,25 +5,38 @@
  * are global companion settings, not per-wallet data).
  *
  * Settings:
- *   - Default fee tier (economy / standard / priority)
+ *   - Default fee tier (economy / standard / priority / custom sat/kB)
  *   - Fiat currency for balance toggle (USD / EUR / AUD / GBP)
  *   - Default network for new wallet pairings (main / test)
  *   - Clear all data (removes all IndexedDB wallets + localStorage)
  */
 import { renderHeader } from "./nav.js";
 import { _clearAllWallets } from "../lib/wallets.js";
+import { WocClient, effectiveWocBase } from "../lib/woc.js";
+import {
+  DEFAULT_FEE_RATE_SATSKB,
+  type FeeRecommendation,
+  fetchFeeRecommendation,
+  formatFeeRate,
+} from "../lib/fee.js";
 
 // localStorage keys
-const KEY_DEFAULT_FEE_TIER = "piwallet.settings.defaultFeeTier";
-const KEY_FIAT_CURRENCY = "piwallet.settings.fiatCurrency";
-const KEY_DEFAULT_NETWORK = "piwallet.settings.defaultNetwork";
+const KEY_DEFAULT_FEE_TIER   = "piwallet.settings.defaultFeeTier";
+const KEY_CUSTOM_FEE_RATE    = "piwallet.settings.customFeeRate";
+const KEY_FIAT_CURRENCY      = "piwallet.settings.fiatCurrency";
+const KEY_DEFAULT_NETWORK    = "piwallet.settings.defaultNetwork";
 
-export type FeeTier = "economy" | "standard" | "priority";
+export type FeeTier = "economy" | "standard" | "priority" | "custom";
 export type FiatCurrency = "USD" | "EUR" | "AUD" | "GBP";
 export type DefaultNetwork = "main" | "test";
 
 export function getDefaultFeeTier(): FeeTier {
   return (localStorage.getItem(KEY_DEFAULT_FEE_TIER) as FeeTier) ?? "standard";
+}
+
+export function getDefaultCustomFeeRate(): number {
+  const stored = parseInt(localStorage.getItem(KEY_CUSTOM_FEE_RATE) ?? "", 10);
+  return Number.isInteger(stored) && stored > 0 ? stored : DEFAULT_FEE_RATE_SATSKB;
 }
 
 export function getFiatCurrency(): FiatCurrency {
@@ -35,9 +48,13 @@ export function getDefaultNetwork(): DefaultNetwork {
 }
 
 export function mountSettingsPage(root: HTMLElement): () => void {
-  const feeTier = getDefaultFeeTier();
-  const fiatCurrency = getFiatCurrency();
+  const feeTier        = getDefaultFeeTier();
+  const customFeeRate  = getDefaultCustomFeeRate();
+  const fiatCurrency   = getFiatCurrency();
   const defaultNetwork = getDefaultNetwork();
+
+  const sel = (v: string, cur: string) => v === cur ? " selected" : "";
+  const chk = (v: string, cur: string) => v === cur ? " checked" : "";
 
   root.innerHTML = `
     <main class="page">
@@ -48,20 +65,44 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       <section class="card">
         <h2>Send defaults</h2>
 
-        <label class="field">
-          <span>Default fee tier</span>
-          <select id="defaultFeeTier">
-            <option value="economy"${feeTier === "economy" ? " selected" : ""}>Economy (cheapest)</option>
-            <option value="standard"${feeTier === "standard" ? " selected" : ""}>Standard (recommended)</option>
-            <option value="priority"${feeTier === "priority" ? " selected" : ""}>Priority (fastest)</option>
-          </select>
-        </label>
+        <div class="field">
+          <span class="field-label">Default fee tier</span>
+          <p class="muted-line" id="feeRateLoading">Loading current rates…</p>
+          <div class="fee-tiers" id="settingsFeeTiers">
+            <label class="fee-tier${feeTier === "economy" ? " selected" : ""}">
+              <input type="radio" name="settingsFeeTier" value="economy"${chk("economy", feeTier)} />
+              <span class="fee-tier-label">Economy</span>
+              <span class="fee-tier-rate" id="sEconomy">—</span>
+              <span class="fee-tier-desc muted-line">slower, cheapest</span>
+            </label>
+            <label class="fee-tier${feeTier === "standard" ? " selected" : ""}">
+              <input type="radio" name="settingsFeeTier" value="standard"${chk("standard", feeTier)} />
+              <span class="fee-tier-label">Standard</span>
+              <span class="fee-tier-rate" id="sStandard">—</span>
+              <span class="fee-tier-desc muted-line">recommended</span>
+            </label>
+            <label class="fee-tier${feeTier === "priority" ? " selected" : ""}">
+              <input type="radio" name="settingsFeeTier" value="priority"${chk("priority", feeTier)} />
+              <span class="fee-tier-label">Priority</span>
+              <span class="fee-tier-rate" id="sPriority">—</span>
+              <span class="fee-tier-desc muted-line">fastest confirmation</span>
+            </label>
+            <label class="fee-tier fee-tier-custom${feeTier === "custom" ? " selected" : ""}">
+              <input type="radio" name="settingsFeeTier" value="custom"${chk("custom", feeTier)} />
+              <span class="fee-tier-label">Custom</span>
+              <input id="sCustomRate" type="number" min="1" step="1"
+                value="${customFeeRate}"
+                class="fee-custom-input" />
+              <span class="fee-tier-desc muted-line">sat/kB</span>
+            </label>
+          </div>
+        </div>
 
-        <label class="field">
+        <label class="field" style="margin-top:1rem">
           <span>Default network for new pairings</span>
           <select id="defaultNetwork">
-            <option value="main"${defaultNetwork === "main" ? " selected" : ""}>Mainnet (BSV)</option>
-            <option value="test"${defaultNetwork === "test" ? " selected" : ""}>Testnet (TBSV)</option>
+            <option value="main"${sel("main", defaultNetwork)}>Mainnet (BSV)</option>
+            <option value="test"${sel("test", defaultNetwork)}>Testnet (TBSV)</option>
           </select>
         </label>
       </section>
@@ -72,10 +113,10 @@ export function mountSettingsPage(root: HTMLElement): () => void {
         <label class="field">
           <span>Fiat currency (for balance toggle)</span>
           <select id="fiatCurrency">
-            <option value="USD"${fiatCurrency === "USD" ? " selected" : ""}>USD — US Dollar</option>
-            <option value="EUR"${fiatCurrency === "EUR" ? " selected" : ""}>EUR — Euro</option>
-            <option value="GBP"${fiatCurrency === "GBP" ? " selected" : ""}>GBP — British Pound</option>
-            <option value="AUD"${fiatCurrency === "AUD" ? " selected" : ""}>AUD — Australian Dollar</option>
+            <option value="USD"${sel("USD", fiatCurrency)}>USD — US Dollar</option>
+            <option value="EUR"${sel("EUR", fiatCurrency)}>EUR — Euro</option>
+            <option value="GBP"${sel("GBP", fiatCurrency)}>GBP — British Pound</option>
+            <option value="AUD"${sel("AUD", fiatCurrency)}>AUD — Australian Dollar</option>
           </select>
         </label>
       </section>
@@ -105,32 +146,73 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     </main>
   `;
 
-  const $feeTier = root.querySelector<HTMLSelectElement>("#defaultFeeTier")!;
-  const $fiat = root.querySelector<HTMLSelectElement>("#fiatCurrency")!;
-  const $network = root.querySelector<HTMLSelectElement>("#defaultNetwork")!;
-  const $clearBtn = root.querySelector<HTMLButtonElement>("#clearBtn")!;
-  const $clearStrip = root.querySelector<HTMLElement>("#clearStrip")!;
-  const $clearActions = root.querySelector<HTMLElement>("#clearActions")!;
-  const $clearConfirm = root.querySelector<HTMLButtonElement>("#clearConfirm")!;
-  const $clearCancel = root.querySelector<HTMLButtonElement>("#clearCancel")!;
-  const $clearStatus = root.querySelector<HTMLElement>("#clearStatus")!;
-  const $savedBanner = root.querySelector<HTMLElement>("#settingsSavedBanner")!;
+  // ---- element refs ----
+  const $feeRateLoading  = root.querySelector<HTMLElement>("#feeRateLoading")!;
+  const $fiat            = root.querySelector<HTMLSelectElement>("#fiatCurrency")!;
+  const $network         = root.querySelector<HTMLSelectElement>("#defaultNetwork")!;
+  const $clearBtn        = root.querySelector<HTMLButtonElement>("#clearBtn")!;
+  const $clearStrip      = root.querySelector<HTMLElement>("#clearStrip")!;
+  const $clearActions    = root.querySelector<HTMLElement>("#clearActions")!;
+  const $clearConfirm    = root.querySelector<HTMLButtonElement>("#clearConfirm")!;
+  const $clearCancel     = root.querySelector<HTMLButtonElement>("#clearCancel")!;
+  const $clearStatus     = root.querySelector<HTMLElement>("#clearStatus")!;
+  const $savedBanner     = root.querySelector<HTMLElement>("#settingsSavedBanner")!;
+  const $customRateInput = root.querySelector<HTMLInputElement>("#sCustomRate")!;
 
+  // ---- saved flash ----
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
   function flashSaved(): void {
     $savedBanner.hidden = false;
     if (savedTimer) clearTimeout(savedTimer);
-    savedTimer = setTimeout(() => {
-      $savedBanner.hidden = true;
-      savedTimer = null;
-    }, 2000);
+    savedTimer = setTimeout(() => { $savedBanner.hidden = true; savedTimer = null; }, 2000);
   }
 
-  $feeTier.addEventListener("change", () => {
-    localStorage.setItem(KEY_DEFAULT_FEE_TIER, $feeTier.value);
-    flashSaved();
+  // ---- fee tier radios ----
+  function highlightSelectedTier(): void {
+    root.querySelectorAll<HTMLElement>(".fee-tier").forEach((el) => {
+      const radio = el.querySelector<HTMLInputElement>("input[type=radio]");
+      el.classList.toggle("selected", !!radio?.checked);
+    });
+  }
+
+  root.querySelectorAll<HTMLInputElement>('input[name="settingsFeeTier"]').forEach((r) => {
+    r.addEventListener("change", () => {
+      highlightSelectedTier();
+      localStorage.setItem(KEY_DEFAULT_FEE_TIER, r.value);
+      flashSaved();
+    });
   });
 
+  $customRateInput.addEventListener("input", () => {
+    const rate = parseInt($customRateInput.value, 10);
+    if (Number.isInteger(rate) && rate > 0) {
+      localStorage.setItem(KEY_CUSTOM_FEE_RATE, String(rate));
+      flashSaved();
+    }
+  });
+
+  // ---- load live fee rates from WoC mainnet ----
+  void (async () => {
+    let rec: FeeRecommendation | null = null;
+    try {
+      const woc = new WocClient({ baseUrl: effectiveWocBase("main") });
+      rec = await fetchFeeRecommendation(woc);
+    } catch { /* use defaults */ }
+
+    const economy  = rec?.economy  ?? DEFAULT_FEE_RATE_SATSKB;
+    const standard = rec?.standard ?? DEFAULT_FEE_RATE_SATSKB;
+    const priority = rec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
+
+    const $eco = root.querySelector<HTMLElement>("#sEconomy");
+    const $std = root.querySelector<HTMLElement>("#sStandard");
+    const $pri = root.querySelector<HTMLElement>("#sPriority");
+    if ($eco) $eco.textContent = formatFeeRate(economy);
+    if ($std) $std.textContent = formatFeeRate(standard);
+    if ($pri) $pri.textContent = formatFeeRate(priority);
+    $feeRateLoading.hidden = true;
+  })();
+
+  // ---- other settings ----
   $fiat.addEventListener("change", () => {
     localStorage.setItem(KEY_FIAT_CURRENCY, $fiat.value);
     flashSaved();
@@ -141,6 +223,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     flashSaved();
   });
 
+  // ---- clear all data ----
   $clearBtn.addEventListener("click", () => {
     $clearActions.hidden = true;
     $clearStrip.hidden = false;
@@ -156,7 +239,6 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     $clearConfirm.textContent = "Clearing…";
     try {
       await _clearAllWallets();
-      // Clear all piwallet.* localStorage keys
       const keysToRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
@@ -165,9 +247,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       for (const k of keysToRemove) localStorage.removeItem(k);
       $clearStatus.classList.remove("error");
       $clearStatus.textContent = "All data cleared. Redirecting to wallets…";
-      setTimeout(() => {
-        window.location.hash = "#/wallets";
-      }, 1500);
+      setTimeout(() => { window.location.hash = "#/wallets"; }, 1500);
     } catch (e) {
       $clearStatus.classList.add("error");
       $clearStatus.textContent = `clear failed: ${(e as Error).message}`;

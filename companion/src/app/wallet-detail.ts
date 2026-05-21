@@ -59,6 +59,10 @@ import {
 } from "../lib/fee.js";
 import type { NetworkT } from "../lib/envelope.js";
 import {
+  getDefaultFeeTier,
+  getDefaultCustomFeeRate,
+} from "./settings-page.js";
+import {
   type CameraScanHandle,
   startCameraScan,
 } from "../lib/camera-scan.js";
@@ -313,33 +317,41 @@ export function mountWalletDetailPage(
             <h2>Select fee</h2>
             <p class="muted-line" id="feeLoading">Loading fee rates…</p>
             <div id="feeTiers" class="fee-tiers" hidden>
-              <label class="fee-tier">
-                <input type="radio" name="feeTier" value="economy" />
+              ${((): string => {
+                const defTier = getDefaultFeeTier();
+                const defCustom = getDefaultCustomFeeRate();
+                const chk = (v: string) => v === defTier ? " checked" : "";
+                const sel = (v: string) => v === defTier ? " selected" : "";
+                return `
+              <label class="fee-tier${sel("economy")}">
+                <input type="radio" name="feeTier" value="economy"${chk("economy")} />
                 <span class="fee-tier-label">Economy</span>
                 <span class="fee-tier-rate" id="feeEconomy">—</span>
                 <span class="fee-tier-desc muted-line">slower, cheapest</span>
               </label>
-              <label class="fee-tier selected">
-                <input type="radio" name="feeTier" value="standard" checked />
+              <label class="fee-tier${sel("standard")}">
+                <input type="radio" name="feeTier" value="standard"${chk("standard")} />
                 <span class="fee-tier-label">Standard</span>
                 <span class="fee-tier-rate" id="feeStandard">—</span>
                 <span class="fee-tier-desc muted-line">recommended</span>
               </label>
-              <label class="fee-tier">
-                <input type="radio" name="feeTier" value="priority" />
+              <label class="fee-tier${sel("priority")}">
+                <input type="radio" name="feeTier" value="priority"${chk("priority")} />
                 <span class="fee-tier-label">Priority</span>
                 <span class="fee-tier-rate" id="feePriority">—</span>
                 <span class="fee-tier-desc muted-line">fastest confirmation</span>
               </label>
-              <label class="fee-tier fee-tier-custom">
-                <input type="radio" name="feeTier" value="custom" />
+              <label class="fee-tier fee-tier-custom${sel("custom")}">
+                <input type="radio" name="feeTier" value="custom"${chk("custom")} />
                 <span class="fee-tier-label">Custom</span>
                 <input id="feeCustom" type="number" min="1" step="1"
+                  value="${defCustom}"
                   placeholder="${DEFAULT_FEE_RATE_SATSKB}"
                   class="fee-custom-input" />
                 <span class="fee-tier-desc muted-line">sat/kB</span>
                 <span class="fee-tier-rate" id="feeCustomEst" style="margin-left:auto">—</span>
-              </label>
+              </label>`;
+              })()}
             </div>
             <div class="actions">
               <button id="feeBack" type="button">← Back</button>
@@ -1181,7 +1193,7 @@ export function mountWalletDetailPage(
       // custom
       const $custom = root.querySelector<HTMLInputElement>("#feeCustom");
       rate = parseInt($custom?.value ?? "", 10);
-      if (!Number.isInteger(rate) || rate <= 0) rate = DEFAULT_FEE_RATE_SATSKB;
+      if (!Number.isInteger(rate) || rate <= 0) rate = getDefaultCustomFeeRate();
     }
     selectedFeeRate = rate;
 
