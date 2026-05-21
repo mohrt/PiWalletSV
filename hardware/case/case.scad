@@ -454,25 +454,32 @@ function camera_post_positions() = [
 // that the front lid's skirt drops into.
 
 module back_tub() {
+ // CSG structure:
+ // outer difference — subtracts pilot holes and other wall
+ // penetrations from the whole solid
+ // union
+ // inner difference — carves the two cavity volumes out of
+ // the outer brick only
+ // outer_brick
+ // main_cavity
+ // stepped_cavity (lid-registration lip)
+ // camera posts — added after cavity so they survive inside
+ // pi standoffs — same
+ //
+ // The cavity cuts MUST be applied to outer_brick before adding the
+ // posts/standoffs; if the posts/standoffs were in the same union as
+ // outer_brick and then the cavity was subtracted from the whole,
+ // the cavity would eat the posts (they are inside the cavity footprint).
+
  difference() {
  union() {
- // Outer brick with rounded vertical corners. No front
- // face — the lid provides it.
+ // ---- Shell: outer brick with cavity carved out ----
+ difference() {
+ // Outer brick with rounded vertical corners.
  outer_brick(case_x, case_y, tub_top);
 
- // Camera mount posts.
- for (p = camera_post_positions())
- translate([p.x, p.y, wall])
- cylinder(h=camera_post_height, d=camera_post_outer);
-
- // Pi standoff posts.
- for (p = pi_standoff_positions())
- translate([p.x, p.y, wall])
- cylinder(h=pi_standoff_height, d=pi_standoff_outer);
- }
-
- // Main cavity — full size from back wall up to the start of
- // the registration step.
+ // Main cavity — full size from back wall up to the
+ // start of the registration step.
  translate([
  cavity_origin_x,
  cavity_origin_y,
@@ -484,9 +491,9 @@ module back_tub() {
  tub_top - wall - lid_skirt_h
  ]);
 
- // Stepped cavity — wider rectangle from the start of the
- // step up to the seam, eating into the side walls' inner
- // half so a lip is formed for the lid skirt to drop into.
+ // Stepped cavity — wider rectangle from the step up
+ // to the seam, leaving a thin shoulder the lid skirt
+ // drops into.
  translate([
  cavity_origin_x - lid_skirt_step,
  cavity_origin_y - lid_skirt_step,
@@ -497,8 +504,21 @@ module back_tub() {
  cavity_y + 2*lid_skirt_step,
  lid_skirt_h + 1
  ]);
+ }
 
- // Pi standoff pilot holes (M2.5 self-tap, optional).
+ // ---- Camera standoffs — rise from the cavity floor ----
+ for (p = camera_post_positions())
+ translate([p.x, p.y, wall])
+ cylinder(h=camera_post_height, d=camera_post_outer);
+
+ // ---- Pi standoffs — rise from the cavity floor ----
+ for (p = pi_standoff_positions())
+ translate([p.x, p.y, wall])
+ cylinder(h=pi_standoff_height, d=pi_standoff_outer);
+ }
+
+ // ---- Pilot holes — pierce back wall AND posts/standoffs ----
+ // Pi standoffs: M2.5 self-tap pilot.
  for (p = pi_standoff_positions())
  translate([p.x, p.y, -1])
  cylinder(
@@ -506,9 +526,7 @@ module back_tub() {
  d=pi_standoff_pilot
  );
 
- // Camera mount pilot holes (M2 self-tap, drilled through
- // the post + back wall so screws can be inserted from
- // behind).
+ // Camera standoffs: M2 self-tap pilot.
  for (p = camera_post_positions())
  translate([p.x, p.y, -1])
  cylinder(
