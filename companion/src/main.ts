@@ -45,8 +45,11 @@ function render(): void {
   } else if (route === "#/settings") {
     mounted = mountSettingsPage(app);
   } else if (route.startsWith("#/wallets/")) {
-    const id = route.slice("#/wallets/".length);
-    mounted = mountWalletDetailPage(app, id);
+    const rest = route.slice("#/wallets/".length);
+    const slash = rest.indexOf("/");
+    const id = slash >= 0 ? rest.slice(0, slash) : rest;
+    const initialTab = slash >= 0 ? rest.slice(slash + 1) : undefined;
+    mounted = mountWalletDetailPage(app, id, initialTab);
   } else if (import.meta.env.DEV && route === "#/loop") {
     // Codec round-trip page is dev-only; production builds tree-shake
     // the import below entirely. Operational users have no reason to

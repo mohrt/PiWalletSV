@@ -129,6 +129,21 @@ a:hover {
   opacity: 0.6;
 }
 
+/* Home page logo hero */
+
+.home-hero {
+  display: flex;
+  justify-content: center;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.home-logo {
+  width: 120px;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
 /* Empty state for the wallets list. Centered, with a clear "go scan an
    xpub" CTA so a brand-new visitor knows what to do without bouncing
    to the docs site first. */
@@ -1039,6 +1054,27 @@ button.danger {
   font-weight: 600;
 }
 
+button.danger-outline {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+button.danger-outline:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.section-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0;
+}
+
+.warning-text {
+  color: var(--danger);
+}
+
 /* =========================================================================
    Send flow
    ========================================================================= */
@@ -1083,6 +1119,44 @@ button.danger {
 .send-max-btn {
   padding: 0.45rem 0.75rem;
   font-size: 0.85rem;
+}
+
+/* Address input with inline scan button */
+
+.address-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.address-input-row input {
+  flex: 1;
+}
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.55rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.addr-scan-video {
+  width: 100%;
+  max-width: 400px;
+  border-radius: var(--radius);
+  display: block;
+  margin: 0.75rem 0 0.25rem;
+  background: #000;
 }
 
 /* Fee tier picker */
