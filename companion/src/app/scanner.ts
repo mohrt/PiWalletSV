@@ -46,9 +46,13 @@ type ViewMode = "text" | "hex" | "base64url";
 export function mountScannerPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
-      ${renderHeader("Scan QR", "scan")}
+      ${renderHeader("Add wallet", "wallets")}
 
       <section class="card scan-card">
+        <p class="muted-line" style="margin-bottom:0.5rem">
+          Point your camera at the Pi's animated QR to pair a wallet.
+          You can also paste an xpub below to import without scanning.
+        </p>
         <video id="video" playsinline muted autoplay></video>
         <div class="scan-status">
           <p id="status">camera idle — click Start to grant access</p>

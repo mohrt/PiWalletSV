@@ -33,28 +33,24 @@ export function mountWalletsPage(root: HTMLElement): () => void {
     <main class="page">
       ${renderHeader("Wallets", "wallets")}
 
-      <section class="card">
+      <div class="wallets-toolbar">
         <p class="muted-line" id="walletStatus"></p>
+        <a class="primary-link" href="#/scan">+ Add wallet</a>
+      </div>
+
+      <section class="card">
         <div id="emptyState" class="empty-state" hidden>
-          <h2>No wallets paired yet</h2>
+          <h2>No wallets yet</h2>
           <p>
             On the Pi, navigate to a wallet and choose
-            <strong>Pair with companion</strong> — the bonnet animates
-            a multipart QR with your wallet's public xpub.
-          </p>
-          <p>
-            Then click <a class="primary-link" href="#/scan">Scan QR</a>
-            and point your camera at the Pi to complete the pairing.
+            <strong>Pair with companion</strong> — the bonnet shows an
+            animated QR with your wallet's public key.
           </p>
           <p class="muted-line">
-            Pairing only ever transmits public material. Your seed phrase
-            never leaves the Pi.
+            Your seed phrase never leaves the Pi.
             <a href="${DOCS_BASE_URL}/security/" target="_blank"
                rel="noopener noreferrer">Why is this safe?</a>
           </p>
-          <div class="actions">
-            <a class="primary-link" href="#/scan">Scan a wallet xpub</a>
-          </div>
         </div>
         <ul id="walletsList" class="wallets-list"></ul>
       </section>
