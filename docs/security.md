@@ -71,6 +71,41 @@ The complete disclosure / reporting policy lives in the project's
   cameras or screen-recorders see the disclaimer-revealed phrase
   during initial setup or recovery.
 
+## Address verification { #address-verification }
+
+The companion app is a browser-based watch-only wallet. That means it
+derives and displays your receive addresses using only your public key —
+no private key ever leaves the Pi. This is by design and safe, but it
+introduces one specific risk worth understanding:
+
+**A compromised browser, extension, or network could substitute a
+different address in the companion's UI without your knowledge.** If you
+share that address with a sender, the funds go to whoever controls the
+substituted address — not to your Pi wallet.
+
+This is not unique to PiWalletSV; it applies to every software wallet
+and web app that shows you a receive address. The conventional mitigation
+is a hardware wallet with a trusted display, which shows the address on a
+screen that the computer cannot influence.
+
+PiWalletSV provides the same protection: **the Pi's bonnet is that
+trusted display.** Before sharing a receive address, you can confirm it
+independently on the bonnet:
+
+1. On the Pi, navigate to the wallet and choose **Show deposit address**.
+2. The bonnet starts at **address #0**. Press **RIGHT** (or **A**) once
+   for each index step — e.g. press RIGHT 3 times to reach **address #3**.
+3. Confirm the address shown on the bonnet matches what the companion
+   app is showing you.
+
+If they match, you can be confident the companion has not been tampered
+with. If they don't match, do not share the address and investigate
+before proceeding.
+
+**This verification step is optional for low-value amounts or testnet
+use.** For mainnet amounts you care about, treat it the same way you
+would verify an address on a Ledger or Trezor — do it before sharing.
+
 ## Release key
 
 Every PiWalletSV image artifact published from the

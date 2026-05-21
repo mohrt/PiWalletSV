@@ -1485,31 +1485,10 @@ button.danger-outline:hover {
 
 /* On-device verify callout */
 
-.verify-callout {
-  margin-top: 0.75rem;
-  padding: 0.65rem 0.85rem;
-  border-radius: 8px;
-  background: rgba(212, 158, 63, 0.08);
-  border: 1px solid rgba(212, 158, 63, 0.3);
-  font-size: 0.85rem;
-}
-
-.verify-callout p {
-  margin: 0 0 0.5rem;
-  line-height: 1.45;
-}
-
-.verify-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  font-size: 0.85rem;
-  color: #58c47a;
-}
-
-.verify-checkbox input[type="checkbox"] {
-  accent-color: #58c47a;
+.verify-tip {
+  font-size: 0.82rem;
+  margin: 0.75rem 0 0;
+  line-height: 1.5;
 }
 
 /* =========================================================================

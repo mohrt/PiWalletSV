@@ -474,19 +474,7 @@ export function mountWalletDetailPage(
               <p class="muted-line" id="receiveStatus"></p>
             </div>
           </div>
-          <div class="verify-callout" id="verifyCallout">
-            <p>
-              <strong>Verify on your Pi before using this address.</strong>
-              On the bonnet, navigate to the wallet and use the address
-              verification screen to confirm the address matches.
-              <a href="${DOCS_BASE_URL}/user-manual/" target="_blank"
-                 rel="noopener noreferrer">Why?</a>
-            </p>
-            <label class="verify-checkbox">
-              <input type="checkbox" id="verifyCheck" />
-              Verified on device ✓
-            </label>
-          </div>
+          <p class="verify-tip muted-line" id="verifyTip"></p>
           <section class="receive-list-section">
             <h3>Recent receive addresses</h3>
             <p class="muted-line">
@@ -677,16 +665,6 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", () => void shiftIndex(-1));
     root.querySelector<HTMLButtonElement>("#nextIdx")
       ?.addEventListener("click", () => void shiftIndex(1));
-
-    // Verify checkbox — persist in localStorage keyed by wallet+address
-    root.querySelector<HTMLInputElement>("#verifyCheck")
-      ?.addEventListener("change", (e) => {
-        const addr = root.querySelector<HTMLElement>("#receiveAddress")?.textContent ?? "";
-        if (addr) {
-          const key = `piwallet.verified.${walletId}.${addr}`;
-          localStorage.setItem(key, (e.target as HTMLInputElement).checked ? "1" : "");
-        }
-      });
 
     // History tab
     root.querySelector<HTMLButtonElement>("#refreshHistory")
@@ -1635,7 +1613,7 @@ export function mountWalletDetailPage(
     const $canvas = root.querySelector<HTMLCanvasElement>("#receiveQr")!;
     const $status = root.querySelector<HTMLElement>("#receiveStatus")!;
     const $prev = root.querySelector<HTMLButtonElement>("#prevIdx")!;
-    const $verifyCheck = root.querySelector<HTMLInputElement>("#verifyCheck");
+    const $tip = root.querySelector<HTMLElement>("#verifyTip");
 
     $path.textContent = `${wallet.path} / ${derived.subPath}`;
     $addr.textContent = derived.address;
@@ -1643,10 +1621,14 @@ export function mountWalletDetailPage(
     $status.textContent =
       idx === 0 ? "first address (index 0)" : `address #${idx} on receive branch`;
 
-    // Restore verification state from localStorage
-    if ($verifyCheck) {
-      const key = `piwallet.verified.${walletId}.${derived.address}`;
-      $verifyCheck.checked = localStorage.getItem(key) === "1";
+    if ($tip) {
+      const steps = idx === 0
+        ? "open <strong>Show deposit address</strong> — it starts at address #0"
+        : `open <strong>Show deposit address</strong> and press RIGHT <strong>${idx} time${idx === 1 ? "" : "s"}</strong> to reach address #${idx}`;
+      $tip.innerHTML =
+        `To verify on your Pi: ${steps}, then confirm it matches. ` +
+        `<a href="${DOCS_BASE_URL}/security/#address-verification" target="_blank" ` +
+        `rel="noopener noreferrer">Why?</a>`;
     }
 
     try {
