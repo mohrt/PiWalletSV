@@ -1169,6 +1169,22 @@ body.terms-locked {
   margin-top: 0.25rem;
 }
 
+.send-balance-line {
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+.wallet-more-link {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-decoration: none;
+  padding: 0.45rem 0.4rem;
+  align-self: center;
+}
+.wallet-more-link:hover { color: var(--text); text-decoration: underline; }
+
 /* Inline rename / remove strips */
 
 .inline-rename,
