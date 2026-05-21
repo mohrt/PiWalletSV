@@ -331,13 +331,14 @@ export function mountWalletDetailPage(
                 <span class="fee-tier-rate" id="feePriority">—</span>
                 <span class="fee-tier-desc muted-line">fastest confirmation</span>
               </label>
-              <label class="fee-tier">
+              <label class="fee-tier fee-tier-custom">
                 <input type="radio" name="feeTier" value="custom" />
                 <span class="fee-tier-label">Custom</span>
                 <input id="feeCustom" type="number" min="1" step="1"
                   placeholder="${DEFAULT_FEE_RATE_SATSKB}"
                   class="fee-custom-input" />
                 <span class="fee-tier-desc muted-line">sat/kB</span>
+                <span class="fee-tier-rate" id="feeCustomEst" style="margin-left:auto">—</span>
               </label>
             </div>
             <div class="actions">
@@ -576,6 +577,23 @@ export function mountWalletDetailPage(
     root.querySelectorAll<HTMLInputElement>('input[name="feeTier"]').forEach((r) => {
       r.addEventListener("change", () => highlightSelectedTier());
     });
+
+    // Custom fee input — update estimated sats live
+    root.querySelector<HTMLInputElement>("#feeCustom")
+      ?.addEventListener("input", () => {
+        const $customInput = root.querySelector<HTMLInputElement>("#feeCustom");
+        const $est = root.querySelector<HTMLElement>("#feeCustomEst");
+        if (!$customInput || !$est || sendStep.step !== "fee" || !wallet?.lastScan) return;
+        const rate = parseInt($customInput.value, 10);
+        if (!Number.isInteger(rate) || rate <= 0) { $est.textContent = "—"; return; }
+        try {
+          const fee = selectUtxosGreedy(wallet.lastScan.utxos, sendStep.sats, rate).feeSats;
+          $est.textContent = `~${fee.toLocaleString("en-US")} sats`;
+        } catch {
+          const bytes = wallet.lastScan.utxos.length * 148 + 2 * 34 + 10;
+          $est.textContent = `~${Math.ceil(bytes * rate / 1000).toLocaleString("en-US")} sats`;
+        }
+      });
 
     // Receive tab
     root.querySelector<HTMLButtonElement>("#copyAddress")
@@ -1112,12 +1130,31 @@ export function mountWalletDetailPage(
     const standard = feeRec?.standard ?? DEFAULT_FEE_RATE_SATSKB;
     const priority = feeRec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
 
+    const feeStep = sendStep.step === "fee" ? sendStep : null;
+    const estSats = feeStep && wallet?.lastScan
+      ? (rate: number) => {
+          try {
+            return selectUtxosGreedy(wallet!.lastScan!.utxos, feeStep.sats, rate).feeSats;
+          } catch {
+            const bytes = (wallet!.lastScan!.utxos.length) * 148 + 2 * 34 + 10;
+            return Math.ceil(bytes * rate / 1000);
+          }
+        }
+      : (_rate: number) => null;
+
+    function fmtTierRate(rate: number): string {
+      const fee = estSats(rate);
+      return fee !== null
+        ? `~${fee.toLocaleString("en-US")} sats  (${formatFeeRate(rate)})`
+        : formatFeeRate(rate);
+    }
+
     const $eco = root.querySelector<HTMLElement>("#feeEconomy");
     const $std = root.querySelector<HTMLElement>("#feeStandard");
     const $pri = root.querySelector<HTMLElement>("#feePriority");
-    if ($eco) $eco.textContent = formatFeeRate(economy);
-    if ($std) $std.textContent = formatFeeRate(standard);
-    if ($pri) $pri.textContent = formatFeeRate(priority);
+    if ($eco) $eco.textContent = fmtTierRate(economy);
+    if ($std) $std.textContent = fmtTierRate(standard);
+    if ($pri) $pri.textContent = fmtTierRate(priority);
 
     selectedFeeRate = standard;
     if ($loading) $loading.hidden = true;
