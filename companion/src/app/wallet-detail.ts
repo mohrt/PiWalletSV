@@ -478,7 +478,7 @@ export function mountWalletDetailPage(
           <section class="receive-list-section">
             <h3>Recent receive addresses</h3>
             <p class="muted-line">
-              A window of 8 addresses around the current pointer (m/0/i).
+              A window of 8 addresses around the current pointer (<span id="receiveWindowDesc">m/0/0</span>).
             </p>
             <ul id="receiveList" class="addr-list"></ul>
           </section>
@@ -1618,6 +1618,8 @@ export function mountWalletDetailPage(
     $path.textContent = `${wallet.path} / ${derived.subPath}`;
     $addr.textContent = derived.address;
     $prev.disabled = idx === 0;
+    const $windowDesc = root.querySelector<HTMLElement>("#receiveWindowDesc");
+    if ($windowDesc) $windowDesc.textContent = `m/0/${idx}`;
     $status.textContent =
       idx === 0 ? "first address (index 0)" : `address #${idx} on receive branch`;
 
