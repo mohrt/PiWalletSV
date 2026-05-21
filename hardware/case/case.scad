@@ -197,24 +197,24 @@ sd_cutout_h = 3.0; // along the z axis
 // PCB thickness: 1.55 mm
 // Lens height: 7.14 mm (PCB bottom to top of lens housing)
 //
-// Confirmed by visual inspection (2026-05-21):
-// camera_lens_centre — 10 mm from FFC edge, centred in x.
-// camera_mount_pitch — x=21 mm (2 mm inset from each side);
-// y=12 mm (near row at 10 mm from FFC, far row at 22 mm).
-// Near hole row is co-planar with lens centre in y.
-// Pattern is NOT centred on the PCB — offset toward far end.
+// Confirmed by caliper + visual inspection (2026-05-21):
+// camera_lens_centre — 10 mm from FFC edge, centred perpendicular to FFC.
+// camera_mount_pitch — 21 mm along the non-FFC axis (2 mm inset from
+// each long edge); 12 mm along the FFC axis (near row at 10 mm from
+// FFC edge, far row at 22 mm). Near hole row co-planar with lens.
+// Pattern is NOT centred — offset toward the far end of the board.
 // camera_mount_dia — M2 clearance, verify on Loop 3 print.
 //
-// FFC orientation: connector exits from the SHORT bottom edge of the
-// PCB (the edge nearest the Pi's CSI ZIF). The ribbon folds under
-// the Pi toward the CSI connector. The PCB is nearly square so
-// portrait/landscape distinction is minor, but x is the slightly
-// longer dimension (25.1 mm).
-camera_module_x = 25.1; // confirmed: PCB edge along x (FFC on bottom/near edge)
-camera_module_y = 24.2; // confirmed: PCB edge along y
+// FFC orientation: connector exits from the LONG SIDE of the PCB
+// (the x=0 edge in case coordinates), running toward the Pi's CSI ZIF
+// on the same side of the case. PCB is mounted in landscape:
+// x-axis = 24.2 mm (FFC edge on left)
+// y-axis = 25.1 mm (long dimension, perpendicular to FFC)
+camera_module_x = 24.2; // confirmed: PCB dimension along x (FFC on x=0 side edge)
+camera_module_y = 25.1; // confirmed: PCB dimension along y (perpendicular to FFC)
 camera_module_z = 7.14; // confirmed: PCB bottom to top of lens housing
-camera_lens_centre = [12.55, 10.0]; // confirmed: centred in x; 10 mm from FFC edge in y
-camera_mount_pitch = [21.0, 12.0]; // confirmed: x-pitch 21 mm (2 mm inset); y-pitch 12 mm (near row at 10 mm, far row at 22 mm from FFC)
+camera_lens_centre = [10.0, 12.55]; // confirmed: 10 mm from FFC side edge in x; centred in y
+camera_mount_pitch = [12.0, 21.0]; // confirmed: x-pitch 12 mm (near row at 10 mm, far at 22 mm); y-pitch 21 mm (2 mm inset each end)
 camera_mount_dia = 2.2; // estimated: M2 clearance
 
 // Back-tub posts the camera screws onto. Each post rises from the
@@ -332,14 +332,14 @@ lcd_window_y = lcd_module.y + 2*lcd_window_clearance;
 lcd_bezel_x = lcd_window_x + 2*lcd_bezel_border;
 lcd_bezel_y = lcd_window_y + 2*lcd_bezel_border;
 
-// Camera mount pattern offset from the PCB's (0,0) corner (FFC edge = y=0).
-// x: centred on the PCB.
-// y: the near hole row is at the same y as the lens (10 mm from FFC edge);
-// the far row is at camera_lens_centre.y + camera_mount_pitch.y = 22 mm.
-// The pattern is NOT centred — it sits in the upper half of the board.
+// Camera mount pattern offset from the PCB's (0,0) corner (FFC side = x=0).
+// x: near hole row is at the same x as the lens (10 mm from FFC edge);
+// far row at camera_lens_centre.x + camera_mount_pitch.x = 22 mm.
+// Pattern is NOT centred in x — offset toward the far (non-FFC) end.
+// y: centred on the 25.1 mm dimension.
 camera_mount_inset = [
- (camera_module_x - camera_mount_pitch.x) / 2, // = 2.05 mm
- camera_lens_centre.y, // = 10.0 mm
+ camera_lens_centre.x, // = 10.0 mm from FFC side
+ (camera_module_y - camera_mount_pitch.y) / 2, // = 2.05 mm, centred
 ];
 
 // Pi standoff height — calculated so the Pi PCB's BOTTOM face lands
