@@ -291,10 +291,15 @@ export function mountWalletDetailPage(
               </div>
             </div>
             <label class="field">
-              <span>Amount (sats)</span>
+              <span>Amount</span>
               <div class="amount-row">
-                <input id="sendSats" type="number" min="1" step="1"
-                  placeholder="e.g. 10000" />
+                <input id="sendAmount" type="number" min="0" step="any"
+                  placeholder="0" />
+                <select id="sendUnit" class="send-unit-select">
+                  <option value="sats">sats</option>
+                  <option value="bsv">BSV</option>
+                  <option value="usd">USD</option>
+                </select>
                 <button id="sendMax" type="button" class="send-max-btn">Max</button>
               </div>
             </label>
@@ -548,6 +553,10 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", () => void onSendNext());
     root.querySelector<HTMLButtonElement>("#sendMax")
       ?.addEventListener("click", onSendMax);
+    root.querySelector<HTMLSelectElement>("#sendUnit")
+      ?.addEventListener("change", (e) => {
+        if ((e.target as HTMLSelectElement).value === "usd") void fetchBsvPrice();
+      });
     root.querySelector<HTMLButtonElement>("#feeBack")
       ?.addEventListener("click", () => showSendStep("form"));
     root.querySelector<HTMLButtonElement>("#feeNext")
@@ -1012,38 +1021,68 @@ export function mountWalletDetailPage(
 
   function onSendMax(): void {
     if (!wallet?.lastScan) return;
-    const $sats = root.querySelector<HTMLInputElement>("#sendSats");
-    if (!$sats) return;
+    const $amount = root.querySelector<HTMLInputElement>("#sendAmount");
+    const $unit = root.querySelector<HTMLSelectElement>("#sendUnit");
+    if (!$amount || !$unit) return;
     const feeRate = selectedFeeRate;
-    // Estimate fee for all UTXOs → 2 outputs (recipient + change)
     const totalIn = wallet.lastScan.utxos.reduce((a, u) => a + u.sats, 0);
     const estimatedFee = Math.ceil((wallet.lastScan.utxos.length * 148 + 2 * 34 + 10) * feeRate / 1000);
-    const maxSend = Math.max(0, totalIn - estimatedFee);
-    $sats.value = String(maxSend);
+    const maxSats = Math.max(0, totalIn - estimatedFee);
+    const unit = $unit.value as "sats" | "bsv" | "usd";
+    if (unit === "sats") {
+      $amount.value = String(maxSats);
+    } else if (unit === "bsv") {
+      $amount.value = (maxSats / SATS_PER_BSV).toFixed(8);
+    } else {
+      $amount.value = bsvUsdPrice !== null
+        ? ((maxSats / SATS_PER_BSV) * bsvUsdPrice).toFixed(2)
+        : String(maxSats / SATS_PER_BSV);
+    }
   }
 
   async function onSendNext(): Promise<void> {
     if (!wallet) return;
     const $addr = root.querySelector<HTMLInputElement>("#sendAddress")!;
-    const $satsInput = root.querySelector<HTMLInputElement>("#sendSats")!;
+    const $amountInput = root.querySelector<HTMLInputElement>("#sendAmount")!;
+    const $unitSelect = root.querySelector<HTMLSelectElement>("#sendUnit")!;
     const $status = root.querySelector<HTMLElement>("#sendFormStatus")!;
     $status.classList.remove("error");
 
     const recipient = $addr.value.trim();
-    const satsRaw = $satsInput.value.trim();
-    const sats = parseInt(satsRaw, 10);
+    const amountRaw = $amountInput.value.trim();
+    const amountNum = parseFloat(amountRaw);
+    const unit = $unitSelect.value as "sats" | "bsv" | "usd";
 
     if (!recipient) {
       $status.classList.add("error");
       $status.textContent = "enter a recipient address";
       return;
     }
-    if (satsRaw === "" || !Number.isInteger(sats) || sats <= 0) {
+    if (amountRaw === "" || isNaN(amountNum) || amountNum <= 0) {
       $status.classList.add("error");
-      $status.textContent = satsRaw === ""
-        ? "enter an amount in sats"
-        : `amount must be a positive whole number (got "${satsRaw}")`;
-      $satsInput.focus();
+      $status.textContent = amountRaw === "" ? "enter an amount" : `invalid amount "${amountRaw}"`;
+      $amountInput.focus();
+      return;
+    }
+
+    let sats: number;
+    if (unit === "sats") {
+      sats = Math.round(amountNum);
+    } else if (unit === "bsv") {
+      sats = Math.round(amountNum * SATS_PER_BSV);
+    } else {
+      if (bsvUsdPrice === null || bsvUsdPrice === 0) {
+        $status.classList.add("error");
+        $status.textContent = "USD price unavailable — switch to sats or BSV";
+        return;
+      }
+      sats = Math.round((amountNum / bsvUsdPrice) * SATS_PER_BSV);
+    }
+
+    if (!Number.isInteger(sats) || sats <= 0) {
+      $status.classList.add("error");
+      $status.textContent = `amount too small (rounds to ${sats} sats)`;
+      $amountInput.focus();
       return;
     }
     if (!wallet.lastScan || wallet.lastScan.utxos.length === 0) {
