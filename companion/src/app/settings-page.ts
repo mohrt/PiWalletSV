@@ -183,7 +183,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     });
   });
 
-  $customRateInput.addEventListener("input", () => {
+  $customRateInput.addEventListener("blur", () => {
     const rate = parseInt($customRateInput.value, 10);
     if (Number.isInteger(rate) && rate > 0) {
       localStorage.setItem(KEY_CUSTOM_FEE_RATE, String(rate));
