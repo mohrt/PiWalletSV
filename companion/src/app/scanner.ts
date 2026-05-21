@@ -66,7 +66,7 @@ export function mountScannerPage(
       <div id="scanTab-wallet"${initialTab !== "wallet" ? ' hidden' : ''}>
         <section class="card scan-card">
           <p class="muted-line" style="margin-bottom:0.5rem">
-            Point your camera at the Pi's animated QR to pair a wallet.
+            Create a wallet on the Pi, then scan the QR code.
           </p>
           <video id="video" playsinline muted autoplay></video>
           <div class="scan-status">
@@ -82,8 +82,17 @@ export function mountScannerPage(
 
         <section class="card paste-hex-card">
           <details>
-            <summary>Or paste xpub <span class="info-tip" title="An xpub (extended public key) lets the companion derive your wallet addresses without exposing your private keys or seed phrase.">ⓘ</span></summary>
-            <p class="muted-line">Paste the xpub below, and select the network.</p>
+            <summary>Or paste xpub</summary>
+            <p class="muted-line">
+              Paste the xpub below, and select the network.
+              <span class="info-tip-wrap">
+                <button class="info-tip" type="button" aria-label="What is an xpub?">ⓘ</button>
+                <span class="info-tip-text" hidden>
+                  An xpub (extended public key) lets the companion derive your wallet
+                  addresses without exposing your private keys or seed phrase.
+                </span>
+              </span>
+            </p>
             <textarea id="pasteXpub" class="hex-blob" rows="3"
               placeholder="xpub6…"
               spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
@@ -1044,6 +1053,14 @@ export function mountScannerPage(
       network,
     });
   }
+
+  // xpub info tip toggle
+  root.querySelector<HTMLButtonElement>(".info-tip")
+    ?.addEventListener("click", (e) => {
+      e.preventDefault();
+      const tip = root.querySelector<HTMLElement>(".info-tip-text");
+      if (tip) tip.hidden = !tip.hidden;
+    });
 
   $pasteXpubImport.addEventListener("click", () => {
     void onPasteXpubImport();
