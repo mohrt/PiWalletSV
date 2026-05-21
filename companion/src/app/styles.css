@@ -960,6 +960,10 @@ body.terms-locked {
   white-space: normal;
 }
 
+.info-tip-text[hidden] {
+  display: none;
+}
+
 /* Scanner page tabs */
 
 .scanner-tabs {
