@@ -40,8 +40,8 @@ function render(): void {
 
   if (route === "" || route === "#" || route === "#/" || route === "#/wallets") {
     mounted = mountWalletsPage(app);
-  } else if (route === "#/scan") {
-    mounted = mountScannerPage(app);
+  } else if (route === "#/scan" || route === "#/scan/tx") {
+    mounted = mountScannerPage(app, route === "#/scan/tx" ? "tx" : "wallet");
   } else if (route === "#/settings") {
     mounted = mountSettingsPage(app);
   } else if (route.startsWith("#/wallets/")) {
