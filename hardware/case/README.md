@@ -2,7 +2,7 @@
 
 The PiWalletSV reference 3D-printable case — a 2-piece clamshell
 PETG enclosure. Holds a Raspberry Pi Zero 2 W, an Adafruit 1.3"
-240×240 TFT bonnet (product 4506), and a Pi Camera Module 3, with
+240×240 TFT bonnet (product 4506), and an Arducam UC-346 OV5647, with
 the LCD facing the operator and the camera lens facing the back of
 the unit on the same optical axis.
 
