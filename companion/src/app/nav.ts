@@ -35,7 +35,10 @@ export function renderHeader(
   const cls = (page: ActivePage): string => (page === active ? ' class="active"' : "");
   return `
     <header class="page-header">
-      <h1>${title}${titleSuffix}<span class="brand"> · PiWalletSV</span></h1>
+      <div class="page-header-brand">
+        <img src="/logo.png" alt="" class="header-logo" aria-hidden="true" />
+        <h1>${title}${titleSuffix}<span class="brand"> · PiWalletSV</span></h1>
+      </div>
       <nav>
         <a href="#/wallets"${cls("wallets")}>Wallets</a>
         <a href="#/scan"${cls("scan")}>Scan QR</a>
