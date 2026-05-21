@@ -74,46 +74,36 @@ export interface BitailsAddressBalance {
   total: number;
 }
 
-/** One page of history from `POST /address/history/multi`. */
+/**
+ * One entry from `POST /address/history/multi`.
+ *
+ * The endpoint returns a **combined flat list** across all queried
+ * addresses — there is no per-address grouping. `deltaSats` is the net
+ * satoshi change across all queried addresses for this tx:
+ *   deltaSats = outputSatoshis - inputSatoshis
+ * Positive = net receive, negative = net send.
+ */
 export interface BitailsHistoryEntry {
-  /**
-   * txid (note: Bitails may return it as `txHash` or `tx_hash`
-   * depending on endpoint version — we normalise in the client).
-   */
   txid: string;
   /** Unix timestamp (seconds). 0 if unconfirmed. */
   timestamp: number;
   /** Block height; 0 if unconfirmed. */
   blockHeight: number;
   /**
-   * Net satoshi change for the queried address in this tx.
+   * Net satoshi change across all queried addresses in this tx.
    * Positive = received, negative = sent.
    */
   deltaSats: number;
 }
 
-/** Raw shape returned by `POST /address/history/multi`. */
-interface BitailsHistoryRaw {
-  address: string;
-  /** Cursor for the next page (`null` when exhausted). */
-  pgkey?: string | null;
-  history: Array<{
-    txHash?: string;
-    txid?: string;
-    timestamp?: number;
-    blockTimestamp?: number;
-    blockHeight?: number;
-    height?: number;
-    satoshis?: number;
-    value?: number;
-  }>;
-}
-
-export interface BitailsHistoryResult {
-  address: string;
-  entries: BitailsHistoryEntry[];
-  /** Cursor for the next page; `null` when all pages consumed. */
-  nextCursor: string | null;
+/** Raw shape of each item in the flat array from `POST /address/history/multi`. */
+interface BitailsHistoryMultiRaw {
+  txid: string;
+  inputSatoshis: number;
+  outputSatoshis: number;
+  /** Unix timestamp (seconds). */
+  time: number;
+  blockheight: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,33 +256,32 @@ export class BitailsClient {
 
   /**
    * `POST /address/history/multi`
-   * Fetches paginated tx history for multiple addresses.
-   * Each entry includes the net sat delta for that address.
+   * Returns the combined transaction history across all queried addresses
+   * as a flat array — entries are NOT grouped per address.
    *
-   * Pass `pgkey` to continue a previous page (cursor from
-   * `BitailsHistoryResult.nextCursor`).
+   * Pagination is offset-based: pass `from` to skip already-fetched entries.
+   * `limit` and `from` are query parameters, not body fields.
+   *
+   * `deltaSats = outputSatoshis − inputSatoshis` per entry (positive = receive).
    */
   async getHistoryBatch(
     addresses: string[],
-    pgkey?: string,
-  ): Promise<BitailsHistoryResult[]> {
+    opts: { limit?: number; from?: number } = {},
+  ): Promise<BitailsHistoryEntry[]> {
     if (addresses.length === 0) return [];
-    const payload: Record<string, unknown> = { addresses, limit: 50 };
-    if (pgkey) payload.pgkey = pgkey;
-    const raw = await this.request<BitailsHistoryRaw[]>(
+    const params = new URLSearchParams();
+    params.set("limit", String(opts.limit ?? 100));
+    if (opts.from) params.set("from", String(opts.from));
+    const raw = await this.request<BitailsHistoryMultiRaw[]>(
       "POST",
-      "/address/history/multi",
-      payload,
+      `/address/history/multi?${params.toString()}`,
+      { addresses },
     );
-    return raw.map((r) => ({
-      address: r.address,
-      nextCursor: r.pgkey ?? null,
-      entries: (r.history ?? []).map((h) => ({
-        txid: (h.txHash ?? h.txid ?? ""),
-        timestamp: h.timestamp ?? h.blockTimestamp ?? 0,
-        blockHeight: h.blockHeight ?? h.height ?? 0,
-        deltaSats: h.satoshis ?? h.value ?? 0,
-      })),
+    return (raw ?? []).map((h) => ({
+      txid: h.txid ?? "",
+      timestamp: h.time ?? 0,
+      blockHeight: h.blockheight ?? 0,
+      deltaSats: (h.outputSatoshis ?? 0) - (h.inputSatoshis ?? 0),
     }));
   }
 }

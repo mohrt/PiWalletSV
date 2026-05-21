@@ -26,7 +26,6 @@ import {
 } from "./derive.js";
 import type { NetworkT } from "./envelope.js";
 import {
-  BITAILS_BULK_BATCH_MAX,
   type BitailsHistoryEntry,
   type BitailsClient,
 } from "./bitails.js";
@@ -102,36 +101,32 @@ export async function fetchWalletHistory(
     addresses.push(deriveAddress(accountXpub, CHANGE_BRANCH, i, network).address);
   }
 
-  // Fetch in batches.
-  const byTxid = new Map<string, WalletTxEntry>();
-  let done = 0;
+  // POST /address/history/multi returns a single combined flat list across
+  // all queried addresses — no batching needed, no per-address grouping.
+  opts.onProgress?.(0, addresses.length);
+  const entries = await bitails.getHistoryBatch(addresses, { limit });
+  opts.onProgress?.(addresses.length, addresses.length);
 
-  for (let i = 0; i < addresses.length; i += BITAILS_BULK_BATCH_MAX) {
-    const batch = addresses.slice(i, i + BITAILS_BULK_BATCH_MAX);
-    const results = await bitails.getHistoryBatch(batch);
-    for (const r of results) {
-      for (const h of r.entries) {
-        if (!h.txid) continue;
-        const existing = byTxid.get(h.txid);
-        if (existing) {
-          existing.deltaSats += h.deltaSats;
-          // Keep the most recent block info if one is unconfirmed.
-          if (h.blockHeight > existing.blockHeight) {
-            existing.blockHeight = h.blockHeight;
-            existing.timestamp = h.timestamp;
-          }
-        } else {
-          byTxid.set(h.txid, {
-            txid: h.txid,
-            timestamp: h.timestamp,
-            blockHeight: h.blockHeight,
-            deltaSats: h.deltaSats,
-          });
-        }
+  // Aggregate by txid: the same txid can appear in the combined list more
+  // than once if a single tx touches multiple wallet addresses. Sum the deltas.
+  const byTxid = new Map<string, WalletTxEntry>();
+  for (const h of entries) {
+    if (!h.txid) continue;
+    const existing = byTxid.get(h.txid);
+    if (existing) {
+      existing.deltaSats += h.deltaSats;
+      if (h.blockHeight > existing.blockHeight) {
+        existing.blockHeight = h.blockHeight;
+        existing.timestamp = h.timestamp;
       }
+    } else {
+      byTxid.set(h.txid, {
+        txid: h.txid,
+        timestamp: h.timestamp,
+        blockHeight: h.blockHeight,
+        deltaSats: h.deltaSats,
+      });
     }
-    done += batch.length;
-    opts.onProgress?.(done, addresses.length);
   }
 
   // Sort: unconfirmed first (height 0), then descending by height.
