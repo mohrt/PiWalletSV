@@ -51,7 +51,6 @@ import {
   updateLabel,
   setLastScan,
   setLastHistory,
-  setDisplayUnit,
   setNextReceiveIndex,
   withDefaults,
 } from "../lib/wallets.js";
@@ -66,6 +65,7 @@ import type { NetworkT } from "../lib/envelope.js";
 import {
   getDefaultFeeTier,
   getDefaultCustomFeeRate,
+  getFiatCurrency,
 } from "./settings-page.js";
 import {
   type CameraScanHandle,
@@ -175,10 +175,11 @@ export function mountWalletDetailPage(
   let exportLastFrameAt = 0;
   let exportRaf: number | null = null;
 
-  // Price cache for fiat toggle
+  // Price cache for fiat/BSV display
   let bsvUsdPrice: number | null = null;
   let priceFetchedAt = 0;
-  let displayUnit: "sats" | "fiat" = "sats";
+  type DisplayUnit = "sats" | "bsv" | "fiat";
+  let displayUnit: DisplayUnit = "sats";
 
   // Active tab
   type Tab = "balance" | "send" | "receive" | "history" | "share";
@@ -210,7 +211,8 @@ export function mountWalletDetailPage(
       return;
     }
     wallet = withDefaults(rec);
-    displayUnit = rec.displayUnit ?? "sats";
+    const storedUnit = localStorage.getItem("piwallet.listUnit") as DisplayUnit | null;
+    displayUnit = storedUnit ?? rec.displayUnit ?? "sats";
     renderShell();
     void renderReceive();
     void onRefreshBalance();
@@ -255,6 +257,11 @@ export function mountWalletDetailPage(
           <button role="tab" data-tab="receive" class="${activeTab === "receive" ? "active" : ""}">Receive</button>
           <button role="tab" data-tab="history" class="${activeTab === "history" ? "active" : ""}">History</button>
           <button role="tab" data-tab="share" class="${activeTab === "share" ? "active" : ""}">Advanced</button>
+          <select id="unitSelect" class="tab-unit-select">
+            <option value="sats"${displayUnit === "sats" ? " selected" : ""}>sats</option>
+            <option value="bsv"${displayUnit === "bsv" ? " selected" : ""}>BSV</option>
+            <option value="fiat"${displayUnit === "fiat" ? " selected" : ""}>${getFiatCurrency()}</option>
+          </select>
         </nav>
 
         <!-- Balance tab -->
@@ -599,6 +606,9 @@ export function mountWalletDetailPage(
     const $toggle = root.querySelector<HTMLButtonElement>("#balanceToggle");
     $toggle?.addEventListener("click", () => void onToggleDisplayUnit());
 
+    root.querySelector<HTMLSelectElement>("#unitSelect")
+      ?.addEventListener("change", (e) => void onUnitSelectChange((e.target as HTMLSelectElement).value as DisplayUnit));
+
     // Send tab
     root.querySelector<HTMLButtonElement>("#scanAddress")
       ?.addEventListener("click", () => void onStartAddrScan());
@@ -805,15 +815,24 @@ export function mountWalletDetailPage(
   // Balance
   // ---------------------------------------------------------------------------
 
-  async function onToggleDisplayUnit(): Promise<void> {
+  async function onUnitSelectChange(unit: DisplayUnit): Promise<void> {
     if (!wallet) return;
-    const next = displayUnit === "sats" ? "fiat" : "sats";
-    displayUnit = next;
-    await setDisplayUnit(wallet.id, next).catch(() => {});
-    if (next === "fiat" && bsvUsdPrice === null) {
-      await fetchBsvPrice();
-    }
+    displayUnit = unit;
+    localStorage.setItem("piwallet.listUnit", unit);
+    if (unit === "fiat" && bsvUsdPrice === null) await fetchBsvPrice();
     renderBalance();
+    // Keep the balance toggle button in sync
+    const $toggle = root.querySelector<HTMLButtonElement>("#balanceToggle");
+    if ($toggle) $toggle.title = `Showing ${unit}`;
+  }
+
+  async function onToggleDisplayUnit(): Promise<void> {
+    // Cycle: sats → bsv → fiat → sats
+    const cycle: DisplayUnit[] = ["sats", "bsv", "fiat"];
+    const next = cycle[(cycle.indexOf(displayUnit) + 1) % cycle.length];
+    const $select = root.querySelector<HTMLSelectElement>("#unitSelect");
+    if ($select) $select.value = next;
+    await onUnitSelectChange(next);
   }
 
   async function fetchBsvPrice(): Promise<void> {
@@ -838,10 +857,13 @@ export function mountWalletDetailPage(
   }
 
   function formatBalance(sats: number): string {
+    if (displayUnit === "bsv") {
+      return `${(sats / SATS_PER_BSV).toFixed(8)} BSV`;
+    }
     if (displayUnit === "fiat") {
-      if (bsvUsdPrice === null) return "— USD";
-      const usd = (sats / SATS_PER_BSV) * bsvUsdPrice;
-      return `$${usd.toFixed(2)} USD`;
+      if (bsvUsdPrice === null) return `— ${getFiatCurrency()}`;
+      const val = (sats / SATS_PER_BSV) * bsvUsdPrice;
+      return `${getFiatCurrency()} ${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
     return formatSats(sats);
   }
@@ -870,9 +892,9 @@ export function mountWalletDetailPage(
 
     $hero.textContent = formatBalance(scan.totalSats);
     $bsv.textContent =
-      displayUnit === "fiat"
-        ? formatSats(scan.totalSats)
-        : formatBsv(scan.totalSats);
+      displayUnit === "sats" ? formatBsv(scan.totalSats) :
+      displayUnit === "bsv"  ? formatSats(scan.totalSats) :
+      formatSats(scan.totalSats);
     $meta.textContent =
       `${scan.utxos.length} UTXO${scan.utxos.length === 1 ? "" : "s"} · ` +
       `last refreshed ${relativeTimeFrom(scan.at)}`;
