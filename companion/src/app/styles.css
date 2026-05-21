@@ -1248,6 +1248,15 @@ button.danger-outline:hover {
   margin: 1.5rem 0;
 }
 
+#exportResult {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+#exportResult[hidden] { display: none; }
+
 .warning-text {
   color: var(--danger);
 }
