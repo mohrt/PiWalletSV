@@ -503,8 +503,8 @@ export function mountWalletDetailPage(
           <h2>Export to another companion</h2>
           <p class="muted-line">
             Show an animated QR so another companion can pair with this
-            wallet. Only the public key (xpub) is exported — no spending
-            key leaves this device.
+            wallet. Only the public key (xpub) is shared — the spending
+            key never leaves the Pi.
           </p>
           <div class="actions">
             <button id="exportShow" class="primary" type="button">Show export QR</button>
@@ -514,7 +514,7 @@ export function mountWalletDetailPage(
             <p class="muted-line">
               Frame <span id="exportFrameIdx">0</span> /
               <span id="exportFrameCount">0</span>
-              — scan from the companion's <a href="#/scan">Scan QR</a> page
+              — scan from <a href="#/scan">+ Add wallet</a> on another companion
             </p>
             <div class="actions">
               <button id="exportToggle" type="button" class="primary">Pause</button>
@@ -1729,7 +1729,9 @@ export function mountWalletDetailPage(
     exportLastFrameAt = 0;
     const $result = root.querySelector<HTMLElement>("#exportResult")!;
     const $count = root.querySelector<HTMLElement>("#exportFrameCount")!;
+    const $showBtn = root.querySelector<HTMLButtonElement>("#exportShow");
     $result.hidden = false;
+    if ($showBtn) $showBtn.hidden = true;
     $count.textContent = String(exportFrames.length);
     startExportAnimation();
   }
@@ -1759,6 +1761,8 @@ export function mountWalletDetailPage(
     exportFrames = null;
     const $result = root.querySelector<HTMLElement>("#exportResult");
     if ($result) $result.hidden = true;
+    const $showBtn = root.querySelector<HTMLButtonElement>("#exportShow");
+    if ($showBtn) $showBtn.hidden = false;
   }
 
   function tickExport(now: number): void {
