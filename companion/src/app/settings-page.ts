@@ -43,6 +43,8 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     <main class="page">
       ${renderHeader("Settings", "settings")}
 
+      <p id="settingsSavedBanner" class="settings-saved-banner" hidden>✓ Settings saved</p>
+
       <section class="card">
         <h2>Send defaults</h2>
 
@@ -112,17 +114,31 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $clearConfirm = root.querySelector<HTMLButtonElement>("#clearConfirm")!;
   const $clearCancel = root.querySelector<HTMLButtonElement>("#clearCancel")!;
   const $clearStatus = root.querySelector<HTMLElement>("#clearStatus")!;
+  const $savedBanner = root.querySelector<HTMLElement>("#settingsSavedBanner")!;
+
+  let savedTimer: ReturnType<typeof setTimeout> | null = null;
+  function flashSaved(): void {
+    $savedBanner.hidden = false;
+    if (savedTimer) clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => {
+      $savedBanner.hidden = true;
+      savedTimer = null;
+    }, 2000);
+  }
 
   $feeTier.addEventListener("change", () => {
     localStorage.setItem(KEY_DEFAULT_FEE_TIER, $feeTier.value);
+    flashSaved();
   });
 
   $fiat.addEventListener("change", () => {
     localStorage.setItem(KEY_FIAT_CURRENCY, $fiat.value);
+    flashSaved();
   });
 
   $network.addEventListener("change", () => {
     localStorage.setItem(KEY_DEFAULT_NETWORK, $network.value);
+    flashSaved();
   });
 
   $clearBtn.addEventListener("click", () => {
@@ -160,5 +176,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     }
   });
 
-  return () => {};
+  return () => {
+    if (savedTimer) clearTimeout(savedTimer);
+  };
 }
