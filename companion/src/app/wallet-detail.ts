@@ -432,13 +432,16 @@ export function mountWalletDetailPage(
             <details class="advanced proposal-hex-details">
               <summary>Sign over SSH instead (paste hex)</summary>
               <p class="muted-line">
-                Copy hex then on the Pi run:
-                <code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code>
+                Copy the hex below, then on the Pi run:<br>
+                <code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code><br>
+                Then paste the signed hex on the
+                <a href="#/scan/tx">Submit signed TX</a> page.
               </p>
               <textarea id="proposalHex" class="hex-blob" rows="6"
                 readonly spellcheck="false" autocorrect="off"></textarea>
               <div class="actions">
                 <button id="copyProposalHex" type="button" class="primary">Copy hex</button>
+                <a href="#/scan/tx" class="primary-link">Submit signed TX →</a>
               </div>
               <p class="muted-line" id="proposalHexStatus"></p>
             </details>

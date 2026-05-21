@@ -43,82 +43,95 @@ const TEXT_DISPLAY_CAP = 64 * 1024; // truncate displayed body for huge payloads
 
 type ViewMode = "text" | "hex" | "base64url";
 
-export function mountScannerPage(root: HTMLElement): () => void {
+export function mountScannerPage(
+  root: HTMLElement,
+  initialTab: "wallet" | "tx" = "wallet",
+): () => void {
   root.innerHTML = `
     <main class="page">
-      ${renderHeader("Add wallet", "wallets")}
+      ${renderHeader("Scan / Import", "wallets")}
 
-      <section class="card scan-card">
-        <p class="muted-line" style="margin-bottom:0.5rem">
-          Point your camera at the Pi's animated QR to pair a wallet.
-          You can also paste an xpub below to import without scanning.
-        </p>
-        <video id="video" playsinline muted autoplay></video>
-        <div class="scan-status">
-          <p id="status">camera idle — click Start to grant access</p>
-          <p id="missing" class="muted-line"></p>
-          <div class="actions">
-            <button id="start" class="primary" type="button">Start camera</button>
-            <button id="stop" type="button">Stop</button>
-            <button id="reset" type="button">Reset</button>
+      <div class="scanner-tabs">
+        <button role="tab" data-scan-tab="wallet"
+          class="scanner-tab${initialTab === "wallet" ? " active" : ""}">
+          Add wallet
+        </button>
+        <button role="tab" data-scan-tab="tx"
+          class="scanner-tab${initialTab === "tx" ? " active" : ""}">
+          Submit signed TX
+        </button>
+      </div>
+
+      <!-- ── Add wallet tab ─────────────────────────────────────────── -->
+      <div id="scanTab-wallet"${initialTab !== "wallet" ? ' hidden' : ''}>
+        <section class="card scan-card">
+          <p class="muted-line" style="margin-bottom:0.5rem">
+            Point your camera at the Pi's animated QR to pair a wallet.
+          </p>
+          <video id="video" playsinline muted autoplay></video>
+          <div class="scan-status">
+            <p id="status">camera idle — click Start to grant access</p>
+            <p id="missing" class="muted-line"></p>
+            <div class="actions">
+              <button id="start" class="primary" type="button">Start camera</button>
+              <button id="stop" type="button">Stop</button>
+              <button id="reset" type="button">Reset</button>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="card paste-hex-card">
-        <details>
-          <summary>Or paste hex (signed_tx from SSH bridge)</summary>
+        <section class="card paste-hex-card">
+          <details>
+            <summary>Or paste xpub (import from another companion)</summary>
+            <p class="muted-line">
+              Paste a BIP32 account-level extended public key to import a
+              watch-only wallet without scanning the Pi. BSV uses the
+              <code>xpub</code> prefix for both networks, so select the
+              correct network below.
+            </p>
+            <textarea id="pasteXpub" class="hex-blob" rows="3"
+              placeholder="xpub6…"
+              spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
+            <label class="field">
+              <span>Network</span>
+              <select id="pasteXpubNetwork">
+                <option value="main">Mainnet (BSV)</option>
+                <option value="test">Testnet (TBSV)</option>
+              </select>
+            </label>
+            <div class="actions">
+              <button id="pasteXpubImport" class="primary" type="button">
+                Import xpub
+              </button>
+              <button id="pasteXpubClear" type="button">Clear</button>
+            </div>
+            <p id="pasteXpubStatus" class="muted-line"></p>
+          </details>
+        </section>
+      </div>
+
+      <!-- ── Submit signed TX tab ───────────────────────────────────── -->
+      <div id="scanTab-tx"${initialTab !== "tx" ? ' hidden' : ''}>
+        <section class="card paste-hex-card">
+          <h2>Paste signed transaction hex</h2>
           <p class="muted-line">
-            Paste the hex output from
-            <code>piwallet sign --hex - …</code> on the Pi to broadcast
-            without a camera. Whitespace, newlines and a leading
-            <code>signed_tx:</code> prefix are tolerated, and you can
-            paste the whole three-line CLI summary
-            (<code>verified:</code> / <code>txid:</code> /
-            <code>signed_tx:</code>) — the non-hex lines are ignored.
-            xpub_export and unsigned_proposal blobs work here too.
+            After signing on the Pi via SSH, paste the hex output from
+            <code>piwallet sign --hex …</code> here to broadcast it.
+            Whitespace, newlines, and a leading <code>signed_tx:</code>
+            prefix are all accepted.
           </p>
           <textarea id="pasteHex" class="hex-blob" rows="6"
-            placeholder="paste envelope hex here…"
+            placeholder="paste signed_tx hex here…"
             spellcheck="false" autocorrect="off"></textarea>
           <div class="actions">
             <button id="pasteHexDecode" class="primary" type="button">
-              Decode hex
+              Decode &amp; broadcast
             </button>
             <button id="pasteHexClear" type="button">Clear</button>
           </div>
           <p id="pasteHexStatus" class="muted-line"></p>
-        </details>
-      </section>
-
-      <section class="card paste-hex-card">
-        <details>
-          <summary>Or paste xpub (import from another companion)</summary>
-          <p class="muted-line">
-            Paste a BIP32 account-level extended public key to import a
-            watch-only wallet without scanning the Pi. BSV uses the
-            <code>xpub</code> prefix for both networks, so select the
-            correct network below.
-          </p>
-          <textarea id="pasteXpub" class="hex-blob" rows="3"
-            placeholder="xpub6…"
-            spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
-          <label class="field">
-            <span>Network</span>
-            <select id="pasteXpubNetwork">
-              <option value="main">Mainnet (BSV)</option>
-              <option value="test">Testnet (TBSV)</option>
-            </select>
-          </label>
-          <div class="actions">
-            <button id="pasteXpubImport" class="primary" type="button">
-              Import xpub
-            </button>
-            <button id="pasteXpubClear" type="button">Clear</button>
-          </div>
-          <p id="pasteXpubStatus" class="muted-line"></p>
-        </details>
-      </section>
+        </section>
+      </div>
 
       <section id="pairCard" class="card pair-card" hidden>
         <h2>Save as paired wallet</h2>
@@ -209,6 +222,32 @@ export function mountScannerPage(root: HTMLElement): () => void {
     "#broadcastExplorer",
   )!;
   const $broadcastStatus = root.querySelector<HTMLElement>("#broadcastStatus")!;
+
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  let activeTab: "wallet" | "tx" = initialTab;
+
+  function switchScannerTab(tab: "wallet" | "tx"): void {
+    activeTab = tab;
+    root.querySelectorAll<HTMLElement>("[id^='scanTab-']").forEach((el) => {
+      el.hidden = el.id !== `scanTab-${tab}`;
+    });
+    root.querySelectorAll<HTMLButtonElement>("[data-scan-tab]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.scanTab === tab);
+    });
+    // Release camera when leaving the wallet tab
+    if (tab !== "wallet" && scanning) releaseCamera();
+  }
+
+  root.querySelectorAll<HTMLButtonElement>("[data-scan-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      switchScannerTab(btn.dataset.scanTab as "wallet" | "tx");
+    });
+  });
+
+  // When a signed TX is scanned on the wallet tab, auto-switch to TX tab
+  function autoSwitchToTx(): void {
+    if (activeTab !== "tx") switchScannerTab("tx");
+  }
 
   const offscreen = document.createElement("canvas");
   const offscreenCtx = offscreen.getContext("2d", { willReadFrequently: true });
@@ -650,6 +689,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
     }
 
     if (envelope?.kind === KIND_SIGNED) {
+      autoSwitchToTx();
       void showBroadcastCard(envelope);
     } else {
       hideBroadcastCard();
