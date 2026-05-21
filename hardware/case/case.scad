@@ -311,7 +311,7 @@ $fn = 64;
 // right_gap = (clearance + 1) = 1.40 mm
 // cavity_x = bonnet_pcb_x + left_gap + right_gap = 72.06 mm
 //
-bonnet_lcd_offset_x = bonnet_pcb_x - 2 * lcd_active_centre.x; // 3.76 mm
+bonnet_lcd_offset_x = bonnet_pcb_x - 2 * (lcd_active_area_offset.x + lcd_active_area.x / 2); // 3.76 mm
 cavity_x = bonnet_pcb_x + 2*(clearance + 1) + bonnet_lcd_offset_x;
 cavity_y = bonnet_pcb_y + 2*clearance + 2;
 
