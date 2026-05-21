@@ -217,16 +217,20 @@ camera_lens_centre = [10.0, 12.55]; // confirmed: 10 mm from FFC side edge in x;
 camera_mount_pitch = [12.0, 21.0]; // confirmed: x-pitch 12 mm (near row at 10 mm, far at 22 mm); y-pitch 21 mm (2 mm inset each end)
 camera_mount_dia = 2.2; // estimated: M2 clearance
 
-// Back-tub posts the camera screws onto. Each post rises from the
-// tub's inner floor and pilots an M2 self-tap.
-camera_post_height = 3.0;
-camera_post_outer = 4.0;
-camera_post_pilot = 1.7;
+// Camera standoffs (back tub). Four cylindrical posts rise from the
+// tub floor; the camera PCB rests flat on their tops. M2 × 6 mm
+// screws go DOWN through the camera PCB clearance holes (Ø 2.2 mm)
+// and self-tap into the pilots. Pilot runs through the back wall too
+// so screws can be inserted before the PCB is placed if preferred.
+camera_post_height = 3.0; // lifts camera off floor
+camera_post_outer = 5.0; // Ø 5 mm column (1.5 mm wall around M2 pilot)
+camera_post_pilot = 1.7; // M2 self-tap in PLA
 
-// Pi standoff posts (in the back tub). Pi sits on these by its 4
-// corner mount holes. Height calculated from the stack-up below.
-pi_standoff_outer = 5.0;
-pi_standoff_pilot = 2.0; // M2.5 self-tap (optional)
+// Pi standoffs (back tub). Four taller posts; Pi PCB rests on tops.
+// M2.5 × 6 mm screws go DOWN through Pi PCB holes and self-tap into
+// the pilots. Height set by stack-up (camera + ribbon gap).
+pi_standoff_outer = 5.0; // Ø 5 mm column
+pi_standoff_pilot = 2.1; // M2.5 self-tap in PLA (2.1 mm recommended)
 
 // Lens cone in the back tub's back wall.
 lens_cone_dia = 8.0;
@@ -293,7 +297,22 @@ $fn = 64;
 // =====================================================================
 
 // Internal cavity (the box that holds the stack).
-cavity_x = bonnet_pcb_x + 2*clearance + 2;
+//
+// X (left-right): The LCD active-area centre is NOT at the PCB midline.
+// lcd_active_centre.x = 30.87 mm on a 65.5 mm-wide PCB, placing it
+// 3.76 mm left of the PCB centreline. To put the lens hole on the
+// case's visual centreline we make the left gap wider by that same
+// 3.76 mm; the right gap stays at the nominal clearance + 1 mm.
+//
+// bonnet_lcd_offset_x = bonnet_pcb_x - 2*lcd_active_centre.x
+// = 65.5 - 61.74 = 3.76 mm
+//
+// left_gap = (clearance + 1) + bonnet_lcd_offset_x = 5.16 mm
+// right_gap = (clearance + 1) = 1.40 mm
+// cavity_x = bonnet_pcb_x + left_gap + right_gap = 72.06 mm
+//
+bonnet_lcd_offset_x = bonnet_pcb_x - 2 * lcd_active_centre.x; // 3.76 mm
+cavity_x = bonnet_pcb_x + 2*(clearance + 1) + bonnet_lcd_offset_x;
 cavity_y = bonnet_pcb_y + 2*clearance + 2;
 
 // Cavity depth — explicit stack-up from camera floor up to LCD top.
@@ -301,11 +320,11 @@ cavity_y = bonnet_pcb_y + 2*clearance + 2;
 // camera, thicker bonnet, different ribbon) propagates here.
 cavity_z =
  camera_post_height + // 3.0 posts lifting camera off back floor
- camera_module_z + // 11.5 camera body
+ camera_module_z + // 7.14 camera body
  ribbon_under_pi + // 6.0 CSI U-turn slot below Pi
  pi_pcb_to_lcd_top + // 14.0 measured (Pi PCB bottom → LCD top)
- front_slack; // 1.0
- // = 35.5 mm internal
+ front_slack; // 0.5
+ // = 30.64 mm internal
 
 // External case dimensions. With no screw lanes the footprint is
 // cavity + 2*wall on every axis — much slimmer rim than before.
@@ -316,10 +335,11 @@ case_z = cavity_z + 2*wall;
 cavity_origin_x = wall;
 cavity_origin_y = wall + front_lane;
 
-// Bonnet's bottom-left corner in case-frame. The cavity is bigger
-// than the PCB by 2*clearance + 2 mm on each axis; we centre the
-// PCB in the cavity so clearance is symmetric on all four sides.
-bonnet_origin_x = cavity_origin_x + (cavity_x - bonnet_pcb_x) / 2;
+// Bonnet's bottom-left corner in case-frame. The cavity X is
+// intentionally ASYMMETRIC: the left gap is wider so the LCD optical
+// axis (= camera lens axis) sits exactly on the case X centreline.
+// The Y gap is still symmetric.
+bonnet_origin_x = wall + (clearance + 1) + bonnet_lcd_offset_x;
 bonnet_origin_y = cavity_origin_y + (cavity_y - bonnet_pcb_y) / 2;
 
 // LCD optical centre in PCB-frame.
@@ -354,7 +374,7 @@ usb_jack_z = wall + pi_standoff_height + pi_pcb_thickness
 
 // Seam between tub and lid. The lid's front face sits on top of the
 // tub; the lid's skirt drops into the tub's stepped lip below.
-tub_top = case_z - wall; // = 37.9
+tub_top = case_z - wall; // = 33.04 (case_z 35.44 − wall 2.4)
 
 // (No screw boss positions — press-fit only.)
 

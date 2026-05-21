@@ -25,15 +25,17 @@ The two pieces are:
  the back tub's top inner edge. The skirt takes shear load so the
  lid can't slide sideways under the screws.
 
-External envelope as the SCAD currently resolves it: **~87 × 52 ×
-39.8 mm** (`case_x × case_y × case_z`). Roughly a deck-of-cards
-footprint stood on its short edge. Re-printable, opens with four
-M2.5 × 16 mm screws, no glue. Each dimension is a function of the
-named variables in `case.scad`; shrinking the envelope is a matter
-of revisiting the screw lanes (currently 7 mm each side) and the
-front/back lanes (currently 7 mm each — front carries the I/O cutouts, back is currently sealed) rather than the
-cavity itself, which is fixed by the bonnet/Pi/camera footprints
+External envelope as the SCAD currently resolves it: **~77 × 38 ×
+35.4 mm** (`case_x × case_y × case_z`). Roughly a deck-of-cards
+footprint stood on its short edge. Re-printable, press-fit lid (no
+screws). Each dimension is a function of the named variables in
+`case.scad`; the cavity is fixed by the bonnet/Pi/camera footprints
 plus the ribbon U-turn clearance.
+
+The cavity X is **intentionally asymmetric**: the left gap is 5.16 mm
+and the right gap 1.4 mm, so the LCD/camera optical axis lands exactly
+on the case centreline (the bonnet's LCD is 3.76 mm left of the PCB
+midline — centring the PCB would put the lens 1.88 mm off-centre).
 
 ## Hardware footprints (canonical numbers)
 
@@ -181,8 +183,8 @@ been opened post-shipment.
 | Joystick silicone pocket | lid INNER face, centred on `joystick_centre` | 13.2 × 13.2 × 1.5 mm | square recess that lets the bonnet's silicone joystick base (12.2 × 12.2 × 3.4 mm) nest into the lid; without it, the silicone base — taller than the LCD plane — held the lid 1.1 mm above the screen and made the LCD look deep below the case surface |
 | Tamper sticker keep-out | back tub, centred along the back wall's top edge | 12 × 6 mm × 0.4 mm recess | flush so a label sits at the same height as the wall |
 | Desk-stand chin | (deferred) | `chin_height = 0.0` | will live on the BACK (high y) edge so the device tilts back away from the front cables; reintroduced when the print iteration calls for it |
-| Camera mount posts | inside back tub, four corners of the camera footprint | Ø 4.0 mm × 3.0 mm tall; Ø 1.7 mm pilot | M2 self-tap from the camera into PETG. Posts double as ribbon-connector clearance. |
-| Pi standoff posts | inside back tub, four corners of the Pi's mounting hole pattern | Ø 5.0 mm × ~20.5 mm tall; Ø 2.0 mm pilot | M2.5 self-tap (optional — Pi can rest passively on flat-topped posts). Height = camera_post_height + camera_module_z + ribbon_under_pi. |
+| Camera standoffs | inside back tub, four corners of the camera footprint | Ø 5.0 mm × 3.0 mm tall; Ø 1.7 mm pilot (M2 self-tap in PLA) | Camera PCB rests on flat post tops. M2 × 6 mm screws DOWN through PCB clearance holes into post pilots to secure. Pilot runs through back wall so screws can also be inserted from outside before placing PCB. |
+| Pi standoffs | inside back tub, four corners of the Pi's mounting hole pattern | Ø 5.0 mm × 16.14 mm tall; Ø 2.1 mm pilot (M2.5 self-tap in PLA) | Pi PCB rests on flat standoff tops. M2.5 × 6 mm screws DOWN through Pi PCB holes into standoff pilots to secure. Height = 3.0 + 7.14 + 6.0 = **16.14 mm**. |
 
 ## Decision log
 
@@ -310,13 +312,13 @@ exiting a different edge, rotate the camera anchor 90° / 180° in
 | joystick cap base | 12.2 × 12.2 × 3.4 mm | 2026-05-16 | calipers (square silicone footprint sitting on the bonnet PCB around the joystick switch) |
 | `joystick_dia` | 9.5 mm | 2026-05-16 | derived: stem OD 7.22 + 2× tilt sweep at lid inner face (~0.8 mm) + 0.5 mm FDM clearance |
 | `joystick_well_dia` | 11.0 mm | 2026-05-16 | derived: stem OD 7.22 + 2× tilt sweep at lid outer face (~1.4 mm) + 0.5 mm FDM clearance + visual border |
-| `camera_module_x` | **25.1 mm** | confirmed 2026-05-21 | UC-346 PCB edge along x (FFC exits short bottom edge) |
-| `camera_module_y` | **24.2 mm** | confirmed 2026-05-21 | UC-346 PCB edge along y |
+| `camera_module_x` | **24.2 mm** | confirmed 2026-05-21 | UC-346 PCB dimension along case x-axis (FFC exits this LEFT edge, x=0) |
+| `camera_module_y` | **25.1 mm** | confirmed 2026-05-21 | UC-346 PCB dimension along case y-axis (long dimension, perpendicular to FFC) |
 | `camera_module_z` | **7.14 mm** | confirmed 2026-05-21 | PCB bottom to top of lens housing (Pi standoff height = 3.0 + 7.14 + 6.0 = **16.14 mm**) |
-| `camera_lens_centre` | (12.55, 12.1) mm | estimated | centred on PCB; OV5647 sensor offset <0.35 mm; verify lens-cone alignment on Loop 3 print |
-| `camera_mount_pitch` | (12.5, 21.0) mm | estimated | Standard Pi Camera corner pattern (~2 mm inset from each edge of 25.1×24.2 mm PCB); verify post alignment on Loop 3 tub print |
+| `camera_lens_centre` | (10.0, 12.55) mm | confirmed 2026-05-21 | 10 mm from FFC edge (x=0); centred in y on 25.1 mm dimension |
+| `camera_mount_pitch` | (12.0, 21.0) mm | confirmed 2026-05-21 | x-pitch 12 mm (near row at 10 mm = lens x, far at 22 mm); y-pitch 21 mm (2.05 mm inset each end); verify post alignment on Loop 3 tub print |
 | `camera_mount_dia` | 2.2 mm | estimated | M2 clearance; verify on Loop 3 print |
-| Camera FFC exit edge | RIGHT (high x) assumed | _pending_ | **Critical**: if the FFC exits from a different edge, swap x↔y in all camera_* vars and re-check lens-cone alignment |
+| Camera FFC exit edge | LEFT (low x, x=0 edge in case-frame) | confirmed 2026-05-21 | FFC exits the short edge facing the LEFT side of the case, runs toward the Pi's CSI ZIF. **Verify FFC routing on first assembly.** |
 
 ### Authoritative source for any future precision
 
