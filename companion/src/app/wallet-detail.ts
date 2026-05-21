@@ -38,7 +38,7 @@ import {
   buildUnsignedProposal,
 } from "../lib/proposal.js";
 import { splitConfirmedPending } from "../lib/balance-split.js";
-import { scanWalletUtxos } from "../lib/utxo.js";
+import { scanWalletUtxos, scanNextReceiveIndex } from "../lib/utxo.js";
 import { WocClient, WocError, effectiveWocBase } from "../lib/woc.js";
 import {
   BitailsClient,
@@ -155,6 +155,7 @@ export function mountWalletDetailPage(
     | null = null;
   let scanRunning = false;
   let historyRunning = false;
+  let receiveIndexScanRunning = false;
   let woc: WocClient | null = null;
   let bitails: BitailsClient | null = null;
   let sendBusy = false;
@@ -213,6 +214,7 @@ export function mountWalletDetailPage(
     renderShell();
     void renderReceive();
     void onRefreshBalance();
+    if (activeTab === "receive") void refreshReceiveIndex();
   }
 
   function renderError(html: string): void {
@@ -768,6 +770,31 @@ export function mountWalletDetailPage(
     // Lazy-load history when tab first opened
     if (tab === "history" && wallet?.lastHistory == null && !historyRunning) {
       void onRefreshHistory();
+    }
+    // Silently verify receive index is still unused when tab opens
+    if (tab === "receive") {
+      void refreshReceiveIndex();
+    }
+  }
+
+  async function refreshReceiveIndex(): Promise<void> {
+    if (!wallet || receiveIndexScanRunning) return;
+    receiveIndexScanRunning = true;
+    try {
+      if (!woc) woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
+      const fresh = await scanNextReceiveIndex(
+        wallet.xpub, woc, wallet.nextReceiveIndex, wallet.network,
+      );
+      if (cancelled) return;
+      if (fresh !== wallet.nextReceiveIndex) {
+        await setNextReceiveIndex(wallet.id, fresh);
+        wallet.nextReceiveIndex = fresh;
+        void renderReceive();
+      }
+    } catch {
+      // silently ignore — stale index is better than a broken UI
+    } finally {
+      receiveIndexScanRunning = false;
     }
   }
 

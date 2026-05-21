@@ -190,3 +190,38 @@ export async function scanWalletUtxos(
     stoppedAt,
   };
 }
+
+/**
+ * Lightweight receive-index scan.
+ *
+ * Starting from `fromIndex`, derives up to `lookAhead` receive addresses and
+ * finds the first one with zero UTXOs (confirmed + mempool). Returns the index
+ * of that address — i.e. the next safely unused receive address.
+ *
+ * Uses a single `getUnspentBatch` call so it's fast and cheap.
+ */
+export async function scanNextReceiveIndex(
+  accountXpub: string,
+  woc: WocClient,
+  fromIndex: number,
+  network: NetworkT,
+  lookAhead = DEFAULT_GAP_LIMIT,
+): Promise<number> {
+  const probes: { index: number; address: string }[] = [];
+  for (let i = 0; i < lookAhead; i++) {
+    const idx = fromIndex + i;
+    const d = deriveAddress(accountXpub, RECEIVE_BRANCH, idx, network);
+    probes.push({ index: idx, address: d.address });
+  }
+
+  const results = await woc.getUnspentBatch(probes.map((p) => p.address));
+  const usedSet = new Set(
+    results.filter((r) => r.utxos.length > 0).map((r) => r.address),
+  );
+
+  for (const p of probes) {
+    if (!usedSet.has(p.address)) return p.index;
+  }
+  // All look-ahead addresses used — return next beyond the window
+  return fromIndex + lookAhead;
+}
