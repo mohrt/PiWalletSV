@@ -42,6 +42,8 @@ import {
 import {
   type WalletRecord,
   getWallet,
+  removeWallet,
+  updateLabel,
   setLastScan,
   setLastHistory,
   setDisplayUnit,
@@ -56,6 +58,10 @@ import {
   formatFeeRate,
 } from "../lib/fee.js";
 import type { NetworkT } from "../lib/envelope.js";
+import {
+  type CameraScanHandle,
+  startCameraScan,
+} from "../lib/camera-scan.js";
 
 const RECENT_WINDOW = 8;
 const SATS_PER_BSV = 100_000_000;
@@ -123,9 +129,12 @@ type SendStep =
 // Main mount function
 // ---------------------------------------------------------------------------
 
+const VALID_TABS = new Set(["balance", "send", "receive", "history", "share"]);
+
 export function mountWalletDetailPage(
   root: HTMLElement,
   walletId: string,
+  initialTab?: string,
 ): () => void {
   let cancelled = false;
   let wallet:
@@ -138,6 +147,7 @@ export function mountWalletDetailPage(
   let sendBusy = false;
   let sendStep: SendStep = { step: "form" };
   let feeRec: FeeRecommendation | null = null;
+  let addrScanHandle: CameraScanHandle | null = null;
   let selectedFeeRate = DEFAULT_FEE_RATE_SATSKB;
 
   let proposalFrames: string[] | null = null;
@@ -157,7 +167,8 @@ export function mountWalletDetailPage(
 
   // Active tab
   type Tab = "balance" | "send" | "receive" | "history" | "share";
-  let activeTab: Tab = "balance";
+  let activeTab: Tab =
+    initialTab && VALID_TABS.has(initialTab) ? (initialTab as Tab) : "balance";
 
   root.innerHTML = `
     <main class="page">
@@ -227,7 +238,7 @@ export function mountWalletDetailPage(
           <button role="tab" data-tab="send" class="${activeTab === "send" ? "active" : ""}">Send</button>
           <button role="tab" data-tab="receive" class="${activeTab === "receive" ? "active" : ""}">Receive</button>
           <button role="tab" data-tab="history" class="${activeTab === "history" ? "active" : ""}">History</button>
-          <button role="tab" data-tab="share" class="${activeTab === "share" ? "active" : ""}">Share</button>
+          <button role="tab" data-tab="share" class="${activeTab === "share" ? "active" : ""}">Advanced</button>
         </nav>
 
         <!-- Balance tab -->
@@ -259,9 +270,26 @@ export function mountWalletDetailPage(
             <h2>Send</h2>
             <label class="field">
               <span>Recipient address</span>
-              <input id="sendAddress" type="text" autocomplete="off"
-                placeholder="${wallet.network === "test" ? "m… or n… (testnet)" : "1… (mainnet)"}" />
+              <div class="address-input-row">
+                <input id="sendAddress" type="text" autocomplete="off"
+                  placeholder="${wallet.network === "test" ? "m… or n… (testnet)" : "1… (mainnet)"}" />
+                <button id="scanAddress" type="button" class="icon-btn" title="Scan address QR">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/>
+                    <path d="M14 14h3v3m0 4h4v-4m-4 0v-3h-3"/>
+                  </svg>
+                </button>
+              </div>
             </label>
+            <div id="addrScanWidget" hidden>
+              <video id="addrScanVideo" class="addr-scan-video" playsinline muted autoplay></video>
+              <p class="muted-line" id="addrScanStatus">Scanning for address QR…</p>
+              <div class="actions">
+                <button id="addrScanCancel" type="button">Cancel</button>
+              </div>
+            </div>
             <label class="field">
               <span>Amount (sats)</span>
               <div class="amount-row">
@@ -414,7 +442,7 @@ export function mountWalletDetailPage(
 
         <!-- Share tab -->
         <section id="tab-share" class="card tab-panel${activeTab === "share" ? " active" : ""}" role="tabpanel">
-          <h2>Share wallet</h2>
+          <h2>Export to another companion</h2>
           <p class="muted-line">
             Show an animated QR so another companion can pair with this
             wallet. Only the public key (xpub) is exported — no spending
@@ -435,6 +463,54 @@ export function mountWalletDetailPage(
               <button id="exportHide" type="button">Hide</button>
             </div>
           </div>
+
+          <h2 style="margin-top:1.5rem">Account xpub</h2>
+          <p class="muted-line">
+            The account-level extended public key. Safe to share — it
+            cannot spend funds, only derive addresses.
+          </p>
+          <div class="actions">
+            <button id="copyXpub" type="button">Copy xpub</button>
+          </div>
+          <p id="copyXpubStatus" class="muted-line"></p>
+
+          <hr class="section-divider" />
+
+          <h2>Rename wallet</h2>
+          <p class="muted-line">Change the display label for this wallet.</p>
+          <label class="field">
+            <span>New label</span>
+            <input id="renameInput" type="text" maxlength="64"
+              autocorrect="off" spellcheck="false"
+              value="${escapeHtml(wallet.label)}" />
+          </label>
+          <div class="actions">
+            <button id="renameSaveBtn" type="button" class="primary">Save label</button>
+          </div>
+          <p id="renameStatus" class="muted-line"></p>
+
+          <hr class="section-divider" />
+
+          <h2>Remove wallet</h2>
+          <p class="muted-line">
+            Removes this watch-only wallet from the companion. The Pi device
+            and your funds are completely unaffected — you can re-pair at any
+            time.
+          </p>
+          <div id="removeWalletConfirm" hidden>
+            <p class="remove-confirm-msg warning-text">
+              Are you sure? This will remove
+              <strong>${wallet.label}</strong> from the companion.
+            </p>
+            <div class="actions">
+              <button id="removeWalletConfirmYes" type="button" class="danger">Remove wallet</button>
+              <button id="removeWalletConfirmNo" type="button">Cancel</button>
+            </div>
+          </div>
+          <div id="removeWalletActions" class="actions">
+            <button id="removeWalletBtn" type="button" class="danger-outline">Remove wallet…</button>
+          </div>
+          <p id="removeWalletStatus" class="muted-line"></p>
         </section>
       </main>
     `;
@@ -464,6 +540,10 @@ export function mountWalletDetailPage(
     $toggle?.addEventListener("click", () => void onToggleDisplayUnit());
 
     // Send tab
+    root.querySelector<HTMLButtonElement>("#scanAddress")
+      ?.addEventListener("click", () => void onStartAddrScan());
+    root.querySelector<HTMLButtonElement>("#addrScanCancel")
+      ?.addEventListener("click", stopAddrScan);
     root.querySelector<HTMLButtonElement>("#sendNext")
       ?.addEventListener("click", () => void onSendNext());
     root.querySelector<HTMLButtonElement>("#sendMax")
@@ -510,13 +590,87 @@ export function mountWalletDetailPage(
     root.querySelector<HTMLButtonElement>("#refreshHistory")
       ?.addEventListener("click", () => void onRefreshHistory());
 
-    // Share tab
+    // Advanced tab
     root.querySelector<HTMLButtonElement>("#exportShow")
       ?.addEventListener("click", () => void onShowExport());
     root.querySelector<HTMLButtonElement>("#exportToggle")
       ?.addEventListener("click", toggleExportAnimation);
     root.querySelector<HTMLButtonElement>("#exportHide")
       ?.addEventListener("click", hideExport);
+    root.querySelector<HTMLButtonElement>("#copyXpub")
+      ?.addEventListener("click", () => void onCopyXpub());
+    root.querySelector<HTMLButtonElement>("#renameSaveBtn")
+      ?.addEventListener("click", () => void onRenameSave());
+    root.querySelector<HTMLButtonElement>("#removeWalletBtn")
+      ?.addEventListener("click", onRemoveWalletOpen);
+    root.querySelector<HTMLButtonElement>("#removeWalletConfirmNo")
+      ?.addEventListener("click", onRemoveWalletCancel);
+    root.querySelector<HTMLButtonElement>("#removeWalletConfirmYes")
+      ?.addEventListener("click", () => void onRemoveWalletConfirm());
+  }
+
+  async function onCopyXpub(): Promise<void> {
+    const $btn = root.querySelector<HTMLButtonElement>("#copyXpub");
+    const $status = root.querySelector<HTMLElement>("#copyXpubStatus");
+    if (!$btn || !$status || !wallet) return;
+    try {
+      await navigator.clipboard.writeText(wallet.xpub);
+      const orig = $btn.textContent;
+      $btn.textContent = "copied!";
+      $status.textContent = "";
+      setTimeout(() => { $btn.textContent = orig; }, 1200);
+    } catch (e) {
+      $status.textContent = `clipboard error: ${(e as Error).message}`;
+    }
+  }
+
+  async function onRenameSave(): Promise<void> {
+    if (!wallet) return;
+    const $input = root.querySelector<HTMLInputElement>("#renameInput");
+    const $status = root.querySelector<HTMLElement>("#renameStatus");
+    if (!$input || !$status) return;
+    const trimmed = $input.value.trim();
+    if (!trimmed) {
+      $status.textContent = "Label cannot be empty.";
+      return;
+    }
+    if (trimmed === wallet.label) {
+      $status.textContent = "No change.";
+      return;
+    }
+    try {
+      await updateLabel(wallet.id, trimmed);
+      wallet = { ...wallet, label: trimmed };
+      // Refresh the page header label
+      const $headerLabel = root.querySelector<HTMLElement>(".page-header h1");
+      if ($headerLabel) $headerLabel.firstChild!.textContent = escapeHtml(trimmed);
+      $status.textContent = `Renamed to "${trimmed}".`;
+      setTimeout(() => { if ($status) $status.textContent = ""; }, 2000);
+    } catch (e) {
+      $status.textContent = `rename failed: ${(e as Error).message}`;
+    }
+  }
+
+  function onRemoveWalletOpen(): void {
+    root.querySelector<HTMLElement>("#removeWalletActions")!.hidden = true;
+    root.querySelector<HTMLElement>("#removeWalletConfirm")!.hidden = false;
+  }
+
+  function onRemoveWalletCancel(): void {
+    root.querySelector<HTMLElement>("#removeWalletConfirm")!.hidden = true;
+    root.querySelector<HTMLElement>("#removeWalletActions")!.hidden = false;
+  }
+
+  async function onRemoveWalletConfirm(): Promise<void> {
+    if (!wallet) return;
+    const $status = root.querySelector<HTMLElement>("#removeWalletStatus");
+    try {
+      await removeWallet(wallet.id);
+      window.location.hash = "#/wallets";
+    } catch (e) {
+      if ($status) $status.textContent = `remove failed: ${(e as Error).message}`;
+      onRemoveWalletCancel();
+    }
   }
 
   function switchTab(tab: Tab): void {
@@ -815,6 +969,38 @@ export function mountWalletDetailPage(
   // ---------------------------------------------------------------------------
   // Send flow
   // ---------------------------------------------------------------------------
+
+  function stopAddrScan(): void {
+    addrScanHandle?.stop();
+    addrScanHandle = null;
+    const $widget = root.querySelector<HTMLElement>("#addrScanWidget");
+    if ($widget) $widget.hidden = true;
+  }
+
+  async function onStartAddrScan(): Promise<void> {
+    const $widget = root.querySelector<HTMLElement>("#addrScanWidget");
+    const $video = root.querySelector<HTMLVideoElement>("#addrScanVideo");
+    const $status = root.querySelector<HTMLElement>("#addrScanStatus");
+    const $addr = root.querySelector<HTMLInputElement>("#sendAddress");
+    if (!$widget || !$video || !$status || !$addr) return;
+
+    stopAddrScan(); // release any previous handle
+    $status.textContent = "Scanning for address QR…";
+    $widget.hidden = false;
+
+    addrScanHandle = await startCameraScan(
+      $video,
+      (raw) => {
+        // Strip bitcoin: URI scheme if present (e.g. "bitcoin:1abc…?amount=…")
+        const addr = raw.replace(/^bitcoin:/i, "").split("?")[0].trim();
+        $addr.value = addr;
+        stopAddrScan();
+      },
+      (err) => {
+        if ($status) $status.textContent = err;
+      },
+    );
+  }
 
   function showSendStep(step: "form" | "fee" | "review" | "qr"): void {
     const steps = ["form", "fee", "review", "qr"];
@@ -1297,5 +1483,6 @@ export function mountWalletDetailPage(
     cancelled = true;
     stopProposalAnimation();
     stopExportAnimation();
+    stopAddrScan();
   };
 }
