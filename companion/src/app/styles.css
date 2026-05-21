@@ -1120,6 +1120,13 @@ body.terms-locked {
   gap: 0.3rem;
 }
 
+.wallet-card-top-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .wallet-card-identity {
   display: flex;
   flex-wrap: wrap;
@@ -1127,12 +1134,32 @@ body.terms-locked {
   gap: 0.5rem;
 }
 
+.wallet-card-balance {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
 .wallet-balance {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 0.9rem;
   color: var(--accent);
-  margin-left: auto;
 }
+
+.wallet-refresh-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 120ms, transform 200ms;
+}
+.wallet-refresh-btn:hover { opacity: 1; }
+.wallet-refresh-btn:disabled { cursor: default; opacity: 0.4; }
 
 .wallet-card-meta {
   font-size: 0.75rem;

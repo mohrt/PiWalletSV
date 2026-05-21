@@ -12,11 +12,13 @@ import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
 import {
   type WalletRecord,
   listWallets,
+  setLastScan,
   withDefaults,
 } from "../lib/wallets.js";
 import { renderHeader } from "./nav.js";
 import { WocClient, effectiveWocBase } from "../lib/woc.js";
 import { getFiatCurrency } from "./settings-page.js";
+import { scanWalletUtxos } from "../lib/utxo.js";
 
 const SATS_PER_BSV = 100_000_000;
 const LIST_UNIT_KEY = "piwallet.listUnit";
@@ -130,13 +132,19 @@ export function mountWalletsPage(root: HTMLElement): () => void {
       const balanceHtml = w.lastScan
         ? `<span class="wallet-balance">Balance: ${escapeHtml(formatBalance(w.lastScan.totalSats))}</span>`
         : `<span class="wallet-balance muted-line">Balance: —</span>`;
+      const refreshBtn = `<button class="wallet-refresh-btn" data-refresh="${w.id}" title="Refresh balance" aria-label="Refresh balance">↻</button>`;
 
       li.innerHTML = `
         <div class="wallet-card-top">
-          <div class="wallet-card-identity">
-            <strong class="wallet-label">${escapeHtml(w.label)}</strong>
-            ${netBadge}
-            ${balanceHtml}
+          <div class="wallet-card-top-row">
+            <div class="wallet-card-identity">
+              <strong class="wallet-label">${escapeHtml(w.label)}</strong>
+              ${netBadge}
+            </div>
+            <div class="wallet-card-balance">
+              ${balanceHtml}
+              ${refreshBtn}
+            </div>
           </div>
           <div class="wallet-card-meta muted-line">
             <code title="fingerprint">${w.fingerprint}</code> ·
@@ -171,6 +179,42 @@ export function mountWalletsPage(root: HTMLElement): () => void {
       ? ""
       : `${wallets.length} wallet${wallets.length === 1 ? "" : "s"}`;
     renderList(wallets);
+  }
+
+  // ── per-wallet balance refresh ─────────────────────────────────────────────
+  $list.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-refresh]");
+    if (!btn) return;
+    const id = btn.dataset.refresh!;
+    const wallet = cachedWallets.find(w => w.id === id);
+    if (!wallet) return;
+    void refreshWalletBalance(withDefaults(wallet), btn);
+  });
+
+  async function refreshWalletBalance(wallet: ReturnType<typeof withDefaults>, btn: HTMLButtonElement): Promise<void> {
+    btn.disabled = true;
+    btn.textContent = "…";
+    try {
+      const woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
+      const result = await scanWalletUtxos(wallet.xpub, woc, { network: wallet.network });
+      const snapshot = {
+        at: new Date().toISOString(),
+        totalSats: result.totalSats,
+        utxos: result.utxos,
+        lastReceiveUsed: result.lastReceiveUsed,
+        lastChangeUsed: result.lastChangeUsed,
+        addressesScanned: result.addressesScanned,
+      };
+      await setLastScan(wallet.id, snapshot);
+      if (cancelled) return;
+      if (listUnit === "fiat" && bsvUsdPrice === null) await fetchPrice();
+      const idx = cachedWallets.findIndex(w => w.id === wallet.id);
+      if (idx >= 0) cachedWallets[idx] = { ...cachedWallets[idx], lastScan: snapshot };
+      renderList(cachedWallets);
+    } catch {
+      btn.disabled = false;
+      btn.textContent = "↻";
+    }
   }
 
   // ── unit selector ──────────────────────────────────────────────────────────
