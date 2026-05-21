@@ -86,17 +86,17 @@ export function mountSettingsPage(root: HTMLElement): () => void {
           your keys and wallets remain on the Pi.
         </p>
         <div id="clearStrip" hidden>
-          <p class="remove-confirm-msg">
-            This will remove all paired wallets from this browser.
-            You can re-pair by scanning your Pi again.
+          <p class="remove-confirm-msg warning-text">
+            Are you sure? This will remove all paired wallets and preferences
+            from this browser. You can re-pair by scanning your Pi again.
           </p>
           <div class="actions">
-            <button id="clearConfirm" class="primary danger" type="button">Yes, clear all data</button>
+            <button id="clearConfirm" class="danger" type="button">Yes, clear all data</button>
             <button id="clearCancel" type="button">Cancel</button>
           </div>
         </div>
         <div class="actions" id="clearActions">
-          <button id="clearBtn" type="button">Clear all data</button>
+          <button id="clearBtn" class="danger-outline" type="button">Clear all data…</button>
         </div>
         <p id="clearStatus" class="muted-line"></p>
       </section>
