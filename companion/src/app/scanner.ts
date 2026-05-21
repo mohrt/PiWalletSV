@@ -83,12 +83,7 @@ export function mountScannerPage(
         <section class="card paste-hex-card">
           <details>
             <summary>Or paste xpub (import from another companion)</summary>
-            <p class="muted-line">
-              Paste a BIP32 account-level extended public key to import a
-              watch-only wallet without scanning the Pi. BSV uses the
-              <code>xpub</code> prefix for both networks, so select the
-              correct network below.
-            </p>
+            <p class="muted-line">Paste the xpub below, and select the network.</p>
             <textarea id="pasteXpub" class="hex-blob" rows="3"
               placeholder="xpub6…"
               spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
