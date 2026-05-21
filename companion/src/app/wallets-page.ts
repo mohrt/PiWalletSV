@@ -8,13 +8,18 @@
  * Primary actions are Send and Receive (deep-link into wallet detail tabs).
  * Rename and Remove live in the wallet's Advanced tab.
  */
-import { DOCS_BASE_URL } from "../lib/config.js";
+import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
 import {
   type WalletRecord,
   listWallets,
   withDefaults,
 } from "../lib/wallets.js";
 import { renderHeader } from "./nav.js";
+import { WocClient, effectiveWocBase } from "../lib/woc.js";
+import { getFiatCurrency } from "./settings-page.js";
+
+const SATS_PER_BSV = 100_000_000;
+const LIST_UNIT_KEY = "piwallet.listUnit";
 
 function escapeHtml(s: string): string {
   return s
@@ -24,18 +29,29 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function formatSats(n: number): string {
-  return `${n.toLocaleString("en-US")} sats`;
-}
-
 export function mountWalletsPage(root: HTMLElement): () => void {
+  type ListUnit = "sats" | "bsv" | "fiat";
+  let listUnit: ListUnit =
+    (localStorage.getItem(LIST_UNIT_KEY) as ListUnit) ?? "sats";
+  let bsvUsdPrice: number | null = null;
+  let priceFetchedAt = 0;
+  let cachedWallets: WalletRecord[] = [];
+  let cancelled = false;
+
   root.innerHTML = `
     <main class="page">
       ${renderHeader("Wallets", "wallets")}
 
       <div class="wallets-toolbar">
         <p class="muted-line" id="walletStatus"></p>
-        <a class="primary-link" href="#/scan">+ Add wallet</a>
+        <div class="wallets-toolbar-right">
+          <select id="listUnitSelect" class="list-unit-select">
+            <option value="sats"${listUnit === "sats" ? " selected" : ""}>sats</option>
+            <option value="bsv"${listUnit === "bsv" ? " selected" : ""}>BSV</option>
+            <option value="fiat"${listUnit === "fiat" ? " selected" : ""}>${getFiatCurrency()}</option>
+          </select>
+          <a class="primary-link" href="#/scan">+ Add wallet</a>
+        </div>
       </div>
 
       <section class="card">
@@ -57,34 +73,48 @@ export function mountWalletsPage(root: HTMLElement): () => void {
     </main>
   `;
 
-  const $list = root.querySelector<HTMLUListElement>("#walletsList")!;
-  const $empty = root.querySelector<HTMLParagraphElement>("#emptyState")!;
-  const $status = root.querySelector<HTMLParagraphElement>("#walletStatus")!;
+  const $list   = root.querySelector<HTMLUListElement>("#walletsList")!;
+  const $empty  = root.querySelector<HTMLElement>("#emptyState")!;
+  const $status = root.querySelector<HTMLElement>("#walletStatus")!;
+  const $unit   = root.querySelector<HTMLSelectElement>("#listUnitSelect")!;
 
-  let cancelled = false;
-
-  async function render(): Promise<void> {
-    let wallets: WalletRecord[];
+  // ── price fetch ────────────────────────────────────────────────────────────
+  async function fetchPrice(): Promise<void> {
+    const now = Date.now();
+    if (bsvUsdPrice !== null && now - priceFetchedAt < PRICE_CACHE_TTL_MS) return;
     try {
-      wallets = await listWallets();
-    } catch (e) {
-      if (cancelled) return;
-      $status.classList.add("error");
-      $status.textContent = `wallet store error: ${(e as Error).message}`;
-      return;
-    }
-    if (cancelled) return;
-    $status.classList.remove("error");
-    $status.textContent =
-      wallets.length === 0
-        ? ""
-        : `${wallets.length} paired wallet${wallets.length === 1 ? "" : "s"}`;
+      const woc = new WocClient({ baseUrl: effectiveWocBase("main") });
+      const resp = await fetch(`${woc.baseUrl}/exchangerate`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!resp.ok) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await resp.json()) as any;
+      const rate = data?.rate ?? data?.price ?? data?.USD ?? null;
+      if (typeof rate === "number" && rate > 0) {
+        bsvUsdPrice = rate;
+        priceFetchedAt = now;
+      }
+    } catch { /* silently ignore */ }
+  }
 
-    $list.innerHTML = "";
-    if (wallets.length === 0) {
-      $empty.hidden = false;
-      return;
+  // ── balance formatting ─────────────────────────────────────────────────────
+  function formatBalance(totalSats: number): string {
+    if (listUnit === "bsv") {
+      return `${(totalSats / SATS_PER_BSV).toFixed(8)} BSV`;
     }
+    if (listUnit === "fiat") {
+      if (bsvUsdPrice === null) return "—";
+      const val = (totalSats / SATS_PER_BSV) * bsvUsdPrice;
+      return `${getFiatCurrency()} ${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    return `${totalSats.toLocaleString("en-US")} sats`;
+  }
+
+  // ── render list ────────────────────────────────────────────────────────────
+  function renderList(wallets: WalletRecord[]): void {
+    $list.innerHTML = "";
+    if (wallets.length === 0) { $empty.hidden = false; return; }
     $empty.hidden = true;
 
     for (const w of wallets) {
@@ -93,14 +123,13 @@ export function mountWalletsPage(root: HTMLElement): () => void {
       li.className = "wallet-row";
       li.dataset.id = w.id;
 
-      const netBadge =
-        wd.network === "test"
-          ? `<span class="testnet-badge" title="BSV testnet">TESTNET</span>`
-          : `<span class="mainnet-badge" title="BSV mainnet">MAINNET</span>`;
+      const netBadge = wd.network === "test"
+        ? `<span class="testnet-badge" title="BSV testnet">TESTNET</span>`
+        : `<span class="mainnet-badge" title="BSV mainnet">MAINNET</span>`;
 
       const balanceHtml = w.lastScan
-        ? `<span class="wallet-balance">${formatSats(w.lastScan.totalSats)}</span>`
-        : `<span class="wallet-balance muted-line">—</span>`;
+        ? `<span class="wallet-balance">Balance: ${escapeHtml(formatBalance(w.lastScan.totalSats))}</span>`
+        : `<span class="wallet-balance muted-line">Balance: —</span>`;
 
       li.innerHTML = `
         <div class="wallet-card-top">
@@ -115,7 +144,6 @@ export function mountWalletsPage(root: HTMLElement): () => void {
             paired ${new Date(w.addedAt).toLocaleDateString()}
           </div>
         </div>
-
         <div class="wallet-card-actions actions">
           <a class="primary-link" href="#/wallets/${w.id}/send">Send</a>
           <a class="primary-link" href="#/wallets/${w.id}/receive">Receive</a>
@@ -124,10 +152,40 @@ export function mountWalletsPage(root: HTMLElement): () => void {
       `;
       $list.appendChild(li);
     }
-
   }
 
+  async function render(): Promise<void> {
+    let wallets: WalletRecord[];
+    try {
+      wallets = await listWallets();
+    } catch (e) {
+      if (cancelled) return;
+      $status.classList.add("error");
+      $status.textContent = `wallet store error: ${(e as Error).message}`;
+      return;
+    }
+    if (cancelled) return;
+    cachedWallets = wallets;
+    $status.classList.remove("error");
+    $status.textContent = wallets.length === 0
+      ? ""
+      : `${wallets.length} wallet${wallets.length === 1 ? "" : "s"}`;
+    renderList(wallets);
+  }
+
+  // ── unit selector ──────────────────────────────────────────────────────────
+  $unit.addEventListener("change", async () => {
+    listUnit = $unit.value as ListUnit;
+    localStorage.setItem(LIST_UNIT_KEY, listUnit);
+    if (listUnit === "fiat" && bsvUsdPrice === null) {
+      await fetchPrice();
+    }
+    if (!cancelled) renderList(cachedWallets);
+  });
+
   void render();
+  // Pre-fetch price if fiat is the stored unit
+  if (listUnit === "fiat") void fetchPrice().then(() => { if (!cancelled) renderList(cachedWallets); });
 
   return () => { cancelled = true; };
 }

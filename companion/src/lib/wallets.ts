@@ -62,7 +62,7 @@ export interface WalletRecord {
    * User's preferred display unit: "sats" or "fiat".
    * Persisted so the toggle survives page reloads.
    */
-  displayUnit?: "sats" | "fiat";
+  displayUnit?: "sats" | "bsv" | "fiat";
 }
 
 /** Cached output of the gap-limit UTXO scan, persisted per wallet. */
@@ -330,7 +330,7 @@ export async function setLastHistory(
 
 export async function setDisplayUnit(
   id: string,
-  unit: "sats" | "fiat",
+  unit: "sats" | "bsv" | "fiat",
 ): Promise<void> {
   await withStore("readwrite", async (store) => {
     const cur = await txPromise<WalletRecord | undefined>(
