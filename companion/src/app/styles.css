@@ -1068,6 +1068,19 @@ button.danger-outline:hover {
   color: #fff;
 }
 
+.settings-saved-banner {
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .section-divider {
   border: none;
   border-top: 1px solid var(--border);
