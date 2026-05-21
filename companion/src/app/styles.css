@@ -166,12 +166,14 @@ a:hover {
 }
 
 .list-unit-select {
-  padding: 0.35rem 0.5rem;
-  font-size: 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text);
+  border-radius: 6px;
+  color: var(--muted);
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
 }
 
 /* Empty state for the wallets list */
