@@ -47,7 +47,7 @@ a:hover {
 
 .page-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -129,19 +129,20 @@ a:hover {
   opacity: 0.6;
 }
 
-/* Home page logo hero */
+/* Inline logo in the page header */
 
-.home-hero {
+.page-header-brand {
   display: flex;
-  justify-content: center;
-  margin: 0.5rem 0 1.25rem;
+  align-items: center;
+  gap: 0.6rem;
 }
 
-.home-logo {
-  width: 120px;
-  height: auto;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+.header-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 /* Empty state for the wallets list. Centered, with a clear "go scan an
@@ -469,7 +470,8 @@ button:hover:not(:disabled) {
   align-items: center;
 }
 
-.primary-link {
+.primary-link,
+.secondary-link {
   display: inline-block;
   padding: 0.45rem 0.9rem;
   background: var(--accent);
@@ -481,7 +483,8 @@ button:hover:not(:disabled) {
   border: 1px solid var(--accent);
 }
 
-.primary-link:hover {
+.primary-link:hover,
+.secondary-link:hover {
   filter: brightness(1.1);
   color: #0b0f15;
 }

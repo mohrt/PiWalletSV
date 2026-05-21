@@ -33,10 +33,6 @@ export function mountWalletsPage(root: HTMLElement): () => void {
     <main class="page">
       ${renderHeader("Wallets", "wallets")}
 
-      <div class="home-hero">
-        <img src="/logo.png" alt="PiWalletSV" class="home-logo" />
-      </div>
-
       <section class="card">
         <p class="muted-line" id="walletStatus"></p>
         <div id="emptyState" class="empty-state" hidden>
@@ -126,8 +122,8 @@ export function mountWalletsPage(root: HTMLElement): () => void {
 
         <div class="wallet-card-actions actions">
           <a class="primary-link" href="#/wallets/${w.id}/send">Send</a>
-          <a class="secondary-link" href="#/wallets/${w.id}/receive">Receive</a>
-          <a href="#/wallets/${w.id}">More…</a>
+          <a class="primary-link" href="#/wallets/${w.id}/receive">Receive</a>
+          <a class="primary-link" href="#/wallets/${w.id}">More…</a>
         </div>
       `;
       $list.appendChild(li);
