@@ -188,40 +188,34 @@ sd_cutout_enabled = true;
 sd_cutout_w = 14.0; // along the y axis
 sd_cutout_h = 3.0; // along the z axis
 
-// Camera: Arducam OV5647 Mini (Arducam product B0033, sold on Amazon
-// as ASIN B01LY05LOE for $9.49). Selected over Pi Camera Module 3
-// because: (a) ~$9 vs ~$25, (b) physical mounting holes on the PCB,
-// (c) ships with a 15-pin↔22-pin Pi-Zero ribbon, (d) OV5647 is the
-// same sensor uses, so QR-scan compatibility is proven.
+// Camera: Arducam UC-346 OV5647 (standard Pi Camera footprint).
+// Ships with a 15-pin↔22-pin Pi-Zero ribbon. OV5647 is the same
+// sensor for phone-screen QR scans at held-up distance.
 //
-// !!! VALUES BELOW ARE PENDING CALIPER VERIFICATION ON ARRIVAL !!!
-// They are reasonable starting estimates for an OV5647-mini class
-// PCB. Re-measure each one with calipers when the part is in hand,
-// drop the measured values in here, and update the corresponding
-// rows in SPEC.md → "Confirmed dimensions". The fields to verify:
-// - camera_module_x / camera_module_y (PCB outline)
-// - camera_module_z (board + lens housing height)
-// - camera_lens_centre (lens optical centre on PCB)
-// - camera_mount_pitch (4-corner hole pattern)
-// - camera_mount_dia (corner hole diameter, M2-class)
-// - which edge the FFC connector exits (drives the U-turn anchor)
+// Confirmed measurements (2026-05-21, calipers):
+// PCB outline: 25.1 × 24.2 mm
+// PCB thickness: 1.55 mm
+// Lens height: 7.14 mm (PCB bottom to top of lens housing)
 //
-// One Amazon reviewer explicitly called out that the Arducam mini's
-// corner hole pattern does NOT match the official Raspberry Pi Zero W
-// camera case mounts, so do NOT assume it's the Pi-Cam v1/v2/v3
-// 12.5×12.5 (or 10.8×10.8) pitch — measure it.
-// Orientation assumption: FFC connector exits from the RIGHT (high x)
-// edge of the camera PCB. This puts the PCB in portrait — long edge
-// along y, short edge along x — and the ribbon folds toward the Pi's
-// CSI ZIF on the same right side. If the actual camera has the FFC on
-// a different edge, swap x↔y in module/lens/pitch below and re-check
-// the lens-cone alignment in the preview.
-camera_module_x = 25.0; // VERIFY: PCB short edge (along x, FFC side on right)
-camera_module_y = 32.0; // VERIFY: PCB long edge (along y)
-camera_module_z = 9.5; // VERIFY: stack-up of PCB + lens housing
-camera_lens_centre = [12.5, 16.0]; // VERIFY: lens optical centre on PCB (roughly centred, biased toward FFC end)
-camera_mount_pitch = [12.5, 21.0]; // VERIFY: hole pattern — narrow in x, taller in y, matching portrait PCB
-camera_mount_dia = 2.2; // VERIFY: M2 clearance
+// Remaining estimates (Loop 3 fit-test will confirm):
+// camera_lens_centre — sensor array centre is within 0.35 mm of
+// die centre per OV5647 datasheet; lens assumed centred on PCB.
+// camera_mount_pitch — standard Pi Camera module corner pattern:
+// 21 mm × 12.5 mm (2 mm inset from each edge). Verify post
+// alignment on first tub print; adjust if posts miss holes.
+// camera_mount_dia — M2 clearance, standard for this class.
+//
+// FFC orientation: connector exits from the SHORT bottom edge of the
+// PCB (the edge nearest the Pi's CSI ZIF). The ribbon folds under
+// the Pi toward the CSI connector. The PCB is nearly square so
+// portrait/landscape distinction is minor, but x is the slightly
+// longer dimension (25.1 mm).
+camera_module_x = 25.1; // confirmed: PCB edge along x (FFC on bottom/near edge)
+camera_module_y = 24.2; // confirmed: PCB edge along y
+camera_module_z = 7.14; // confirmed: PCB bottom to top of lens housing
+camera_lens_centre = [12.55, 12.1]; // estimated: centred on PCB; verify lens-cone alignment on print
+camera_mount_pitch = [12.5, 21.0]; // estimated: standard Pi Camera corner pattern; verify on print
+camera_mount_dia = 2.2; // estimated: M2 clearance
 
 // Back-tub posts the camera screws onto. Each post rises from the
 // tub's inner floor and pilots an M2 self-tap.

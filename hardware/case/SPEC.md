@@ -70,35 +70,27 @@ STEP file in `hardware/case/refs/`, cross-verified with calipers).
 Don't trust any other "Adafruit learn page" tables for these — the
 ones we found in the wild were off by several millimetres.
 
-### Camera: Arducam OV5647 Mini (Arducam B0033 / Amazon ASIN B01LY05LOE)
+### Camera: Arducam UC-346 OV5647
 
-Selected over the Pi Camera Module 3 because (a) it's ~$9 vs ~$25,
-(b) it has 4 corner mounting holes on the PCB (the Pi Zero W camera
-ships with no through-board mount), (c) it ships with both a 15-pin
-1 mm ribbon and a 15-pin↔22-pin adapter for the Pi Zero CSI port, and
-(d) the OV5647 sensor is the same one uses for QR
-scanning, so software compatibility (`libcamera`, `raspicam`) is
-proven for our use case. Auto-focus is not needed for held-up
-QR-code scans at typical phone-screen distance.
+Standard Pi Camera Module footprint. Ships with a 15-pin↔22-pin
+Pi-Zero adapter ribbon. The OV5647 sensor is widely used in Pi QR
+signer builds, so software compatibility (`libcamera`,
+`raspicam`) is proven. Fixed-focus is fine for held-up phone-screen
+QR scans at typical distance.
 
-> **All values in this section are pending caliper verification on
-> arrival.** Arducam does not publish a precise mechanical drawing
-> for this module, and one Amazon reviewer specifically called out
-> that the corner hole pattern does NOT match the official Raspberry
-> Pi Zero W camera case mounts. So the numbers below are reasonable
-> starting estimates; treat them as provisional until measured.
+**Confirmed measurements (2026-05-21, calipers):**
 
-| Property | Estimate (verify) | Notes |
+| Property | Measured | Notes |
 |---|---|---|
-| Module outline | ~24 × 25 mm | OV5647-mini class PCBs sit roughly in this envelope |
-| Module thickness (with lens housing) | ~9.5 mm | shorter than v3 (no autofocus stack); savings can grow `ribbon_under_pi` |
-| Mounting hole pattern | ~21 × 12.5 mm pitch (estimate) | 4 corner holes; **measure** — the pattern is reportedly Arducam-specific, not Pi-standard |
-| Mounting hole diameter | ~2.2 mm | M2 clearance is the most common Arducam-mini choice |
-| Lens centre on PCB | ~(12, 12.5) mm | biased toward one edge — measure once it arrives |
+| PCB outline | **25.1 × 24.2 mm** | nearly square; x slightly longer |
+| PCB thickness | **1.55 mm** | |
+| Lens height | **7.14 mm** | PCB bottom to top of lens housing |
+| Lens centre on PCB | ~(12.55, 12.1) mm | estimated centred; OV5647 sensor array offset is <0.35 mm per datasheet |
+| Mounting hole pattern | ~21 × 12.5 mm pitch | standard Pi Camera corner pattern at ~2 mm inset; **verify on Loop 3 tub print** |
+| Mounting hole diameter | ~2.2 mm | M2 clearance |
 | Lens outer diameter (housing) | ~7 mm | drives `lens_cone` diameter on the back wall |
-| Ribbon connector | 15-pin 1 mm pitch on camera side | identify which edge it exits to fix the U-turn anchor |
-| Cables in box | 15 cm 15-pin (Pi A/B/3) + **15 cm 15-pin↔22-pin (Pi Zero CSI)** | the second one is what we use |
-| Cable lengths in the wild | 15 cm (in box) is overlong for our 87 mm enclosure; Arducam B085RW9K13 cable set offers 38 mm / 73 mm / 150 mm — the 38 mm is shorter than the 50 mm target and gives a clean U-turn |
+| FFC connector edge | short bottom edge | exits toward Pi's CSI ZIF; ribbon folds under Pi |
+| Cable in box | 15 cm 15-pin↔22-pin (Pi Zero CSI) | overlong for enclosure — use Arducam B085RW9K13 38 mm or 73 mm cable for clean fit |
 
 ### CSI ribbon U-turn
 
@@ -204,7 +196,7 @@ a future contributor can tell **what was deliberate** vs accidental.
 | 3 | Recessed lens cone | Reduces glare and protects the lens during travel. Costs nothing in print time. |
 | 4 | No SD cutout in production; cutout in `dev` variant | Production: sealed-appliance feel; SD is meant to be flashed once. Dev: faster iteration. Two SCAD profiles, one source. |
 | 5 | micro-USB cutout (not pass-through) | Standard, replaceable cable, no awkward strain on the bonnet pad. |
-| 6 | Arducam OV5647 Mini (B0033), not Pi Camera v3 | (a) ~$9 vs ~$25 cheaper; (b) the mini PCB has 4 corner mounting holes that the Pi Camera Zero W ribbon-only camera does not; (c) ships with the 15-pin↔22-pin Pi-Zero adapter cable in the box, no separate Adafruit 5819 purchase; (d) OV5647 is a proven sensor for phone-screen QR scans at held-up distance; (e) fixed-focus is fine for held-up phone-screen QR scans at typical distance — autofocus is overkill. Mechanical drawing is not published, so all camera datums in `case.scad` are PENDING caliper verification on arrival. |
+| 6 | Arducam UC-346 OV5647 (standard Pi Camera footprint) | (a) same footprint as Pi Camera Module 3 — 25.1×24.2 mm, confirmed 2026-05-21; (b) 4 corner mounting holes on the PCB; (c) ships with the 15-pin↔22-pin Pi-Zero adapter cable in the box; (d) OV5647 is a proven sensor for phone-screen QR scans at held-up distance; (e) fixed-focus is fine for held-up phone-screen QR scans at typical distance — autofocus is overkill. Key dimensions confirmed by caliper; mount pitch to be verified on Loop 3 tub print. |
 | 7 | PETG | Tough, mildly flexible, doesn't warp, travels well. ABS warps without a heated chamber; PLA is brittle in a hot car. |
 | 8 | Plain shell + tamper-sticker keep-out box | Alpha is function-first. The keep-out lets a future production variant ship pre-stickered without re-cutting the model. |
 | 9 | Lanyard hole + desk-stand chin: both deferred | Loop 1 showed the round lanyard hole through a curved wall was unusable; will revisit as a flat tab with a slot. Chin started at 8 mm on the front edge but conflicted with the I/O cluster which has to live on that edge — will be re-added on the BACK edge in a later iteration once the chin geometry is shaped. |
@@ -318,12 +310,12 @@ exiting a different edge, rotate the camera anchor 90° / 180° in
 | joystick cap base | 12.2 × 12.2 × 3.4 mm | 2026-05-16 | calipers (square silicone footprint sitting on the bonnet PCB around the joystick switch) |
 | `joystick_dia` | 9.5 mm | 2026-05-16 | derived: stem OD 7.22 + 2× tilt sweep at lid inner face (~0.8 mm) + 0.5 mm FDM clearance |
 | `joystick_well_dia` | 11.0 mm | 2026-05-16 | derived: stem OD 7.22 + 2× tilt sweep at lid outer face (~1.4 mm) + 0.5 mm FDM clearance + visual border |
-| `camera_module_x` | 25.0 mm (estimate) | _pending_ | Arducam B0033 PCB **short** edge — oriented portrait with FFC on right |
-| `camera_module_y` | 32.0 mm (estimate) | _pending_ | Arducam B0033 PCB **long** edge — oriented portrait with FFC on right |
-| `camera_module_z` | 9.5 mm (estimate) | _pending_ | Arducam B0033 stack-up (PCB + lens housing) — verify with calipers on arrival |
-| `camera_lens_centre` | (12.5, 16.0) mm (estimate) | _pending_ | Arducam B0033 lens optical centre on PCB (roughly centred, biased toward FFC end) |
-| `camera_mount_pitch` | (12.5, 21.0) mm (estimate) | _pending_ | Hole pattern — narrow in x, taller in y, matching portrait orientation. Amazon reviewer notes it does NOT match Pi-standard; measure on arrival |
-| `camera_mount_dia` | 2.2 mm (estimate) | _pending_ | Arducam B0033 corner hole diameter — likely M2 clearance, verify |
+| `camera_module_x` | **25.1 mm** | confirmed 2026-05-21 | UC-346 PCB edge along x (FFC exits short bottom edge) |
+| `camera_module_y` | **24.2 mm** | confirmed 2026-05-21 | UC-346 PCB edge along y |
+| `camera_module_z` | **7.14 mm** | confirmed 2026-05-21 | PCB bottom to top of lens housing (Pi standoff height = 3.0 + 7.14 + 6.0 = **16.14 mm**) |
+| `camera_lens_centre` | (12.55, 12.1) mm | estimated | centred on PCB; OV5647 sensor offset <0.35 mm; verify lens-cone alignment on Loop 3 print |
+| `camera_mount_pitch` | (12.5, 21.0) mm | estimated | Standard Pi Camera corner pattern (~2 mm inset from each edge of 25.1×24.2 mm PCB); verify post alignment on Loop 3 tub print |
+| `camera_mount_dia` | 2.2 mm | estimated | M2 clearance; verify on Loop 3 print |
 | Camera FFC exit edge | RIGHT (high x) assumed | _pending_ | **Critical**: if the FFC exits from a different edge, swap x↔y in all camera_* vars and re-check lens-cone alignment |
 
 ### Authoritative source for any future precision
