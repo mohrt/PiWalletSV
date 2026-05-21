@@ -20,12 +20,17 @@ import {
 import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
 import {
   KIND_XPUB,
+  KIND_SIGNED,
+  type SignedTxT,
+  atomicBeefTxid,
   bytesToHex,
   encodeEnvelope,
   hexToBytes,
+  decodeEnvelope,
 } from "../lib/envelope.js";
 import { CoinSelectError, selectUtxosGreedy } from "../lib/coin-select.js";
 import { encodeMultipartLines } from "../pw1.js";
+import { Transaction } from "@bsv/sdk";
 import { ProofFetchError, fetchInputProof } from "../lib/proof-fetcher.js";
 import { renderHeader } from "./nav.js";
 import {
@@ -66,6 +71,10 @@ import {
   type CameraScanHandle,
   startCameraScan,
 } from "../lib/camera-scan.js";
+import {
+  type Pw1ScanHandle,
+  startPw1Scan,
+} from "../lib/camera-scan-pw1.js";
 
 const RECENT_WINDOW = 8;
 const SATS_PER_BSV = 100_000_000;
@@ -152,6 +161,7 @@ export function mountWalletDetailPage(
   let sendStep: SendStep = { step: "form" };
   let feeRec: FeeRecommendation | null = null;
   let addrScanHandle: CameraScanHandle | null = null;
+  let pw1ScanHandle: Pw1ScanHandle | null = null;
   let selectedFeeRate = DEFAULT_FEE_RATE_SATSKB;
 
   let proposalFrames: string[] | null = null;
@@ -377,9 +387,8 @@ export function mountWalletDetailPage(
           </div>
 
           <div id="sendStep-qr" hidden>
-            <p class="muted-line">
-              Animated PW1 proposal — point the Pi camera at this canvas.
-            </p>
+            <h2>Step 1 — show proposal to Pi</h2>
+            <p class="muted-line">Point the Pi camera at this animated QR.</p>
             <canvas id="proposalQr" width="320" height="320"></canvas>
             <p class="muted-line">
               Frame <span id="proposalFrameIdx">0</span> /
@@ -390,8 +399,36 @@ export function mountWalletDetailPage(
               <button id="proposalToggle" type="button" class="primary">Pause</button>
               <button id="proposalDone" type="button">New send</button>
             </div>
+
+            <hr class="section-divider" />
+
+            <h2>Step 2 — scan Pi's signed response</h2>
+            <p class="muted-line">
+              After the Pi signs, point this camera at the Pi's response QR.
+            </p>
+            <div id="pw1ScanWidget" hidden>
+              <video id="pw1ScanVideo" class="addr-scan-video" playsinline muted autoplay></video>
+              <p class="muted-line" id="pw1ScanStatus">Scanning for signed TX…</p>
+              <p class="muted-line" id="pw1ScanProgress"></p>
+              <div class="actions">
+                <button id="pw1ScanCancel" type="button">Cancel</button>
+              </div>
+            </div>
+            <div id="pw1ScanActions" class="actions">
+              <button id="pw1ScanStart" type="button" class="primary">Scan Pi's response</button>
+            </div>
+
+            <div id="broadcastWidget" hidden>
+              <p id="broadcastInfo" class="muted-line"></p>
+              <div class="actions">
+                <button id="broadcastBtn" type="button" class="primary">Broadcast</button>
+                <button id="proposalDone2" type="button">New send</button>
+              </div>
+              <p id="broadcastStatus" class="muted-line"></p>
+            </div>
+
             <details class="advanced proposal-hex-details">
-              <summary>Or sign over SSH (paste hex)</summary>
+              <summary>Sign over SSH instead (paste hex)</summary>
               <p class="muted-line">
                 Copy hex then on the Pi run:
                 <code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code>
@@ -582,8 +619,16 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", toggleAnimation);
     root.querySelector<HTMLButtonElement>("#proposalDone")
       ?.addEventListener("click", resetSendCard);
+    root.querySelector<HTMLButtonElement>("#proposalDone2")
+      ?.addEventListener("click", resetSendCard);
     root.querySelector<HTMLButtonElement>("#copyProposalHex")
       ?.addEventListener("click", () => void onCopyProposalHex());
+    root.querySelector<HTMLButtonElement>("#pw1ScanStart")
+      ?.addEventListener("click", () => void onStartPw1Scan());
+    root.querySelector<HTMLButtonElement>("#pw1ScanCancel")
+      ?.addEventListener("click", stopPw1Scan);
+    root.querySelector<HTMLButtonElement>("#broadcastBtn")
+      ?.addEventListener("click", () => void onBroadcast());
 
     // Fee tier radio — highlight selected
     root.querySelectorAll<HTMLInputElement>('input[name="feeTier"]').forEach((r) => {
@@ -1374,12 +1419,140 @@ export function mountWalletDetailPage(
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Inline PW1 signed-TX scanner
+  // ---------------------------------------------------------------------------
+
+  function stopPw1Scan(): void {
+    pw1ScanHandle?.stop();
+    pw1ScanHandle = null;
+    const $widget = root.querySelector<HTMLElement>("#pw1ScanWidget");
+    const $actions = root.querySelector<HTMLElement>("#pw1ScanActions");
+    if ($widget) $widget.hidden = true;
+    if ($actions) $actions.hidden = false;
+  }
+
+  async function onStartPw1Scan(): Promise<void> {
+    const $widget = root.querySelector<HTMLElement>("#pw1ScanWidget");
+    const $actions = root.querySelector<HTMLElement>("#pw1ScanActions");
+    const $video = root.querySelector<HTMLVideoElement>("#pw1ScanVideo");
+    const $status = root.querySelector<HTMLElement>("#pw1ScanStatus");
+    const $progress = root.querySelector<HTMLElement>("#pw1ScanProgress");
+    if (!$widget || !$video || !$status || !$actions) return;
+
+    stopPw1Scan();
+    $status.textContent = "Scanning for signed TX…";
+    if ($progress) $progress.textContent = "";
+    $widget.hidden = false;
+    $actions.hidden = true;
+
+    pw1ScanHandle = await startPw1Scan(
+      $video,
+      (received, total) => {
+        if ($progress) {
+          $progress.textContent = total
+            ? `Frame ${received} / ${total}`
+            : received > 0 ? `${received} frame${received > 1 ? "s" : ""} received…` : "";
+        }
+      },
+      (bytes) => {
+        stopPw1Scan();
+        void onSignedTxReceived(bytes);
+      },
+      (err) => {
+        if ($status) $status.textContent = err;
+      },
+    );
+  }
+
+  async function onSignedTxReceived(bytes: Uint8Array): Promise<void> {
+    const $broadcast = root.querySelector<HTMLElement>("#broadcastWidget");
+    const $info = root.querySelector<HTMLElement>("#broadcastInfo");
+    const $broadcastStatus = root.querySelector<HTMLElement>("#broadcastStatus");
+    if (!$broadcast || !$info) return;
+
+    let env: Awaited<ReturnType<typeof decodeEnvelope>>;
+    try {
+      env = await decodeEnvelope(bytes);
+    } catch (e) {
+      if ($info) $info.textContent = `decode error: ${(e as Error).message}`;
+      $broadcast.hidden = false;
+      return;
+    }
+
+    if (env.kind !== KIND_SIGNED) {
+      if ($info) $info.textContent = `unexpected envelope type: ${env.kind}`;
+      $broadcast.hidden = false;
+      return;
+    }
+
+    const signed = env as SignedTxT;
+    let txid = "";
+    let sizeBytes = 0;
+    try {
+      const tx = Transaction.fromAtomicBEEF(Array.from(signed.atomicBeef));
+      txid = tx.id("hex");
+      sizeBytes = signed.atomicBeef.byteLength;
+    } catch {
+      try { txid = atomicBeefTxid(signed.atomicBeef); } catch { txid = "unknown"; }
+    }
+
+    if ($info) {
+      $info.innerHTML = `Ready to broadcast<br><code class="mono" style="font-size:0.75rem;word-break:break-all">${txid}</code>${sizeBytes ? `<br><span class="muted-line">${sizeBytes} bytes</span>` : ""}`;
+    }
+    if ($broadcastStatus) $broadcastStatus.textContent = "";
+    $broadcast.hidden = false;
+
+    // Store for broadcast
+    const $btn = root.querySelector<HTMLButtonElement>("#broadcastBtn");
+    if ($btn) $btn.dataset.signedHex = bytesToHex(signed.atomicBeef);
+    if ($btn) $btn.dataset.txid = txid;
+  }
+
+  async function onBroadcast(): Promise<void> {
+    if (!wallet) return;
+    const $btn = root.querySelector<HTMLButtonElement>("#broadcastBtn");
+    const $status = root.querySelector<HTMLElement>("#broadcastStatus");
+    if (!$btn || !$status) return;
+
+    const rawHex = $btn.dataset.signedHex;
+    if (!rawHex) { $status.textContent = "no signed TX — scan the Pi's response first"; return; }
+
+    $btn.disabled = true;
+    $btn.textContent = "Broadcasting…";
+    $status.classList.remove("error");
+    $status.textContent = "";
+
+    try {
+      if (!woc) woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
+      await woc.broadcastRaw(rawHex);
+      const txid = $btn.dataset.txid ?? "";
+      const explorer = wallet.network === "test"
+        ? `https://test.whatsonchain.com/tx/${txid}`
+        : `https://whatsonchain.com/tx/${txid}`;
+      $status.classList.remove("error");
+      $status.innerHTML = `✓ Broadcast! <a href="${explorer}" target="_blank" rel="noopener noreferrer">View on explorer ↗</a>`;
+      $btn.textContent = "Broadcasted";
+    } catch (e) {
+      $status.classList.add("error");
+      $status.textContent = `broadcast failed: ${(e as Error).message}`;
+      $btn.disabled = false;
+      $btn.textContent = "Retry broadcast";
+    }
+  }
+
   function resetSendCard(): void {
     stopProposalAnimation();
+    stopPw1Scan();
     proposalFrames = null;
     proposalFrameIdx = 0;
     sendStep = { step: "form" };
     showSendStep("form");
+    // Reset broadcast widget
+    const $broadcast = root.querySelector<HTMLElement>("#broadcastWidget");
+    const $pw1Actions = root.querySelector<HTMLElement>("#pw1ScanActions");
+    if ($broadcast) $broadcast.hidden = true;
+    if ($pw1Actions) $pw1Actions.hidden = false;
     const $status = root.querySelector<HTMLElement>("#sendFormStatus");
     if ($status) { $status.classList.remove("error"); $status.textContent = ""; }
   }
@@ -1572,5 +1745,6 @@ export function mountWalletDetailPage(
     stopProposalAnimation();
     stopExportAnimation();
     stopAddrScan();
+    stopPw1Scan();
   };
 }

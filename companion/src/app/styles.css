@@ -145,9 +145,21 @@ a:hover {
   flex-shrink: 0;
 }
 
-/* Empty state for the wallets list. Centered, with a clear "go scan an
-   xpub" CTA so a brand-new visitor knows what to do without bouncing
-   to the docs site first. */
+/* Wallets page toolbar — sits between header and card */
+
+.wallets-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  min-height: 1.8rem;
+}
+
+.wallets-toolbar .muted-line {
+  margin: 0;
+}
+
+/* Empty state for the wallets list */
 .empty-state {
   text-align: center;
   padding: 1.5rem 0.5rem 0.5rem;
