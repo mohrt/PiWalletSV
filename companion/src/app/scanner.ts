@@ -82,7 +82,7 @@ export function mountScannerPage(
 
         <section class="card paste-hex-card">
           <details>
-            <summary>Or paste xpub (import from another companion)</summary>
+            <summary>Or paste xpub <span class="info-tip" title="An xpub (extended public key) lets the companion derive your wallet addresses without exposing your private keys or seed phrase.">ⓘ</span></summary>
             <p class="muted-line">Paste the xpub below, and select the network.</p>
             <textarea id="pasteXpub" class="hex-blob" rows="3"
               placeholder="xpub6…"
