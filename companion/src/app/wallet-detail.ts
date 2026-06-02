@@ -22,7 +22,6 @@ import {
   KIND_XPUB,
   KIND_SIGNED,
   type SignedTxT,
-  atomicBeefTxid,
   bytesToHex,
   encodeEnvelope,
   hexToBytes,
@@ -1525,13 +1524,20 @@ export function mountWalletDetailPage(
 
     const signed = env as SignedTxT;
     let txid = "";
+    let rawHex = "";
     let sizeBytes = 0;
     try {
       const tx = Transaction.fromAtomicBEEF(Array.from(signed.atomicBeef));
-      txid = tx.id("hex");
-      sizeBytes = signed.atomicBeef.byteLength;
-    } catch {
-      try { txid = atomicBeefTxid(signed.atomicBeef); } catch { txid = "unknown"; }
+      txid = tx.id("hex") as string;
+      rawHex = tx.toHex();
+      sizeBytes = rawHex.length / 2;
+    } catch (e) {
+      if ($info) {
+        $info.textContent =
+          `signed_tx Atomic BEEF parse failed: ${(e as Error).message}`;
+      }
+      $broadcast.hidden = false;
+      return;
     }
 
     if ($info) {
@@ -1540,10 +1546,13 @@ export function mountWalletDetailPage(
     if ($broadcastStatus) $broadcastStatus.textContent = "";
     $broadcast.hidden = false;
 
-    // Store for broadcast
     const $btn = root.querySelector<HTMLButtonElement>("#broadcastBtn");
-    if ($btn) $btn.dataset.signedHex = bytesToHex(signed.atomicBeef);
-    if ($btn) $btn.dataset.txid = txid;
+    if ($btn) {
+      $btn.dataset.signedHex = rawHex;
+      $btn.dataset.txid = txid;
+      $btn.disabled = false;
+      $btn.textContent = "Broadcast";
+    }
   }
 
   async function onBroadcast(): Promise<void> {
@@ -1572,7 +1581,14 @@ export function mountWalletDetailPage(
       $btn.textContent = "Broadcasted";
     } catch (e) {
       $status.classList.add("error");
-      $status.textContent = `broadcast failed: ${(e as Error).message}`;
+      let msg: string;
+      if (e instanceof WocError) {
+        msg = e.message;
+        if (e.bodySnippet) msg += `\nWoC said: ${e.bodySnippet}`;
+      } else {
+        msg = (e as Error).message;
+      }
+      $status.textContent = `broadcast failed: ${msg}`;
       $btn.disabled = false;
       $btn.textContent = "Retry broadcast";
     }
