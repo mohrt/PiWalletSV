@@ -684,6 +684,84 @@ button:hover:not(:disabled) {
   padding: 0.25rem 0;
 }
 
+/* Collapsible panels (Balance UTXOs, Receive address list, etc.) */
+
+.panel-details {
+  margin-top: 0.75rem;
+}
+
+.panel-details summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.panel-details-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.panel-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.panel-details summary::after {
+  content: "▾";
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+
+.panel-details:not([open]) summary::after {
+  transform: rotate(-90deg);
+}
+
+.panel-details summary:hover {
+  background: rgba(79, 156, 255, 0.1);
+  border-color: rgba(79, 156, 255, 0.4);
+  color: var(--accent-strong);
+}
+
+.panel-details summary:hover::after {
+  color: var(--accent-strong);
+}
+
+.panel-details[open] summary {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+.panel-details-body {
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: var(--surface-2);
+  padding: 0.65rem 0.75rem 0.75rem;
+}
+
+.panel-details-body .utxo-list,
+.panel-details-body .addr-list {
+  margin-top: 0;
+}
+
 .utxo-list {
   list-style: none;
   margin: 0.5rem 0 0;
@@ -1190,8 +1268,18 @@ body.terms-locked {
 .wallet-card-balance {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem 0.4rem;
   margin-left: auto;
+}
+
+.wallet-pending-hint {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #e3b86c;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .wallet-balance {
@@ -1227,6 +1315,10 @@ body.terms-locked {
   margin: 0 0 0.75rem;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.5rem;
+}
+
+.send-balance-line .info-tip-text {
+  margin-top: 0.45rem;
 }
 
 .send-progress {
@@ -1481,73 +1573,6 @@ button.danger-outline:hover {
   background: #000;
 }
 
-/* Fee tier picker */
-
-.fee-tiers {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin: 0.75rem 0;
-}
-
-.fee-tier {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  cursor: pointer;
-  transition: border-color 100ms;
-}
-
-.fee-tier.selected,
-.fee-tier:has(input:checked) {
-  border-color: var(--accent);
-  background: rgba(79, 156, 255, 0.07);
-}
-
-.fee-tier input[type="radio"] {
-  flex: 0 0 auto;
-  accent-color: var(--accent);
-}
-
-.fee-tier-label {
-  font-weight: 600;
-  font-size: 0.9rem;
-  min-width: 5rem;
-}
-
-.fee-tier-rate {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 0.85rem;
-  color: var(--accent);
-  flex: 1;
-  text-align: right;
-}
-
-.fee-tier-custom {
-  flex-wrap: wrap;
-}
-
-.fee-tier-desc {
-  font-size: 0.78rem;
-  margin: 0;
-  flex: 1;
-}
-
-.fee-custom-input {
-  width: 6rem;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.85rem;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 5px;
-}
-
 /* Review table */
 
 .review-table {
@@ -1605,20 +1630,32 @@ button.danger-outline:hover {
   gap: 0.5rem;
 }
 
-.receive-list-section {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
+.receive-list-hint {
+  margin: 0 0 0.5rem;
 }
 
-.receive-list-section h3 {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--muted);
-  margin: 0 0 0.25rem;
+.receive-verify-line {
+  margin: -0.35rem 0 0.75rem;
 }
 
-/* On-device verify callout */
+.receive-verify-line .info-tip-text {
+  margin-top: 0.45rem;
+}
+
+.receive-verify-steps {
+  display: block;
+  margin: 0.45rem 0;
+}
+
+.receive-verify-steps strong {
+  font-weight: 600;
+}
+
+.receive-verify-line .info-tip-text a {
+  font-size: 0.82rem;
+}
+
+/* On-device verify callout (legacy) */
 
 .verify-tip {
   font-size: 0.82rem;
@@ -1762,7 +1799,6 @@ button.danger-outline:hover {
   color: var(--danger);
 }
 
-.send-spv-tip,
 .balance-spv-note {
   font-size: 0.82rem;
   margin-top: 0.25rem;

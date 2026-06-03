@@ -54,7 +54,6 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const defaultNetwork = getDefaultNetwork();
 
   const sel = (v: string, cur: string) => v === cur ? " selected" : "";
-  const chk = (v: string, cur: string) => v === cur ? " checked" : "";
 
   root.innerHTML = `
     <main class="page">
@@ -65,37 +64,23 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       <section class="card">
         <h2>Send defaults</h2>
 
-        <div class="field">
-          <span class="field-label">Default fee tier</span>
-          <p class="muted-line" id="feeRateLoading">Loading current rates…</p>
-          <div class="fee-tiers" id="settingsFeeTiers">
-            <label class="fee-tier${feeTier === "economy" ? " selected" : ""}">
-              <input type="radio" name="settingsFeeTier" value="economy"${chk("economy", feeTier)} />
-              <span class="fee-tier-label">Economy</span>
-              <span class="fee-tier-rate" id="sEconomy">—</span>
-              <span class="fee-tier-desc muted-line">slower, cheapest</span>
-            </label>
-            <label class="fee-tier${feeTier === "standard" ? " selected" : ""}">
-              <input type="radio" name="settingsFeeTier" value="standard"${chk("standard", feeTier)} />
-              <span class="fee-tier-label">Standard</span>
-              <span class="fee-tier-rate" id="sStandard">—</span>
-              <span class="fee-tier-desc muted-line">recommended</span>
-            </label>
-            <label class="fee-tier${feeTier === "priority" ? " selected" : ""}">
-              <input type="radio" name="settingsFeeTier" value="priority"${chk("priority", feeTier)} />
-              <span class="fee-tier-label">Priority</span>
-              <span class="fee-tier-rate" id="sPriority">—</span>
-              <span class="fee-tier-desc muted-line">fastest confirmation</span>
-            </label>
-            <label class="fee-tier fee-tier-custom${feeTier === "custom" ? " selected" : ""}">
-              <input type="radio" name="settingsFeeTier" value="custom"${chk("custom", feeTier)} />
-              <span class="fee-tier-label">Custom</span>
-              <input id="sCustomRate" type="number" min="0" step="1"
-                value="${customFeeRate}"
-                class="fee-custom-input" />
-              <span class="fee-tier-desc muted-line">sat/kB</span>
-            </label>
-          </div>
+        <label class="field">
+          <span>Default fee tier</span>
+          <select id="settingsFeeTierSelect" class="fee-tier-select">
+            <option value="economy"${sel("economy", feeTier)}>Economy</option>
+            <option value="standard"${sel("standard", feeTier)}>Standard</option>
+            <option value="priority"${sel("priority", feeTier)}>Priority</option>
+            <option value="custom"${sel("custom", feeTier)}>Custom…</option>
+          </select>
+          <p class="muted-line send-fee-loading" id="feeRateLoading">Loading current rates…</p>
+        </label>
+        <div id="settingsFeeCustomRow" class="fee-custom-row"${feeTier === "custom" ? "" : " hidden"}>
+          <label class="field">
+            <span>Custom rate (sat/kB)</span>
+            <input id="sCustomRate" type="number" min="0" step="1"
+              value="${customFeeRate}"
+              placeholder="${DEFAULT_FEE_RATE_SATSKB}" />
+          </label>
         </div>
 
         <label class="field" style="margin-top:1rem">
@@ -148,6 +133,8 @@ export function mountSettingsPage(root: HTMLElement): () => void {
 
   // ---- element refs ----
   const $feeRateLoading  = root.querySelector<HTMLElement>("#feeRateLoading")!;
+  const $feeTierSelect   = root.querySelector<HTMLSelectElement>("#settingsFeeTierSelect")!;
+  const $feeCustomRow    = root.querySelector<HTMLElement>("#settingsFeeCustomRow")!;
   const $fiat            = root.querySelector<HTMLSelectElement>("#fiatCurrency")!;
   const $network         = root.querySelector<HTMLSelectElement>("#defaultNetwork")!;
   const $clearBtn        = root.querySelector<HTMLButtonElement>("#clearBtn")!;
@@ -167,48 +154,70 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     savedTimer = setTimeout(() => { $savedBanner.hidden = true; savedTimer = null; }, 2000);
   }
 
-  // ---- fee tier radios ----
-  function highlightSelectedTier(): void {
-    root.querySelectorAll<HTMLElement>(".fee-tier").forEach((el) => {
-      const radio = el.querySelector<HTMLInputElement>("input[type=radio]");
-      el.classList.toggle("selected", !!radio?.checked);
-    });
+  let feeRec: FeeRecommendation | null = null;
+
+  function refreshFeeTierLabels(): void {
+    const economy = feeRec?.economy ?? DEFAULT_FEE_RATE_SATSKB;
+    const standard = feeRec?.standard ?? DEFAULT_FEE_RATE_SATSKB;
+    const priority = feeRec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
+    const tier = $feeTierSelect.value;
+
+    function fmtOptionLabel(name: string, rate: number): string {
+      return `${name} — ${formatFeeRate(rate)}`;
+    }
+
+    for (const [value, name, rate] of [
+      ["economy", "Economy", economy],
+      ["standard", "Standard", standard],
+      ["priority", "Priority", priority],
+    ] as const) {
+      const opt = $feeTierSelect.querySelector<HTMLOptionElement>(`option[value="${value}"]`);
+      if (opt) opt.textContent = fmtOptionLabel(name, rate);
+    }
+
+    const customOpt = $feeTierSelect.querySelector<HTMLOptionElement>('option[value="custom"]');
+    if (customOpt) {
+      const parsed = parseInt($customRateInput.value, 10);
+      const customRate = Number.isInteger(parsed) && parsed >= 0
+        ? parsed
+        : getDefaultCustomFeeRate();
+      customOpt.textContent = tier === "custom"
+        ? fmtOptionLabel("Custom", customRate)
+        : "Custom…";
+    }
+    $feeTierSelect.value = tier;
   }
 
-  root.querySelectorAll<HTMLInputElement>('input[name="settingsFeeTier"]').forEach((r) => {
-    r.addEventListener("change", () => {
-      highlightSelectedTier();
-      localStorage.setItem(KEY_DEFAULT_FEE_TIER, r.value);
-      flashSaved();
-    });
+  function onSettingsFeeTierChanged(): void {
+    $feeCustomRow.hidden = $feeTierSelect.value !== "custom";
+    localStorage.setItem(KEY_DEFAULT_FEE_TIER, $feeTierSelect.value);
+    refreshFeeTierLabels();
+    flashSaved();
+  }
+
+  $feeTierSelect.addEventListener("change", onSettingsFeeTierChanged);
+
+  $customRateInput.addEventListener("input", () => {
+    if ($feeTierSelect.value === "custom") refreshFeeTierLabels();
   });
 
   $customRateInput.addEventListener("blur", () => {
     const rate = parseInt($customRateInput.value, 10);
     if (Number.isInteger(rate) && rate >= 0) {
       localStorage.setItem(KEY_CUSTOM_FEE_RATE, String(rate));
+      refreshFeeTierLabels();
       flashSaved();
     }
   });
 
   // ---- load live fee rates from WoC mainnet ----
   void (async () => {
-    let rec: FeeRecommendation | null = null;
     try {
       const woc = new WocClient({ baseUrl: effectiveWocBase("main") });
-      rec = await fetchFeeRecommendation(woc);
+      feeRec = await fetchFeeRecommendation(woc);
     } catch { /* use defaults */ }
 
-    const economy  = rec?.economy  ?? DEFAULT_FEE_RATE_SATSKB;
-    const standard = rec?.standard ?? DEFAULT_FEE_RATE_SATSKB;
-    const priority = rec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
-
-    const $eco = root.querySelector<HTMLElement>("#sEconomy");
-    const $std = root.querySelector<HTMLElement>("#sStandard");
-    const $pri = root.querySelector<HTMLElement>("#sPriority");
-    if ($eco) $eco.textContent = formatFeeRate(economy);
-    if ($std) $std.textContent = formatFeeRate(standard);
-    if ($pri) $pri.textContent = formatFeeRate(priority);
+    refreshFeeTierLabels();
     $feeRateLoading.hidden = true;
   })();
 

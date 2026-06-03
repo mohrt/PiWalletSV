@@ -18,6 +18,7 @@ import {
   deriveAddressBatch,
 } from "../lib/derive.js";
 import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
+import { relativeTimeFrom } from "../lib/relative-time.js";
 import {
   KIND_XPUB,
   KIND_SIGNED,
@@ -97,21 +98,6 @@ function formatSats(n: number): string {
 
 function formatBsv(n: number): string {
   return `${(n / SATS_PER_BSV).toFixed(8)} BSV`;
-}
-
-function relativeTimeFrom(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return iso;
-  const ms = Date.now() - t;
-  if (ms < 0) return new Date(iso).toLocaleString();
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  const day = Math.floor(hr / 24);
-  return `${day}d ago`;
 }
 
 function shortTxid(txid: string): string {
@@ -290,9 +276,11 @@ export function mountWalletDetailPage(
           <p class="muted-line" id="balanceMeta"></p>
           <p class="muted-line balance-spv-note" id="balanceSpvNote" hidden></p>
           <p class="muted-line balance-status" id="balanceStatus"></p>
-          <details id="utxoDetails" hidden>
-            <summary>UTXOs (<span id="utxoCount">0</span>)</summary>
-            <ul id="utxoList" class="utxo-list"></ul>
+          <details id="utxoDetails" class="panel-details" hidden>
+            <summary><span class="panel-details-label">UTXOs (<span id="utxoCount">0</span>)</span></summary>
+            <div class="panel-details-body">
+              <ul id="utxoList" class="utxo-list"></ul>
+            </div>
           </details>
         </section>
 
@@ -308,10 +296,14 @@ export function mountWalletDetailPage(
           <p class="send-balance-line muted-line">
             Spendable: <span id="sendBalanceHero">—</span>
             <span id="sendBalancePending" hidden></span>
-          </p>
-          <p class="muted-line send-spv-tip">
-            Sending uses SPV verification — only confirmed on-chain coins are
-            spendable. Pending UTXOs must confirm first.
+            <span class="info-tip-wrap">
+              <button id="sendSpvInfoTip" class="info-tip" type="button"
+                aria-label="Why only confirmed coins are spendable">ⓘ</button>
+              <span id="sendSpvInfoText" class="info-tip-text" hidden>
+                Sending uses SPV verification — only confirmed on-chain coins are
+                spendable. Pending UTXOs must confirm first.
+              </span>
+            </span>
           </p>
           <div id="sendStep-form">
             <h2>Send</h2>
@@ -498,7 +490,21 @@ export function mountWalletDetailPage(
 
         <!-- Receive tab -->
         <section id="tab-receive" class="card tab-panel${activeTab === "receive" ? " active" : ""}" role="tabpanel">
-          <h2>Receive</h2>
+          <h2 class="receive-heading">Receive</h2>
+          <p class="receive-verify-line muted-line">
+            Confirm this address on the Pi before sharing it.
+            <span class="info-tip-wrap">
+              <button id="receiveVerifyTip" class="info-tip" type="button"
+                aria-label="Why verify on the Pi">ⓘ</button>
+              <span id="receiveVerifyText" class="info-tip-text" hidden>
+                The companion derives addresses from your public key only — if the
+                browser were tampered with, it could show someone else's address.
+                <span id="receiveVerifySteps" class="receive-verify-steps"></span>
+                <a href="${DOCS_BASE_URL}/security/#address-verification" target="_blank"
+                  rel="noopener noreferrer">Address verification guide ↗</a>
+              </span>
+            </span>
+          </p>
           <p class="muted-line" id="receivePath"></p>
           <div class="receive-row">
             <canvas id="receiveQr" width="240" height="240"></canvas>
@@ -512,14 +518,16 @@ export function mountWalletDetailPage(
               <p class="muted-line" id="receiveStatus"></p>
             </div>
           </div>
-          <p class="verify-tip muted-line" id="verifyTip"></p>
-          <section class="receive-list-section">
-            <h3>Recent receive addresses</h3>
-            <p class="muted-line">
-              A window of 8 addresses around the current pointer (<span id="receiveWindowDesc">m/0/0</span>).
-            </p>
-            <ul id="receiveList" class="addr-list"></ul>
-          </section>
+          <details class="panel-details">
+            <summary><span class="panel-details-label">Recent receive addresses</span></summary>
+            <div class="panel-details-body">
+              <p class="muted-line receive-list-hint">
+                A window of 8 addresses around the current pointer
+                (<span id="receiveWindowDesc">m/0/0</span>).
+              </p>
+              <ul id="receiveList" class="addr-list"></ul>
+            </div>
+          </details>
         </section>
 
         <!-- History tab -->
@@ -643,6 +651,12 @@ export function mountWalletDetailPage(
       ?.addEventListener("change", (e) => void onUnitSelectChange((e.target as HTMLSelectElement).value as DisplayUnit));
 
     // Send tab
+    root.querySelector<HTMLButtonElement>("#sendSpvInfoTip")
+      ?.addEventListener("click", (e) => {
+        e.preventDefault();
+        const tip = root.querySelector<HTMLElement>("#sendSpvInfoText");
+        if (tip) tip.hidden = !tip.hidden;
+      });
     root.querySelector<HTMLButtonElement>("#scanAddress")
       ?.addEventListener("click", () => void onStartAddrScan());
     root.querySelector<HTMLButtonElement>("#addrScanCancel")
@@ -707,6 +721,12 @@ export function mountWalletDetailPage(
       ?.addEventListener("input", () => onFeeTierChanged());
 
     // Receive tab
+    root.querySelector<HTMLButtonElement>("#receiveVerifyTip")
+      ?.addEventListener("click", (e) => {
+        e.preventDefault();
+        const tip = root.querySelector<HTMLElement>("#receiveVerifyText");
+        if (tip) tip.hidden = !tip.hidden;
+      });
     root.querySelector<HTMLButtonElement>("#copyAddress")
       ?.addEventListener("click", () => void onCopy());
     root.querySelector<HTMLButtonElement>("#prevIdx")
@@ -2161,7 +2181,7 @@ export function mountWalletDetailPage(
     const $canvas = root.querySelector<HTMLCanvasElement>("#receiveQr")!;
     const $status = root.querySelector<HTMLElement>("#receiveStatus")!;
     const $prev = root.querySelector<HTMLButtonElement>("#prevIdx")!;
-    const $tip = root.querySelector<HTMLElement>("#verifyTip");
+    const $steps = root.querySelector<HTMLElement>("#receiveVerifySteps");
 
     $path.textContent = `${wallet.path} / ${derived.subPath}`;
     $addr.textContent = derived.address;
@@ -2171,14 +2191,11 @@ export function mountWalletDetailPage(
     $status.textContent =
       idx === 0 ? "first address (index 0)" : `address #${idx} on receive branch`;
 
-    if ($tip) {
-      const steps = idx === 0
-        ? "open <strong>Show deposit address</strong> — it starts at address #0"
-        : `open <strong>Show deposit address</strong> and press RIGHT <strong>${idx} time${idx === 1 ? "" : "s"}</strong> to reach address #${idx}`;
-      $tip.innerHTML =
-        `To verify on your Pi: ${steps}, then confirm it matches. ` +
-        `<a href="${DOCS_BASE_URL}/security/#address-verification" target="_blank" ` +
-        `rel="noopener noreferrer">Why?</a>`;
+    if ($steps) {
+      $steps.innerHTML = idx === 0
+        ? "On the Pi: open <strong>Show deposit address</strong> — it starts at address #0."
+        : `On the Pi: open <strong>Show deposit address</strong> and press RIGHT ` +
+          `<strong>${idx} time${idx === 1 ? "" : "s"}</strong> to reach address #${idx}.`;
     }
 
     try {

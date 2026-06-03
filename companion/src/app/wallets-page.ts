@@ -8,6 +8,8 @@
  * Primary actions are Send and Receive (deep-link into wallet detail tabs).
  * Rename and Remove live in the wallet's Advanced tab.
  */
+import { splitConfirmedPending } from "../lib/balance-split.js";
+import { relativeTimeFrom } from "../lib/relative-time.js";
 import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
 import {
   type WalletRecord,
@@ -139,8 +141,23 @@ export function mountWalletsPage(root: HTMLElement): () => void {
         : `<span class="mainnet-badge" title="BSV mainnet">MAINNET</span>`;
 
       const balanceHtml = w.lastScan
-        ? `<span class="wallet-balance">Balance: ${escapeHtml(formatBalance(w.lastScan.totalSats))}</span>`
+        ? (() => {
+            const split = splitConfirmedPending(w.lastScan.utxos);
+            let pendingHtml = "";
+            if (split.hasPending) {
+              if (split.allPending) {
+                pendingHtml = `<span class="wallet-pending-hint">pending</span>`;
+              } else {
+                pendingHtml =
+                  `<span class="wallet-pending-hint">+${escapeHtml(formatBalance(split.pendingSats))} pending</span>`;
+              }
+            }
+            return `<span class="wallet-balance">Balance: ${escapeHtml(formatBalance(w.lastScan.totalSats))}</span>${pendingHtml}`;
+          })()
         : `<span class="wallet-balance muted-line">Balance: —</span>`;
+      const scanMeta = w.lastScan
+        ? `scanned ${relativeTimeFrom(w.lastScan.at)} · `
+        : "";
       const refreshBtn = `<button class="wallet-refresh-btn" data-refresh="${w.id}" title="Refresh balance" aria-label="Refresh balance">↻</button>`;
 
       li.innerHTML = `
@@ -156,7 +173,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
             </div>
           </div>
           <div class="wallet-card-meta muted-line">
-            <code title="fingerprint">${w.fingerprint}</code> ·
+            ${scanMeta}<code title="fingerprint">${w.fingerprint}</code> ·
             ${escapeHtml(w.path)} ·
             paired ${new Date(w.addedAt).toLocaleDateString()}
           </div>
