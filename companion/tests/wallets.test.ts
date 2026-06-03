@@ -143,6 +143,7 @@ describe("wallets store", () => {
       lastReceiveUsed: 1,
       lastChangeUsed: -1,
       addressesScanned: 22,
+      stoppedAt: { receive: 22, change: 20 },
     });
     const after = await getWallet(rec.id);
     expect(after?.lastScan?.totalSats).toBe(5000);

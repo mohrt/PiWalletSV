@@ -204,6 +204,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
         lastReceiveUsed: result.lastReceiveUsed,
         lastChangeUsed: result.lastChangeUsed,
         addressesScanned: result.addressesScanned,
+        stoppedAt: result.stoppedAt,
       };
       await setLastScan(wallet.id, snapshot);
       if (cancelled) return;
@@ -211,9 +212,13 @@ export function mountWalletsPage(root: HTMLElement): () => void {
       const idx = cachedWallets.findIndex(w => w.id === wallet.id);
       if (idx >= 0) cachedWallets[idx] = { ...cachedWallets[idx], lastScan: snapshot };
       renderList(cachedWallets);
-    } catch {
+    } catch (e) {
       btn.disabled = false;
       btn.textContent = "↻";
+      if (!cancelled) {
+        $status.classList.add("error");
+        $status.textContent = `balance refresh failed: ${(e as Error).message}`;
+      }
     }
   }
 

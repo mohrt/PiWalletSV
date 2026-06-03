@@ -250,6 +250,93 @@ describe("WocClient", () => {
     await expect(w.getUnspentBatch(tooMany)).rejects.toBeInstanceOf(WocError);
   });
 
+  it("getAddressHistoryBatch merges confirmed and unconfirmed tx rows", async () => {
+    const txA = "aa".repeat(32);
+    const txB = "bb".repeat(32);
+    const { fetch, calls } = stubFetch((url, init) => {
+      expect(url).toContain("/addresses/history/all");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        addresses: ["addrA", "addrB"],
+      });
+      return jsonResponse([
+        {
+          address: "addrA",
+          confirmed: {
+            result: [{ tx_hash: txA, height: 100 }],
+            error: "",
+          },
+          unconfirmed: { result: [], error: "" },
+        },
+        {
+          address: "addrB",
+          confirmed: { result: [], error: "" },
+          unconfirmed: {
+            result: [{ tx_hash: txB, height: 0 }],
+            error: "",
+          },
+        },
+      ]);
+    });
+    const w = new WocClient({ fetch, minIntervalMs: 0 });
+    const rows = await w.getAddressHistoryBatch(["addrA", "addrB"]);
+    expect(calls).toHaveLength(1);
+    expect(rows).toEqual([
+      { address: "addrA", entries: [{ txid: txA, blockHeight: 100 }] },
+      { address: "addrB", entries: [{ txid: txB, blockHeight: 0 }] },
+    ]);
+  });
+
+  it("getAddressHistoryBatch dedupes the same txid keeping the higher height", async () => {
+    const txid = "cc".repeat(32);
+    const { fetch } = stubFetch(() =>
+      jsonResponse([
+        {
+          address: "addrA",
+          confirmed: {
+            result: [{ tx_hash: txid, height: 50 }],
+            error: "",
+          },
+          unconfirmed: {
+            result: [{ tx_hash: txid, height: 0 }],
+            error: "",
+          },
+        },
+      ]),
+    );
+    const w = new WocClient({ fetch, minIntervalMs: 0 });
+    const rows = await w.getAddressHistoryBatch(["addrA"]);
+    expect(rows[0]?.entries).toEqual([{ txid, blockHeight: 50 }]);
+  });
+
+  it("getTxDetail maps vout addresses and BSV values", async () => {
+    const txid = "aa".repeat(32);
+    const { fetch, calls } = stubFetch(() =>
+      jsonResponse({
+        txid,
+        time: 1_700_000_000,
+        blockheight: 812345,
+        blocktime: 1_700_000_100,
+        vin: [{ txid: "bb".repeat(32), vout: 0 }],
+        vout: [
+          {
+            value: 0.00001,
+            scriptPubKey: { addresses: ["1Recv"] },
+          },
+        ],
+      }),
+    );
+    const w = new WocClient({ fetch, minIntervalMs: 0 });
+    const tx = await w.getTxDetail(txid);
+    expect(calls[0]?.url).toContain(`/tx/${txid}`);
+    expect(tx).toMatchObject({
+      txid,
+      time: 1_700_000_100,
+      blockHeight: 812345,
+      vin: [{ txid: "bb".repeat(32), vout: 0 }],
+      vout: [{ valueBsv: 0.00001, address: "1Recv" }],
+    });
+  });
+
   it("getTxHex returns hex text", async () => {
     const { fetch } = stubFetch(() => textResponse("0100000001abcdef\n"));
     const w = new WocClient({ fetch });
