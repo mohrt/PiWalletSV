@@ -328,6 +328,39 @@ def test_scan_on_progress_callback(
     assert len(progress_calls) == len(lines)
 
 
+def test_scan_on_progress_last_frame_reports_full_count(
+    fake_cam: MagicMock,
+    fake_picamera_cls: MagicMock,
+    fake_controls: types.SimpleNamespace,
+) -> None:
+    """Final fragment must report N/N, not 0/N — feed() resets the assembler."""
+    payload = b"x" * 400
+    lines = _make_lines(payload)
+    assert len(lines) >= 2
+
+    frame_iter: Iterator[list[MagicMock]] = iter(
+        [[_fake_decoded(ln)] for ln in lines]
+    )
+
+    def decode(frame: Any) -> list[MagicMock]:
+        try:
+            return next(frame_iter)
+        except StopIteration:
+            return []
+
+    progress_calls: list[tuple[int, str]] = []
+
+    def on_progress(count: int, msg: str) -> None:
+        progress_calls.append((count, msg))
+
+    _run_with_patches(
+        fake_picamera_cls, fake_controls, decode,
+        on_progress=on_progress,
+    )
+    n = len(lines)
+    assert progress_calls[-1] == (n, f"fragment {n}/{n}")
+
+
 def test_scan_camera_closed_on_multipart_error(
     fake_cam: MagicMock,
     fake_picamera_cls: MagicMock,

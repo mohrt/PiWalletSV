@@ -5,6 +5,34 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image, ImageOps
 
+# PiWallet case mounts the camera PCB with the sensor 90° off from the bonnet
+# LCD. Rotate captured frames so the sign-flow preview reads upright.
+PIWALLET_CAMERA_ROTATION_DEG: int = 90
+
+
+def rotate_rgb888(rgb: np.ndarray, degrees: int = PIWALLET_CAMERA_ROTATION_DEG) -> np.ndarray:
+    """Rotate an H×W×3 RGB888 array clockwise by 0/90/180/270° (0 = no-op)."""
+    if degrees == 0:
+        return rgb
+    if degrees not in (90, 180, 270):
+        raise ValueError(f"degrees must be 0/90/180/270, got {degrees}")
+    if rgb.dtype != np.uint8:
+        rgb = rgb.astype(np.uint8, copy=False)
+    if rgb.ndim != 3 or rgb.shape[2] < 3:
+        raise ValueError(f"expected H x W x 3 RGB array, got shape {rgb.shape}")
+    base = rgb[:, :, :3]
+    if not base.flags["C_CONTIGUOUS"]:
+        base = np.ascontiguousarray(base)
+    pil = Image.fromarray(base, mode="RGB")
+    pil = pil.transpose(
+        {
+            90: Image.Transpose.ROTATE_270,
+            180: Image.Transpose.ROTATE_180,
+            270: Image.Transpose.ROTATE_90,
+        }[degrees]
+    )
+    return np.asarray(pil)
+
 
 def rgb888_thumbnail(rgb: np.ndarray, *, max_edge: int = 208) -> Image.Image:
     """Return RGB image scaled to fit inside max_edge x max_edge (contain, bilinear).

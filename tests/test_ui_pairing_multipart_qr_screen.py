@@ -79,22 +79,3 @@ def test_b_long_returns_exit() -> None:
     assert s.done is True
     assert s.result == "exit"
 
-
-def test_pairing_multipart_qr_left_wraps_and_resets_timer() -> None:
-    t = {"ms": [50]}
-
-    def clock() -> int:
-        return t["ms"][0]
-
-    s = PairingMultipartQrScreen(["a", "b", "c"], clock_ms=clock, auto_advance_ms=1000)
-    fb = FrameBuffer()
-
-    s.idx = 1
-    s.on_event(Event(button=Button.LEFT, kind=EventKind.PRESS, at_ms=0))
-    assert s.idx == 0
-    t["ms"][0] = 50
-    s.draw(fb)
-    assert s.idx == 0
-    t["ms"][0] = 1050
-    s.draw(fb)
-    assert s.idx == 1

@@ -42,6 +42,14 @@ def test_assembler_out_of_order() -> None:
     assert out == blob
 
 
+def test_pw1_line_meta() -> None:
+    from piwallet.qr.multipart import pw1_line_meta
+
+    assert pw1_line_meta("PW1|10|3|abc") == (10, 3)
+    assert pw1_line_meta("  PW1|2|0|  ") == (2, 0)
+    assert pw1_line_meta("not pw1") is None
+
+
 def test_assembler_duplicate_fragment_ok() -> None:
     blob = b"w" * 400
     lines = split_envelope_to_lines(blob, max_encoded_chunk_chars=64)
