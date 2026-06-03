@@ -4,7 +4,7 @@
  * The companion only has two real surfaces in the post-split layout:
  *
  *   - `#/wallets`               (also used for `#/wallets/<id>` detail)
- *   - `#/scan`                  (multipart-QR scanner)
+ *   - `#/scan`                  (pair wallet — camera or paste xpub; reached from Wallets CTA)
  *
  * Marketing-flavoured pages (front-page explainer, security briefing,
  * disclaimer, encoder playground) live on the docs site (URL fixed at

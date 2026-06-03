@@ -461,6 +461,63 @@ button:hover:not(:disabled) {
   font-size: 0.9rem;
 }
 
+body.pair-locked {
+  overflow: hidden;
+}
+
+.pair-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  z-index: 9998;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding:
+    max(0.5rem, env(safe-area-inset-top))
+    max(0.5rem, env(safe-area-inset-right))
+    max(0.5rem, env(safe-area-inset-bottom))
+    max(0.5rem, env(safe-area-inset-left));
+}
+
+.pair-overlay[hidden] {
+  display: none;
+}
+
+.pair-modal {
+  background: var(--surface, #181b22);
+  color: var(--text, #eef);
+  border: 1px solid var(--border, #333);
+  border-radius: 12px 12px 0 0;
+  max-width: 480px;
+  width: 100%;
+  max-height: min(90vh, 520px);
+  overflow-y: auto;
+  padding: 1.25rem 1.35rem 1.5rem;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.45);
+}
+
+@media (min-width: 540px) {
+  .pair-overlay {
+    align-items: center;
+    padding:
+      max(1rem, env(safe-area-inset-top))
+      max(1rem, env(safe-area-inset-right))
+      max(1rem, env(safe-area-inset-bottom))
+      max(1rem, env(safe-area-inset-left));
+  }
+
+  .pair-modal {
+    border-radius: 10px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  }
+}
+
+.pair-modal h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+}
+
 .wallets-list {
   list-style: none;
   margin: 0;
