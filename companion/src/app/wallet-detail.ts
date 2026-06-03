@@ -17,7 +17,7 @@ import {
   deriveAddress,
   deriveAddressBatch,
 } from "../lib/derive.js";
-import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
+import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS, PW1_QR_FRAME_MS } from "../lib/config.js";
 import { relativeTimeFrom } from "../lib/relative-time.js";
 import {
   KIND_XPUB,
@@ -1903,7 +1903,7 @@ export function mountWalletDetailPage(
 
   function tickProposal(now: number): void {
     if (!proposalFrames || cancelled) { proposalRaf = null; return; }
-    const interval = 1000 / 6;
+    const interval = PW1_QR_FRAME_MS;
     if (now - proposalLastFrameAt >= interval) {
       proposalLastFrameAt = now;
       const $canvas = root.querySelector<HTMLCanvasElement>("#proposalQr");
@@ -2434,7 +2434,7 @@ export function mountWalletDetailPage(
 
   function tickExport(now: number): void {
     if (!exportFrames || cancelled) { exportRaf = null; return; }
-    const interval = 1000 / 6;
+    const interval = PW1_QR_FRAME_MS;
     if (now - exportLastFrameAt >= interval) {
       exportLastFrameAt = now;
       const $canvas = root.querySelector<HTMLCanvasElement>("#exportQr");

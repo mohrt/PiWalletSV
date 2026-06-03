@@ -44,3 +44,14 @@ export const HISTORY_PAGE_SIZE = 50;
  * rate from WoC and caches it this long before re-fetching.
  */
 export const PRICE_CACHE_TTL_MS = 60_000;
+
+/**
+ * Milliseconds each PW1 multipart QR frame stays on screen when the
+ * companion animates a proposal or export sequence.
+ *
+ * Matches ``PairingMultipartQrScreen.auto_advance_ms`` on the Pi bonnet
+ * (700 ms). The Pi camera decodes one frame every ~350 ms
+ * (``camera_scan.interval_s``), so 700 ms gives the camera two capture
+ * attempts per displayed QR before the frame rotates.
+ */
+export const PW1_QR_FRAME_MS = 700;
