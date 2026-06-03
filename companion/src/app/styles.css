@@ -1538,6 +1538,26 @@ button.danger-outline:hover {
   animation: fadeIn 0.15s ease;
 }
 
+label.button-like {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.45rem 0.85rem;
+  min-height: 44px;
+}
+
+label.button-like:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-4px); }
   to   { opacity: 1; transform: translateY(0); }

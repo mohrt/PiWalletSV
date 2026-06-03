@@ -12,6 +12,11 @@
  */
 import { renderHeader } from "./nav.js";
 import { _clearAllWallets } from "../lib/wallets.js";
+import {
+  buildWalletBackupFile,
+  importWalletBackup,
+  serializeWalletBackup,
+} from "../lib/wallet-backup.js";
 import { WocClient, effectiveWocBase } from "../lib/woc.js";
 import {
   DEFAULT_FEE_RATE_SATSKB,
@@ -107,6 +112,39 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       </section>
 
       <section class="card">
+        <h2>Offline use</h2>
+        <p class="muted-line">
+          After the first load, the app shell and your paired wallets stay
+          cached in this browser. You can open wallets and view the last
+          cached balance or history without network access.
+        </p>
+        <p class="muted-line">
+          Live balance scans, transaction history, fee estimates, and broadcast
+          need internet. Camera pairing works offline once the app is loaded,
+          but chain data always requires connectivity.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Backup &amp; migration</h2>
+        <p class="muted-line">
+          Export a JSON file of your paired wallets (xpub and labels only —
+          no seed phrases or private keys). Import it on another phone or
+          after clearing browser data to avoid re-scanning the Pi.
+        </p>
+        <div class="actions">
+          <button id="exportWallets" class="primary" type="button">
+            Export paired wallets
+          </button>
+          <label class="button-like">
+            Import backup…
+            <input id="importWalletsFile" type="file" accept=".json,application/json" hidden />
+          </label>
+        </div>
+        <p id="backupStatus" class="muted-line" aria-live="polite"></p>
+      </section>
+
+      <section class="card">
         <h2>Data</h2>
         <p class="muted-line">
           Remove all paired wallets and companion preferences from this
@@ -145,6 +183,9 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $clearStatus     = root.querySelector<HTMLElement>("#clearStatus")!;
   const $savedBanner     = root.querySelector<HTMLElement>("#settingsSavedBanner")!;
   const $customRateInput = root.querySelector<HTMLInputElement>("#sCustomRate")!;
+  const $exportWallets   = root.querySelector<HTMLButtonElement>("#exportWallets")!;
+  const $importFile      = root.querySelector<HTMLInputElement>("#importWalletsFile")!;
+  const $backupStatus    = root.querySelector<HTMLElement>("#backupStatus")!;
 
   // ---- saved flash ----
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -230,6 +271,75 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   $network.addEventListener("change", () => {
     localStorage.setItem(KEY_DEFAULT_NETWORK, $network.value);
     flashSaved();
+  });
+
+  // ---- wallet backup export / import ----
+  function setBackupStatus(msg: string, isError = false): void {
+    $backupStatus.textContent = msg;
+    $backupStatus.classList.toggle("error", isError);
+  }
+
+  $exportWallets.addEventListener("click", async () => {
+    $exportWallets.disabled = true;
+    setBackupStatus("");
+    try {
+      const file = await buildWalletBackupFile();
+      const json = serializeWalletBackup(file);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+      a.download = `piwallet-paired-wallets-${ts}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setBackupStatus(
+        file.wallets.length === 0
+          ? "Exported empty backup — no paired wallets yet."
+          : `Exported ${file.wallets.length} wallet${file.wallets.length === 1 ? "" : "s"}.`,
+      );
+      flashSaved();
+    } catch (e) {
+      setBackupStatus(`export failed: ${(e as Error).message}`, true);
+    } finally {
+      $exportWallets.disabled = false;
+    }
+  });
+
+  $importFile.addEventListener("change", () => {
+    const file = $importFile.files?.[0];
+    $importFile.value = "";
+    if (!file) return;
+    void (async () => {
+      setBackupStatus("Importing…");
+      try {
+        const raw = await file.text();
+        const result = await importWalletBackup(raw);
+        const parts: string[] = [];
+        if (result.imported > 0) {
+          parts.push(
+            `imported ${result.imported} wallet${result.imported === 1 ? "" : "s"}`,
+          );
+        }
+        if (result.skippedDuplicates > 0) {
+          parts.push(
+            `skipped ${result.skippedDuplicates} duplicate${result.skippedDuplicates === 1 ? "" : "s"}`,
+          );
+        }
+        if (result.failed.length > 0) {
+          parts.push(
+            `${result.failed.length} failed (${result.failed.map((f) => f.label).join(", ")})`,
+          );
+        }
+        const summary = parts.length > 0 ? parts.join("; ") + "." : "Nothing to import.";
+        setBackupStatus(summary, result.failed.length > 0 && result.imported === 0);
+        if (result.imported > 0) flashSaved();
+      } catch (e) {
+        setBackupStatus(`import failed: ${(e as Error).message}`, true);
+      }
+    })();
   });
 
   // ---- clear all data ----
