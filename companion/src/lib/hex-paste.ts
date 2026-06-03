@@ -55,6 +55,10 @@ export interface HexPasteResult {
   droppedOther: string[];
 }
 
+export type HexPasteDecodeResult =
+  | { ok: true; bytes: Uint8Array; parsed: HexPasteResult }
+  | { ok: false; error: string; parsed: HexPasteResult };
+
 /**
  * Scan pasted text and pull out a clean concatenated hex string.
  *
@@ -111,4 +115,40 @@ export function extractHexFromPaste(input: string): HexPasteResult {
     droppedLabeled,
     droppedOther,
   };
+}
+
+/** Parse pasted CLI / terminal text into envelope bytes. */
+export function decodeHexPasteToBytes(input: string): HexPasteDecodeResult {
+  const parsed = extractHexFromPaste(input);
+  const cleaned = parsed.hex;
+  if (cleaned.length === 0) {
+    return { ok: false, error: "paste an envelope hex string first", parsed };
+  }
+  if (cleaned.length % 2 !== 0) {
+    return {
+      ok: false,
+      error: `hex has odd length ${cleaned.length}; check the paste was complete`,
+      parsed,
+    };
+  }
+  if (!PURE_HEX.test(cleaned)) {
+    return {
+      ok: false,
+      error: "hex contains non-[0-9a-f] characters after stripping whitespace",
+      parsed,
+    };
+  }
+  try {
+    const bytes = new Uint8Array(cleaned.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(cleaned.slice(i * 2, i * 2 + 2), 16);
+    }
+    return { ok: true, bytes, parsed };
+  } catch (e) {
+    return {
+      ok: false,
+      error: `hex decode failed: ${(e as Error).message}`,
+      parsed,
+    };
+  }
 }

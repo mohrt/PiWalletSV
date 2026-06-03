@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { extractHexFromPaste } from "../src/lib/hex-paste.js";
+import { decodeHexPasteToBytes, extractHexFromPaste } from "../src/lib/hex-paste.js";
 
 /**
  * Pin the parser's behaviour against the CLI shapes operators are
@@ -102,5 +102,21 @@ describe("extractHexFromPaste", () => {
     const r = extractHexFromPaste("env_v1: deadbeef");
     expect(r.hex).toBe("");
     expect(r.droppedLabeled).toEqual(["env_v1: deadbeef"]);
+  });
+});
+
+describe("decodeHexPasteToBytes", () => {
+  it("returns bytes for valid pasted hex", () => {
+    const r = decodeHexPasteToBytes("signed_tx: 1f8b0800");
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(Array.from(r.bytes)).toEqual([0x1f, 0x8b, 0x08, 0x00]);
+    }
+  });
+
+  it("surfaces parse errors without throwing", () => {
+    const r = decodeHexPasteToBytes("verified: ok");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toContain("paste an envelope");
   });
 });

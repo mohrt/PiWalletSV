@@ -9,23 +9,19 @@
  * Privacy: getUserMedia is only invoked when the user clicks "Start
  * camera". Tracks are released on Stop and on page teardown.
  */
-import { Transaction } from "@bsv/sdk";
 import jsQR from "jsqr";
-import { type Pw1ScanHandle, startPw1Scan } from "../lib/camera-scan-pw1.js";
 
 import {
   type Envelope,
   KIND_PROPOSAL,
   KIND_SIGNED,
   KIND_XPUB,
-  type SignedTxT,
   type XpubExportT,
   atomicBeefTxid,
   bytesToHex,
   decodeEnvelope,
 } from "../lib/envelope.js";
 import { xpubFingerprint, DerivationError } from "../lib/derive.js";
-import { extractHexFromPaste } from "../lib/hex-paste.js";
 import { renderHeader } from "./nav.js";
 import { getDefaultNetwork } from "./settings-page.js";
 import { MultipartAssembler, MultipartQrError } from "../pw1.js";
@@ -34,115 +30,66 @@ import {
   WalletStoreError,
   addWallet,
   findByFingerprintAndPath,
-  listWallets,
 } from "../lib/wallets.js";
 import { ENVELOPE_VERSION } from "../lib/envelope.js";
 import type { NetworkT } from "../lib/envelope.js";
-import { WocClient, WocError, effectiveWocBase, wocExplorerTxUrl } from "../lib/woc.js";
 
 const SCAN_INTERVAL_MS = 80; // ~12.5 fps; plenty for animated QR
 const TEXT_DISPLAY_CAP = 64 * 1024; // truncate displayed body for huge payloads
 
 type ViewMode = "text" | "hex" | "base64url";
 
-export function mountScannerPage(
-  root: HTMLElement,
-  initialTab: "wallet" | "tx" = "wallet",
-): () => void {
+export function mountScannerPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
-      ${renderHeader("Scan / Import", "wallets")}
+      ${renderHeader("Add wallet", "wallets")}
 
-      <div class="scanner-tabs">
-        <button role="tab" data-scan-tab="wallet"
-          class="scanner-tab${initialTab === "wallet" ? " active" : ""}">
-          Add wallet
-        </button>
-        <button role="tab" data-scan-tab="tx"
-          class="scanner-tab${initialTab === "tx" ? " active" : ""}">
-          Submit signed TX
-        </button>
-      </div>
-
-      <!-- ── Add wallet tab ─────────────────────────────────────────── -->
-      <div id="scanTab-wallet"${initialTab !== "wallet" ? ' hidden' : ''}>
-        <section class="card scan-card">
-          <p class="muted-line scan-card-desc">Scan xpub from the Pi or other companion wallet.</p>
-          <video id="video" playsinline muted autoplay></video>
-          <div class="scan-status">
-            <p id="status">camera idle — click Start to grant access</p>
-            <p id="missing" class="muted-line"></p>
-            <div class="actions">
-              <button id="start" class="primary" type="button">Start camera</button>
-              <button id="stop" type="button">Stop</button>
-              <button id="reset" type="button">Reset</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="card paste-hex-card">
-          <details>
-            <summary>Or paste xpub</summary>
-            <p class="muted-line">
-              Paste the xpub below, and select the network.
-              <span class="info-tip-wrap">
-                <button class="info-tip" type="button" aria-label="What is an xpub?">ⓘ</button>
-                <span class="info-tip-text" hidden>
-                  An xpub (extended public key) lets the companion derive your wallet
-                  addresses without exposing your private keys or seed phrase.
-                </span>
-              </span>
-            </p>
-            <textarea id="pasteXpub" class="hex-blob" rows="3"
-              placeholder="xpub6…"
-              spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
-            <label class="field">
-              <span>Network</span>
-              <select id="pasteXpubNetwork">
-                <option value="main">Mainnet (BSV)</option>
-                <option value="test">Testnet (TBSV)</option>
-              </select>
-            </label>
-            <div class="actions">
-              <button id="pasteXpubImport" class="primary" type="button">
-                Import xpub
-              </button>
-              <button id="pasteXpubClear" type="button">Clear</button>
-            </div>
-            <p id="pasteXpubStatus" class="muted-line"></p>
-          </details>
-        </section>
-      </div>
-
-      <!-- ── Submit signed TX tab ───────────────────────────────────── -->
-      <div id="scanTab-tx"${initialTab !== "tx" ? ' hidden' : ''}>
-        <section class="card scan-card">
-          <p class="muted-line scan-card-desc">Scan the signed QR from the Pi.</p>
-          <video id="txVideo" playsinline muted autoplay></video>
-          <div class="scan-status">
-            <p id="txStatus">camera idle — click Start to grant access</p>
-            <p id="txProgress" class="muted-line"></p>
-            <div class="actions">
-              <button id="txStart" class="primary" type="button">Start camera</button>
-              <button id="txStop" type="button">Stop</button>
-            </div>
-          </div>
-        </section>
-
-        <section class="card paste-hex-card">
-          <h2>Or paste signed TX hex</h2>
-          <textarea id="pasteHex" class="hex-blob" rows="6"
-            placeholder="paste signed_tx hex here…"
-            spellcheck="false" autocorrect="off"></textarea>
+      <section class="card scan-card">
+        <p class="muted-line scan-card-desc">Scan xpub from the Pi or another companion wallet.</p>
+        <video id="video" playsinline muted autoplay></video>
+        <div class="scan-status">
+          <p id="status">camera idle — click Start to grant access</p>
+          <p id="missing" class="muted-line"></p>
           <div class="actions">
-            <button id="pasteHexDecode" class="primary" type="button">
-              Decode &amp; broadcast
-            </button>
-            <button id="pasteHexClear" type="button">Clear</button>
+            <button id="start" class="primary" type="button">Start camera</button>
+            <button id="stop" type="button">Stop</button>
+            <button id="reset" type="button">Reset</button>
           </div>
-          <p id="pasteHexStatus" class="muted-line"></p>
-        </section>
-      </div>
+        </div>
+      </section>
+
+      <section class="card paste-hex-card">
+        <details>
+          <summary>Or paste xpub</summary>
+          <p class="muted-line">
+            Paste the xpub below, and select the network.
+            <span class="info-tip-wrap">
+              <button class="info-tip" type="button" aria-label="What is an xpub?">ⓘ</button>
+              <span class="info-tip-text" hidden>
+                An xpub (extended public key) lets the companion derive your wallet
+                addresses without exposing your private keys or seed phrase.
+              </span>
+            </span>
+          </p>
+          <textarea id="pasteXpub" class="hex-blob" rows="3"
+            placeholder="xpub6…"
+            spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
+          <label class="field">
+            <span>Network</span>
+            <select id="pasteXpubNetwork">
+              <option value="main">Mainnet (BSV)</option>
+              <option value="test">Testnet (TBSV)</option>
+            </select>
+          </label>
+          <div class="actions">
+            <button id="pasteXpubImport" class="primary" type="button">
+              Import xpub
+            </button>
+            <button id="pasteXpubClear" type="button">Clear</button>
+          </div>
+          <p id="pasteXpubStatus" class="muted-line"></p>
+        </details>
+      </section>
 
       <section id="pairCard" class="card pair-card" hidden>
         <h2>Save as paired wallet</h2>
@@ -155,28 +102,6 @@ export function mountScannerPage(
           <button id="pairSave" class="primary" type="button">Save wallet</button>
           <a id="pairOpenList" href="#/wallets" hidden>Open wallets list</a>
         </div>
-      </section>
-
-      <section id="broadcastCard" class="card broadcast-card" hidden>
-        <h2>Broadcast signed transaction</h2>
-        <ol class="sign-steps" id="signSteps">
-          <li class="sign-step done" id="step-scan">Scanned</li>
-          <li class="sign-step active" id="step-broadcast">Broadcast</li>
-          <li class="sign-step" id="step-done">Done</li>
-        </ol>
-        <p id="broadcastTxid" class="broadcast-txid"></p>
-        <p id="broadcastMeta" class="muted-line"></p>
-        <div class="actions">
-          <button id="broadcastBtn" class="primary" type="button">
-            Broadcast to BSV mainnet
-          </button>
-          <a id="broadcastExplorer" target="_blank" rel="noopener noreferrer"
-            class="primary-link" hidden>View on WhatsOnChain</a>
-        </div>
-        <p id="broadcastStatus" class="muted-line"></p>
-        <p id="broadcastSuccess" class="broadcast-success" hidden>
-          ✓ Transaction accepted by the BSV network.
-        </p>
       </section>
 
       <section id="resultCard" class="card" hidden>
@@ -226,41 +151,6 @@ export function mountScannerPage(
   const $pairFp = root.querySelector<HTMLElement>("#pairFp")!;
   const $pairSave = root.querySelector<HTMLButtonElement>("#pairSave")!;
   const $pairOpenList = root.querySelector<HTMLAnchorElement>("#pairOpenList")!;
-  const $broadcastCard = root.querySelector<HTMLElement>("#broadcastCard")!;
-  const $broadcastTxid = root.querySelector<HTMLElement>("#broadcastTxid")!;
-  const $broadcastMeta = root.querySelector<HTMLElement>("#broadcastMeta")!;
-  const $broadcastBtn = root.querySelector<HTMLButtonElement>("#broadcastBtn")!;
-  const $broadcastExplorer = root.querySelector<HTMLAnchorElement>(
-    "#broadcastExplorer",
-  )!;
-  const $broadcastStatus = root.querySelector<HTMLElement>("#broadcastStatus")!;
-
-  // ── Tab switching ──────────────────────────────────────────────────────────
-  let activeTab: "wallet" | "tx" = initialTab;
-
-  function switchScannerTab(tab: "wallet" | "tx"): void {
-    activeTab = tab;
-    root.querySelectorAll<HTMLElement>("[id^='scanTab-']").forEach((el) => {
-      el.hidden = el.id !== `scanTab-${tab}`;
-    });
-    root.querySelectorAll<HTMLButtonElement>("[data-scan-tab]").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.scanTab === tab);
-    });
-    // Release cameras when switching tabs
-    if (tab !== "wallet" && scanning) releaseCamera();
-    if (tab !== "tx") stopTxCamera();
-  }
-
-  root.querySelectorAll<HTMLButtonElement>("[data-scan-tab]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      switchScannerTab(btn.dataset.scanTab as "wallet" | "tx");
-    });
-  });
-
-  // When a signed TX is scanned on the wallet tab, auto-switch to TX tab
-  function autoSwitchToTx(): void {
-    if (activeTab !== "tx") switchScannerTab("tx");
-  }
 
   const offscreen = document.createElement("canvas");
   const offscreenCtx = offscreen.getContext("2d", { willReadFrequently: true });
@@ -278,16 +168,6 @@ export function mountScannerPage(
   let envelope: Envelope | null = null;
   let lastDownloadUrl: string | null = null;
   let pairXpub: XpubExportT | null = null;
-  let signedTx: SignedTxT | null = null;
-  let signedTxNetwork: NetworkT = "main";
-  // Decoded once when the broadcast card is shown so the broadcast click
-  // doesn't re-parse the BEEF (and so a parse failure surfaces in the UI
-  // before the user commits to a network round-trip).
-  let signedTxRawHex = "";
-  let signedTxId = "";
-  let woc: WocClient | null = null;
-  let broadcasting = false;
-  let txCameraHandle: Pw1ScanHandle | null = null;
 
   $stop.disabled = true;
   $reset.disabled = true;
@@ -525,153 +405,6 @@ export function mountScannerPage(
     }
   }
 
-  function hideBroadcastCard(): void {
-    signedTx = null;
-    signedTxNetwork = "main";
-    signedTxRawHex = "";
-    signedTxId = "";
-    broadcasting = false;
-    $broadcastCard.hidden = true;
-    $broadcastTxid.textContent = "";
-    $broadcastMeta.textContent = "";
-    $broadcastStatus.classList.remove("error");
-    $broadcastStatus.textContent = "";
-    $broadcastBtn.disabled = false;
-    $broadcastBtn.textContent = "Broadcast to BSV mainnet";
-    $broadcastExplorer.hidden = true;
-    $broadcastExplorer.removeAttribute("href");
-  }
-
-  async function showBroadcastCard(env: SignedTxT): Promise<void> {
-    signedTx = env;
-    broadcasting = false;
-    // Resolve the wallet's network so we route the broadcast (and the
-    // explorer link) to the correct WoC base. The signed_tx envelope
-    // carries only `walletFp`, so we look it up against the paired
-    // wallet store; if the wallet isn't paired here we default to
-    // mainnet and surface a notice. Mismatches surface clearly when
-    // the broadcast eventually fails on the wrong network.
-    const fpHex = bytesToHex(env.walletFp).toLowerCase();
-    let net: NetworkT = "main";
-    try {
-      const all = await listWallets();
-      const match = all.find((w) => w.fingerprint === fpHex);
-      if (match) net = match.network ?? "main";
-    } catch {
-      // Treat IndexedDB errors as "no match"; fall through to mainnet.
-    }
-    signedTxNetwork = net;
-
-    // Decode the Atomic BEEF (BRC-95) once at card-display time so
-    // the operator sees the same txid the broadcast will submit, and
-    // any malformed payload surfaces a clear error before the user
-    // commits to a network round-trip.
-    let txid: string;
-    let rawHex: string;
-    let txByteSize: number;
-    try {
-      const tx = Transaction.fromAtomicBEEF(Array.from(env.atomicBeef));
-      txid = tx.id("hex") as string;
-      rawHex = tx.toHex();
-      txByteSize = rawHex.length / 2;
-    } catch (e) {
-      $broadcastCard.hidden = false;
-      $broadcastTxid.textContent = "";
-      $broadcastMeta.textContent = "";
-      $broadcastStatus.classList.add("error");
-      $broadcastStatus.textContent =
-        `signed_tx Atomic BEEF parse failed: ${(e as Error).message}`;
-      $broadcastBtn.disabled = true;
-      $broadcastBtn.textContent = "Cannot broadcast";
-      $broadcastExplorer.hidden = true;
-      return;
-    }
-    signedTxRawHex = rawHex;
-    signedTxId = txid;
-
-    $broadcastCard.hidden = false;
-    $broadcastTxid.textContent = `txid: ${txid}`;
-    const netLabel = net === "test" ? "TESTNET" : "mainnet";
-    $broadcastMeta.textContent =
-      `wallet ${fpHex} · raw tx ${txByteSize} bytes · ${netLabel}`;
-    $broadcastStatus.classList.remove("error");
-    $broadcastStatus.textContent = "";
-    $broadcastBtn.disabled = false;
-    $broadcastBtn.textContent =
-      net === "test" ? "Broadcast to BSV testnet" : "Broadcast to BSV mainnet";
-    $broadcastExplorer.hidden = true;
-    $broadcastExplorer.removeAttribute("href");
-  }
-
-  function setSignStep(step: "scan" | "broadcast" | "done" | "error"): void {
-    const $scan = root.querySelector<HTMLElement>("#step-scan");
-    const $broadcast = root.querySelector<HTMLElement>("#step-broadcast");
-    const $done = root.querySelector<HTMLElement>("#step-done");
-    if (!$scan || !$broadcast || !$done) return;
-    // Reset all
-    for (const el of [$scan, $broadcast, $done]) {
-      el.className = "sign-step";
-    }
-    if (step === "scan") {
-      $scan.classList.add("active");
-    } else if (step === "broadcast") {
-      $scan.classList.add("done");
-      $broadcast.classList.add("active");
-    } else if (step === "done") {
-      $scan.classList.add("done");
-      $broadcast.classList.add("done");
-      $done.classList.add("done");
-    } else if (step === "error") {
-      $scan.classList.add("done");
-      $broadcast.classList.add("error");
-    }
-  }
-
-  async function onBroadcast(): Promise<void> {
-    if (!signedTx || broadcasting) return;
-    broadcasting = true;
-    $broadcastBtn.disabled = true;
-    $broadcastBtn.textContent = "Broadcasting…";
-    $broadcastStatus.classList.remove("error");
-    $broadcastStatus.textContent = "Submitting to WhatsOnChain…";
-    setSignStep("broadcast");
-
-    const baseUrl = effectiveWocBase(signedTxNetwork);
-    if (!woc || woc.baseUrl !== baseUrl.replace(/\/+$/, "")) {
-      woc = new WocClient({ baseUrl });
-    }
-    try {
-      const txid = await woc.broadcastRaw(signedTxRawHex, signedTxId);
-      setSignStep("done");
-      const $success = root.querySelector<HTMLElement>("#broadcastSuccess");
-      if ($success) $success.hidden = false;
-      $broadcastStatus.textContent = `txid: ${txid}`;
-      if (txid.toLowerCase() !== signedTxId.toLowerCase()) {
-        $broadcastStatus.classList.add("error");
-        $broadcastStatus.textContent =
-          `WARNING: WoC returned txid ${txid} but the Pi signed ${signedTxId}.`;
-      }
-      $broadcastExplorer.href = wocExplorerTxUrl(txid, signedTxNetwork);
-      $broadcastExplorer.hidden = false;
-      $broadcastBtn.textContent = "Broadcasted";
-    } catch (e) {
-      setSignStep("error");
-      $broadcastStatus.classList.add("error");
-      let msg: string;
-      if (e instanceof WocError) {
-        msg = e.message;
-        if (e.bodySnippet) msg += `\nWoC said: ${e.bodySnippet}`;
-      } else {
-        msg = (e as Error).message;
-      }
-      $broadcastStatus.textContent = `broadcast failed: ${msg}`;
-      $broadcastBtn.disabled = false;
-      $broadcastBtn.textContent = "Retry broadcast";
-    } finally {
-      broadcasting = false;
-    }
-  }
-
   async function tryDecodeEnvelope(bytes: Uint8Array): Promise<void> {
     try {
       envelope = await decodeEnvelope(bytes);
@@ -699,10 +432,10 @@ export function mountScannerPage(
     }
 
     if (envelope?.kind === KIND_SIGNED) {
-      autoSwitchToTx();
-      void showBroadcastCard(envelope);
-    } else {
-      hideBroadcastCard();
+      setStatus(
+        "Signed tx detected — open Wallets → your wallet → Send → Step 2 to scan or paste the Pi response.",
+        false,
+      );
     }
 
     const defaultView: ViewMode = looksLikeText(bytes) ? "text" : "hex";
@@ -714,9 +447,18 @@ export function mountScannerPage(
     renderResultView();
     $resultCard.hidden = false;
     $reset.disabled = false;
-    const tag = envelope
-      ? `complete — ${envelope.kind === KIND_XPUB ? "xpub_export" : envelope.kind === KIND_PROPOSAL ? "unsigned_proposal" : "signed_tx"} (${bytes.length} bytes)`
-      : `complete — reassembled ${bytes.length} bytes`;
+    let tag: string;
+    if (!envelope) {
+      tag = `complete — reassembled ${bytes.length} bytes`;
+    } else if (envelope.kind === KIND_SIGNED) {
+      tag = `signed_tx (${bytes.length} bytes) — use Send → Step 2 in your wallet`;
+    } else if (envelope.kind === KIND_XPUB) {
+      tag = `complete — xpub_export (${bytes.length} bytes)`;
+    } else if (envelope.kind === KIND_PROPOSAL) {
+      tag = `complete — unsigned_proposal (${bytes.length} bytes)`;
+    } else {
+      tag = `complete — envelope (${bytes.length} bytes)`;
+    }
     setStatus(tag);
     $missing.textContent = "";
   }
@@ -838,57 +580,6 @@ export function mountScannerPage(
     $stop.disabled = true;
   }
 
-  // ── TX tab camera ──────────────────────────────────────────────────────────
-
-  const $txVideo = root.querySelector<HTMLVideoElement>("#txVideo")!;
-  const $txStatus = root.querySelector<HTMLElement>("#txStatus")!;
-  const $txProgress = root.querySelector<HTMLElement>("#txProgress")!;
-  const $txStart = root.querySelector<HTMLButtonElement>("#txStart")!;
-  const $txStop = root.querySelector<HTMLButtonElement>("#txStop")!;
-
-  function stopTxCamera(): void {
-    txCameraHandle?.stop();
-    txCameraHandle = null;
-    $txStart.disabled = false;
-    $txStop.disabled = true;
-  }
-
-  $txStop.disabled = true;
-
-  $txStart.addEventListener("click", () => void (async () => {
-    stopTxCamera();
-    $txStatus.textContent = "Starting camera…";
-    $txProgress.textContent = "";
-    $txStart.disabled = true;
-    $txStop.disabled = false;
-    txCameraHandle = await startPw1Scan(
-      $txVideo,
-      (received, total) => {
-        $txProgress.textContent = total
-          ? `Frame ${received} / ${total}`
-          : received > 0 ? `${received} frame${received > 1 ? "s" : ""} received…` : "";
-      },
-      async (bytes) => {
-        stopTxCamera();
-        $txStatus.textContent = "Decoded — loading…";
-        $txProgress.textContent = "";
-        void showResult(bytes);
-      },
-      (err) => {
-        $txStatus.textContent = err;
-        $txStart.disabled = false;
-        $txStop.disabled = true;
-      },
-    );
-    if (txCameraHandle) $txStatus.textContent = "Scanning for signed TX…";
-  })());
-
-  $txStop.addEventListener("click", () => {
-    stopTxCamera();
-    $txStatus.textContent = "camera stopped";
-    $txProgress.textContent = "";
-  });
-
   function resetAll(): void {
     asm = new MultipartAssembler();
     result = null;
@@ -901,7 +592,6 @@ export function mountScannerPage(
     $missing.textContent = "";
     $reset.disabled = true;
     hidePairCard();
-    hideBroadcastCard();
     if (lastDownloadUrl) {
       URL.revokeObjectURL(lastDownloadUrl);
       lastDownloadUrl = null;
@@ -976,93 +666,6 @@ export function mountScannerPage(
   $pairSave.addEventListener("click", () => {
     void onPairSave();
   });
-  $broadcastBtn.addEventListener("click", () => {
-    void onBroadcast();
-  });
-
-  // ---- Paste-hex bridge ----------------------------------------------
-  // Lets the operator skip the camera entirely when they have the
-  // envelope as text — typically a signed_tx blob piped over SSH from
-  // `piwallet sign --hex -` on the Pi (the "Sign over SSH" example in
-  // docs/cli.md). Reuses showResult() so xpub_export / proposal blobs
-  // work too — useful for debugging without ever opening the camera.
-  const $pasteHex = root.querySelector<HTMLTextAreaElement>("#pasteHex")!;
-  const $pasteHexDecode = root.querySelector<HTMLButtonElement>(
-    "#pasteHexDecode",
-  )!;
-  const $pasteHexClear = root.querySelector<HTMLButtonElement>(
-    "#pasteHexClear",
-  )!;
-  const $pasteHexStatus = root.querySelector<HTMLElement>("#pasteHexStatus")!;
-
-  function setPasteStatus(msg: string, isError = false): void {
-    $pasteHexStatus.textContent = msg;
-    $pasteHexStatus.classList.toggle("error", isError);
-  }
-
-  function onPasteHexDecode(): void {
-    // extractHexFromPaste() tolerates the labelled SSH-terminal output
-    // shape — lines like `verified: ...` and `txid: ...` are dropped,
-    // and a `signed_tx:` (or any `label:`) prefix is stripped from the
-    // hex line so the operator can paste the entire CLI summary.
-    const parsed = extractHexFromPaste($pasteHex.value);
-    const cleaned = parsed.hex;
-    if (cleaned.length === 0) {
-      setPasteStatus("paste an envelope hex string first", true);
-      return;
-    }
-    if (cleaned.length % 2 !== 0) {
-      setPasteStatus(
-        `hex has odd length ${cleaned.length}; check the paste was complete`,
-        true,
-      );
-      return;
-    }
-    if (!/^[0-9a-f]+$/.test(cleaned)) {
-      setPasteStatus(
-        "hex contains non-[0-9a-f] characters after stripping whitespace",
-        true,
-      );
-      return;
-    }
-    let bytes: Uint8Array;
-    try {
-      bytes = new Uint8Array(cleaned.length / 2);
-      for (let i = 0; i < bytes.length; i++) {
-        bytes[i] = parseInt(cleaned.slice(i * 2, i * 2 + 2), 16);
-      }
-    } catch (e) {
-      setPasteStatus(`hex decode failed: ${(e as Error).message}`, true);
-      return;
-    }
-    setPasteStatus(`decoding ${bytes.length} bytes…`);
-    // Reset the multipart assembler so a previous half-finished camera
-    // session doesn't bleed into this paste-driven session.
-    asm = new MultipartAssembler();
-    void showResult(bytes).then(() => {
-      // showResult() already updates the main #status banner; the
-      // textarea's own status echoes "decoded" so the operator
-      // doesn't have to scan up the page to find feedback. If we
-      // dropped any prefix-labelled summary lines (e.g. `verified:`,
-      // `txid:`) call that out so the operator knows the parse was
-      // generous on purpose, not by accident.
-      const droppedCount =
-        parsed.droppedLabeled.length + parsed.droppedOther.length;
-      const noteParts: string[] = [`decoded ${bytes.length} bytes`];
-      if (droppedCount > 0) {
-        noteParts.push(`ignored ${droppedCount} non-hex line(s)`);
-      }
-      noteParts.push("see the result card below");
-      setPasteStatus(noteParts.join(" — "));
-    });
-  }
-
-  $pasteHexDecode.addEventListener("click", onPasteHexDecode);
-  $pasteHexClear.addEventListener("click", () => {
-    $pasteHex.value = "";
-    setPasteStatus("");
-    $pasteHex.focus();
-  });
 
   // ── xpub paste import ───────────────────────────────────────────────────
   function setXpubStatus(msg: string, isError = false): void {
@@ -1131,7 +734,6 @@ export function mountScannerPage(
 
   return () => {
     releaseCamera();
-    stopTxCamera();
     if (lastDownloadUrl) {
       URL.revokeObjectURL(lastDownloadUrl);
       lastDownloadUrl = null;

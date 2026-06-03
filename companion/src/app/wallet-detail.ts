@@ -28,6 +28,7 @@ import {
   decodeEnvelope,
 } from "../lib/envelope.js";
 import { CoinSelectError, selectUtxosGreedy } from "../lib/coin-select.js";
+import { decodeHexPasteToBytes } from "../lib/hex-paste.js";
 import { encodeMultipartLines } from "../pw1.js";
 import { Transaction } from "@bsv/sdk";
 import { ProofFetchError, fetchInputProof } from "../lib/proof-fetcher.js";
@@ -444,18 +445,17 @@ export function mountWalletDetailPage(
               </div>
 
               <details class="advanced proposal-hex-details">
-                <summary>Sign over SSH instead (paste hex)</summary>
+                <summary>Sign over SSH instead of QR</summary>
                 <p class="muted-line">
                   Copy the hex below, then on the Pi run:<br>
                   <code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code><br>
-                  Then paste the signed hex on the
-                  <a href="#/scan/tx">Submit signed TX</a> page.
+                  When the Pi prints the signed output, open
+                  <strong>Step 2 — Scan</strong> and paste it there.
                 </p>
                 <textarea id="proposalHex" class="hex-blob" rows="6"
                   readonly spellcheck="false" autocorrect="off"></textarea>
                 <div class="actions">
                   <button id="copyProposalHex" type="button" class="primary">Copy hex</button>
-                  <a href="#/scan/tx" class="primary-link">Submit signed TX →</a>
                 </div>
                 <p class="muted-line" id="proposalHexStatus"></p>
               </details>
@@ -476,6 +476,25 @@ export function mountWalletDetailPage(
               <div id="pw1ScanActions" class="actions send-scan-actions">
                 <button id="pw1ScanStart" type="button" class="primary">Scan Pi's response</button>
               </div>
+
+              <details class="advanced signed-tx-paste-details">
+                <summary>Sign over SSH (paste signed hex)</summary>
+                <p class="muted-line">
+                  Paste the Pi's terminal output below — the full
+                  <code>verified:</code> / <code>txid:</code> / <code>signed_tx:</code>
+                  summary is fine.
+                </p>
+                <textarea id="pasteSignedTx" class="hex-blob" rows="6"
+                  placeholder="signed_tx: …"
+                  spellcheck="false" autocorrect="off"></textarea>
+                <div class="actions">
+                  <button id="pasteSignedTxDecode" type="button" class="primary">
+                    Decode &amp; broadcast
+                  </button>
+                  <button id="pasteSignedTxClear" type="button">Clear</button>
+                </div>
+                <p id="pasteSignedTxStatus" class="muted-line"></p>
+              </details>
 
               <div id="broadcastWidget" class="send-broadcast-panel" hidden>
                 <p id="broadcastInfo" class="send-broadcast-message muted-line"></p>
@@ -672,6 +691,10 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", () => void onStartPw1Scan());
     root.querySelector<HTMLButtonElement>("#pw1ScanCancel")
       ?.addEventListener("click", stopPw1Scan);
+    root.querySelector<HTMLButtonElement>("#pasteSignedTxDecode")
+      ?.addEventListener("click", () => void onPasteSignedTxDecode());
+    root.querySelector<HTMLButtonElement>("#pasteSignedTxClear")
+      ?.addEventListener("click", onPasteSignedTxClear);
     root.querySelector<HTMLButtonElement>("#broadcastBtn")
       ?.addEventListener("click", () => void onBroadcast());
     root.querySelector<HTMLButtonElement>("#broadcastDone")
@@ -1776,6 +1799,40 @@ export function mountWalletDetailPage(
     const $actions = root.querySelector<HTMLElement>("#pw1ScanActions");
     if ($widget) $widget.hidden = true;
     if ($actions) $actions.hidden = false;
+  }
+
+  function setPasteSignedTxStatus(msg: string, isError = false): void {
+    const $status = root.querySelector<HTMLElement>("#pasteSignedTxStatus");
+    if (!$status) return;
+    $status.textContent = msg;
+    $status.classList.toggle("error", isError);
+  }
+
+  function onPasteSignedTxClear(): void {
+    const $paste = root.querySelector<HTMLTextAreaElement>("#pasteSignedTx");
+    if ($paste) {
+      $paste.value = "";
+      $paste.focus();
+    }
+    setPasteSignedTxStatus("");
+  }
+
+  async function onPasteSignedTxDecode(): Promise<void> {
+    const $paste = root.querySelector<HTMLTextAreaElement>("#pasteSignedTx");
+    if (!$paste) return;
+    const decoded = decodeHexPasteToBytes($paste.value);
+    if (!decoded.ok) {
+      setPasteSignedTxStatus(decoded.error, true);
+      return;
+    }
+    setPasteSignedTxStatus(`decoding ${decoded.bytes.length} bytes…`);
+    stopPw1Scan();
+    await onSignedTxReceived(decoded.bytes);
+    const dropped =
+      decoded.parsed.droppedLabeled.length + decoded.parsed.droppedOther.length;
+    const noteParts = [`decoded ${decoded.bytes.length} bytes`];
+    if (dropped > 0) noteParts.push(`ignored ${dropped} non-hex line(s)`);
+    setPasteSignedTxStatus(noteParts.join(" — "));
   }
 
   async function onStartPw1Scan(): Promise<void> {
