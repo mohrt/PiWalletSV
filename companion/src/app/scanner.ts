@@ -27,6 +27,7 @@ import {
 import { xpubFingerprint, DerivationError } from "../lib/derive.js";
 import { extractHexFromPaste } from "../lib/hex-paste.js";
 import { renderHeader } from "./nav.js";
+import { getDefaultNetwork } from "./settings-page.js";
 import { MultipartAssembler, MultipartQrError } from "../pw1.js";
 import {
   type WalletRecord,
@@ -215,6 +216,7 @@ export function mountScannerPage(
   const $copyB64 = root.querySelector<HTMLButtonElement>("#copyB64")!;
   const $pasteXpub = root.querySelector<HTMLTextAreaElement>("#pasteXpub")!;
   const $pasteXpubNetwork = root.querySelector<HTMLSelectElement>("#pasteXpubNetwork")!;
+  $pasteXpubNetwork.value = getDefaultNetwork();
   const $pasteXpubImport = root.querySelector<HTMLButtonElement>("#pasteXpubImport")!;
   const $pasteXpubClear = root.querySelector<HTMLButtonElement>("#pasteXpubClear")!;
   const $pasteXpubStatus = root.querySelector<HTMLElement>("#pasteXpubStatus")!;

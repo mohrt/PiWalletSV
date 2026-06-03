@@ -46,11 +46,15 @@ export function bitailsBaseForNetwork(network: NetworkT): string {
  * Resolve the Bitails base URL the companion should fetch from.
  *
  * - Dev + mainnet  → Vite proxy `/bitails`            (avoids self-signed-cert CORS)
- * - Dev + testnet  → direct `test-api.bitails.io`     (CORS headers present in dev)
+ * - Dev + testnet  → Vite proxy `/bitails-test`      (test-api lacks CORS for localhost)
  * - Prod + mainnet → direct `api.bitails.io`           (CORS headers present)
  * - Prod + testnet → CloudFront proxy `/bitails-test`  (injects CORS headers on ALL
  *                    responses, including 504s from test-api.bitails.io which omits
  *                    CORS headers on error responses and would block the browser)
+ *
+ * Transaction history on testnet uses WhatsOnChain instead of Bitails — see
+ * {@link fetchWalletHistory} in `history.ts`. Bitails' testnet API is frequently
+ * down; WoC returns txid + height (no sat deltas).
  */
 export function effectiveBitailsBase(
   network: NetworkT,
@@ -58,6 +62,7 @@ export function effectiveBitailsBase(
 ): string {
   const dev = options.dev ?? import.meta.env.DEV;
   if (dev && network === "main") return BITAILS_DEV_PROXY_PATH;
+  if (dev && network === "test") return BITAILS_TESTNET_PROXY_PATH;
   if (!dev && network === "test") return BITAILS_TESTNET_PROXY_PATH;
   return bitailsBaseForNetwork(network);
 }

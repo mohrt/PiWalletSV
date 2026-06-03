@@ -9,6 +9,11 @@
   --accent: #4f9cff;
   --accent-strong: #6db1ff;
   --danger: #ff6b6b;
+  /* Aliases used by a few component rules */
+  --fg: var(--text);
+  --text-muted: var(--muted);
+  --card-border: var(--border);
+  --radius: 6px;
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }

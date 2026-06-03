@@ -141,7 +141,12 @@ type SendStep =
 // Main mount function
 // ---------------------------------------------------------------------------
 
-const VALID_TABS = new Set(["balance", "send", "receive", "history", "share"]);
+const VALID_TABS = new Set(["balance", "send", "receive", "history", "advanced"]);
+
+function normalizeTab(tab: string | undefined): string | undefined {
+  if (tab === "share") return "advanced";
+  return tab;
+}
 
 export function mountWalletDetailPage(
   root: HTMLElement,
@@ -182,9 +187,10 @@ export function mountWalletDetailPage(
   let displayUnit: DisplayUnit = "sats";
 
   // Active tab
-  type Tab = "balance" | "send" | "receive" | "history" | "share";
+  type Tab = "balance" | "send" | "receive" | "history" | "advanced";
+  const tabFromRoute = normalizeTab(initialTab);
   let activeTab: Tab =
-    initialTab && VALID_TABS.has(initialTab) ? (initialTab as Tab) : "balance";
+    tabFromRoute && VALID_TABS.has(tabFromRoute) ? (tabFromRoute as Tab) : "balance";
 
   root.innerHTML = `
     <main class="page">
@@ -256,7 +262,7 @@ export function mountWalletDetailPage(
           <button role="tab" data-tab="send" class="${activeTab === "send" ? "active" : ""}">Send</button>
           <button role="tab" data-tab="receive" class="${activeTab === "receive" ? "active" : ""}">Receive</button>
           <button role="tab" data-tab="history" class="${activeTab === "history" ? "active" : ""}">History</button>
-          <button role="tab" data-tab="share" class="${activeTab === "share" ? "active" : ""}">Advanced</button>
+          <button role="tab" data-tab="advanced" class="${activeTab === "advanced" ? "active" : ""}">Advanced</button>
           <select id="unitSelect" class="tab-unit-select">
             <option value="sats"${displayUnit === "sats" ? " selected" : ""}>sats</option>
             <option value="bsv"${displayUnit === "bsv" ? " selected" : ""}>BSV</option>
@@ -269,7 +275,7 @@ export function mountWalletDetailPage(
           <div class="balance-hero-row">
             <div class="balance-hero">
               <button id="balanceToggle" class="balance-hero-value" type="button"
-                title="Tap to toggle sats / USD">
+                title="Tap to cycle sats, BSV, or ${getFiatCurrency()}">
                 <span id="balanceHero">—</span>
               </button>
               <div id="balancePending" class="balance-pending" hidden></div>
@@ -330,7 +336,7 @@ export function mountWalletDetailPage(
                 <select id="sendUnit" class="send-unit-select">
                   <option value="sats">sats</option>
                   <option value="bsv">BSV</option>
-                  <option value="usd">USD</option>
+                  <option value="fiat">${getFiatCurrency()}</option>
                 </select>
                 <button id="sendMax" type="button" class="send-max-btn">Max</button>
               </div>
@@ -520,14 +526,17 @@ export function mountWalletDetailPage(
           </div>
           <p class="muted-line" id="historyStatus"></p>
           <div id="historyEmpty" class="empty-state" hidden>
-            <p>No transaction history yet.</p>
-            <p class="muted-line">Click Refresh to fetch history from Bitails.</p>
+            <p id="historyEmptyTitle">No transaction history yet.</p>
+            <p class="muted-line" id="historyEmptyHint">Click Refresh to fetch history from Bitails.</p>
+            <button id="scanBalanceForHistory" class="primary" type="button" hidden>
+              Scan balance first
+            </button>
           </div>
           <ul id="historyList" class="history-list"></ul>
         </section>
 
         <!-- Share tab -->
-        <section id="tab-share" class="card tab-panel${activeTab === "share" ? " active" : ""}" role="tabpanel">
+        <section id="tab-advanced" class="card tab-panel${activeTab === "advanced" ? " active" : ""}" role="tabpanel">
           <h2>Export to another companion</h2>
           <p class="muted-line">
             Show an animated QR so another companion can pair with this
@@ -639,7 +648,7 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", onSendMax);
     root.querySelector<HTMLSelectElement>("#sendUnit")
       ?.addEventListener("change", (e) => {
-        if ((e.target as HTMLSelectElement).value === "usd") void fetchBsvPrice();
+        if ((e.target as HTMLSelectElement).value === "fiat") void fetchBsvPrice();
       });
     root.querySelector<HTMLButtonElement>("#feeBack")
       ?.addEventListener("click", () => showSendStep("form"));
@@ -709,6 +718,8 @@ export function mountWalletDetailPage(
     // History tab
     root.querySelector<HTMLButtonElement>("#refreshHistory")
       ?.addEventListener("click", () => void onRefreshHistory());
+    root.querySelector<HTMLButtonElement>("#scanBalanceForHistory")
+      ?.addEventListener("click", () => void onScanBalanceForHistory());
 
     // Advanced tab
     root.querySelector<HTMLButtonElement>("#exportShow")
@@ -801,8 +812,13 @@ export function mountWalletDetailPage(
     root.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tab === tab);
     });
-    // Lazy-load history when tab first opened
-    if (tab === "history" && wallet?.lastHistory == null && !historyRunning) {
+    // Lazy-load history when tab first opened (requires balance scan first)
+    if (
+      tab === "history" &&
+      wallet?.lastScan &&
+      wallet.lastHistory == null &&
+      !historyRunning
+    ) {
       void onRefreshHistory();
     }
     // Silently verify receive index is still unused when tab opens
@@ -844,7 +860,11 @@ export function mountWalletDetailPage(
     renderBalance();
     // Keep the balance toggle button in sync
     const $toggle = root.querySelector<HTMLButtonElement>("#balanceToggle");
-    if ($toggle) $toggle.title = `Showing ${unit}`;
+    if ($toggle) {
+      const label =
+        unit === "fiat" ? getFiatCurrency() : unit === "bsv" ? "BSV" : "sats";
+      $toggle.title = `Tap to cycle (showing ${label})`;
+    }
   }
 
   async function onToggleDisplayUnit(): Promise<void> {
@@ -979,7 +999,7 @@ export function mountWalletDetailPage(
     }
   }
 
-  async function onRefreshBalance(): Promise<void> {
+  async function onRefreshBalance(options: { thenHistory?: boolean } = {}): Promise<void> {
     if (!wallet || scanRunning) return;
     scanRunning = true;
     const $refresh = root.querySelector<HTMLButtonElement>("#refreshBalance");
@@ -1016,6 +1036,7 @@ export function mountWalletDetailPage(
         lastReceiveUsed: result.lastReceiveUsed,
         lastChangeUsed: result.lastChangeUsed,
         addressesScanned: result.addressesScanned,
+        stoppedAt: result.stoppedAt,
       };
       await setLastScan(wallet.id, snapshot);
       wallet.lastScan = snapshot;
@@ -1035,6 +1056,9 @@ export function mountWalletDetailPage(
           `Scan complete — ${result.utxos.length} UTXO(s), ` +
           `${result.addressesScanned} addresses probed.` +
           (didAdvance ? ` · receive index → ${wallet.nextReceiveIndex}` : "");
+      }
+      if (options.thenHistory) {
+        await onRefreshHistory();
       }
     } catch (e) {
       if (cancelled) return;
@@ -1060,35 +1084,68 @@ export function mountWalletDetailPage(
     if (!wallet) return;
     const $list = root.querySelector<HTMLUListElement>("#historyList");
     const $empty = root.querySelector<HTMLElement>("#historyEmpty");
+    const $emptyTitle = root.querySelector<HTMLElement>("#historyEmptyTitle");
+    const $emptyHint = root.querySelector<HTMLElement>("#historyEmptyHint");
+    const $scanBtn = root.querySelector<HTMLButtonElement>("#scanBalanceForHistory");
+    const $refreshBtn = root.querySelector<HTMLButtonElement>("#refreshHistory");
     const $status = root.querySelector<HTMLElement>("#historyStatus");
     if (!$list || !$empty) return;
+
+    const needsScan = !wallet.lastScan;
+    if ($scanBtn) $scanBtn.hidden = !needsScan;
+    if ($refreshBtn) {
+      $refreshBtn.textContent = needsScan ? "Scan balance first" : "Refresh";
+    }
 
     const snap = wallet.lastHistory;
     if (!snap) {
       $empty.hidden = false;
       $list.innerHTML = "";
+      if ($emptyTitle) {
+        $emptyTitle.textContent = needsScan
+          ? "Balance scan required"
+          : "No transaction history yet.";
+      }
+      if ($emptyHint) {
+        $emptyHint.textContent = needsScan
+          ? "Refresh balance first so we know which addresses to check."
+          : wallet.network === "test"
+            ? "Click Refresh to fetch history from WhatsOnChain."
+            : "Click Refresh to fetch history from Bitails.";
+      }
       if ($status) $status.textContent = "";
       return;
     }
     $empty.hidden = snap.entries.length > 0;
+    if ($emptyTitle && snap.entries.length === 0) {
+      $emptyTitle.textContent = "No transactions found";
+    }
+    if ($emptyHint && snap.entries.length === 0) {
+      $emptyHint.textContent =
+        `Checked ${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} — none had history.`;
+    }
     if ($status) {
       $status.textContent =
         `${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"} · ` +
+        `${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} checked · ` +
         `last fetched ${relativeTimeFrom(snap.at)}`;
     }
     $list.innerHTML = "";
     for (const tx of snap.entries) {
       const li = document.createElement("li");
+      const deltaKnown = tx.deltaKnown !== false;
       const isReceive = tx.deltaSats >= 0;
       const isPending = tx.blockHeight === 0;
-      li.className = `history-row ${isReceive ? "receive" : "send"}${isPending ? " pending" : ""}`;
+      li.className = `history-row ${deltaKnown ? (isReceive ? "receive" : "send") : "unknown"}${isPending ? " pending" : ""}`;
       const network = wallet.network ?? "main";
+      const deltaHtml = deltaKnown
+        ? `<span class="history-delta ${isReceive ? "positive" : "negative"}">${isReceive ? "+" : ""}${formatSats(tx.deltaSats)}</span>`
+        : `<span class="history-delta muted-line">—</span>`;
+      const timeLabel = formatTxTimestamp(tx.timestamp);
       li.innerHTML = `
         <div class="history-top">
-          <span class="history-delta ${isReceive ? "positive" : "negative"}">
-            ${isReceive ? "+" : ""}${formatSats(tx.deltaSats)}
-          </span>
-          <span class="history-time muted-line">${escapeHtml(formatTxTimestamp(tx.timestamp))}</span>
+          ${deltaHtml}
+          <span class="history-time muted-line">${escapeHtml(timeLabel)}</span>
         </div>
         <div class="history-meta muted-line">
           <a href="${escapeHtml(wocExplorerTxUrl(tx.txid, network))}" target="_blank"
@@ -1102,26 +1159,45 @@ export function mountWalletDetailPage(
     }
   }
 
+  async function onScanBalanceForHistory(): Promise<void> {
+    await onRefreshBalance({ thenHistory: true });
+  }
+
   async function onRefreshHistory(): Promise<void> {
     if (!wallet || historyRunning) return;
+    if (!wallet.lastScan) {
+      await onRefreshBalance({ thenHistory: true });
+      return;
+    }
     historyRunning = true;
     const $btn = root.querySelector<HTMLButtonElement>("#refreshHistory");
     const $status = root.querySelector<HTMLElement>("#historyStatus");
     if ($btn) { $btn.disabled = true; $btn.textContent = "Fetching…"; }
-    if ($status) { $status.classList.remove("error"); $status.textContent = "Fetching history from Bitails…"; }
+    if ($status) { $status.classList.remove("error"); $status.textContent = wallet.network === "test"
+      ? "Fetching history from WhatsOnChain…"
+      : "Fetching history from Bitails…"; }
 
     if (!bitails) {
       bitails = new BitailsClient({ baseUrl: effectiveBitailsBase(wallet.network) });
+    }
+    if (!woc) {
+      woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
     }
 
     try {
       const snap = await fetchWalletHistory(wallet.xpub, bitails, {
         network: wallet.network,
-        lastReceiveUsed: wallet.lastScan?.lastReceiveUsed,
-        lastChangeUsed: wallet.lastScan?.lastChangeUsed,
-        onProgress: (done, total) => {
+        woc: wallet.network === "test" ? woc : undefined,
+        stoppedAtReceive: wallet.lastScan.stoppedAt?.receive,
+        stoppedAtChange: wallet.lastScan.stoppedAt?.change,
+        lastReceiveUsed: wallet.lastScan.lastReceiveUsed,
+        lastChangeUsed: wallet.lastScan.lastChangeUsed,
+        onProgress: (done, total, phase) => {
           if (cancelled || !$status) return;
-          $status.textContent = `Fetching history (${done}/${total} addresses)…`;
+          $status.textContent =
+            phase === "transactions"
+              ? `Loading transaction details (${done}/${total})…`
+              : `Fetching history (${done}/${total} addresses)…`;
         },
       });
       if (cancelled) return;
@@ -1131,6 +1207,7 @@ export function mountWalletDetailPage(
       if ($status) {
         $status.textContent =
           `${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"} · ` +
+          `${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} checked · ` +
           `last fetched just now`;
       }
     } catch (e) {
@@ -1315,7 +1392,7 @@ export function mountWalletDetailPage(
     const totalIn = utxos.reduce((a, u) => a + u.sats, 0);
     const estimatedFee = Math.ceil((utxos.length * 148 + 2 * 34 + 10) * feeRate / 1000);
     const maxSats = Math.max(0, totalIn - estimatedFee);
-    const unit = $unit.value as "sats" | "bsv" | "usd";
+    const unit = $unit.value as "sats" | "bsv" | "fiat";
     if (unit === "sats") {
       $amount.value = String(maxSats);
     } else if (unit === "bsv") {
@@ -1338,7 +1415,7 @@ export function mountWalletDetailPage(
     const recipient = $addr.value.trim();
     const amountRaw = $amountInput.value.trim();
     const amountNum = parseFloat(amountRaw);
-    const unit = $unitSelect.value as "sats" | "bsv" | "usd";
+    const unit = $unitSelect.value as "sats" | "bsv" | "fiat";
 
     if (!recipient) {
       $status.classList.add("error");
@@ -1360,7 +1437,7 @@ export function mountWalletDetailPage(
     } else {
       if (bsvUsdPrice === null || bsvUsdPrice === 0) {
         $status.classList.add("error");
-        $status.textContent = "USD price unavailable — switch to sats or BSV";
+        $status.textContent = `${getFiatCurrency()} price unavailable — switch to sats or BSV`;
         return;
       }
       sats = Math.round((amountNum / bsvUsdPrice) * SATS_PER_BSV);

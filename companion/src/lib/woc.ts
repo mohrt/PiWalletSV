@@ -118,6 +118,42 @@ export interface WocBulkUnspentResult {
   utxos: WocUnspentEntry[];
 }
 
+/** One tx row from {@link WocClient.getAddressHistoryBatch}. */
+export interface WocAddressHistoryEntry {
+  txid: string;
+  /** Confirmation block height (0 if mempool / unknown). */
+  blockHeight: number;
+}
+
+/** One row of a {@link WocClient.getAddressHistoryBatch} response. */
+export interface WocBulkHistoryResult {
+  address: string;
+  entries: WocAddressHistoryEntry[];
+}
+
+/** Parsed `GET /tx/{txid}` fields used for wallet history deltas. */
+export interface WocTxVinRef {
+  txid: string;
+  vout: number;
+  /** Non-empty when this input is a coinbase generation. */
+  coinbase?: string;
+}
+
+export interface WocTxVoutRef {
+  /** Output value in whole BSV (WoC decimal). */
+  valueBsv: number;
+  address?: string;
+}
+
+export interface WocTxDetail {
+  txid: string;
+  /** Unix timestamp (seconds). 0 if unknown. */
+  time: number;
+  blockHeight: number;
+  vin: WocTxVinRef[];
+  vout: WocTxVoutRef[];
+}
+
 /**
  * Max addresses per `POST /addresses/unspent` call. WoC documents
  * this as 20 across both mainnet and testnet. Going over yields an
@@ -531,6 +567,140 @@ export class WocClient {
       address,
       utxos: byAddress.get(address) ?? [],
     }));
+  }
+
+  /**
+   * Bulk confirmed + unconfirmed tx history lookup.
+   *
+   * `POST /addresses/history/all` returns tx hashes + heights per address.
+   * Unlike Bitails, WoC does not include net satoshi deltas — callers that
+   * need +/- amounts must fetch raw txs separately.
+   */
+  async getAddressHistoryBatch(
+    addresses: string[],
+  ): Promise<WocBulkHistoryResult[]> {
+    if (addresses.length === 0) return [];
+    if (addresses.length > WOC_BULK_BATCH_MAX) {
+      throw new WocError(
+        "/addresses/history/all",
+        0,
+        `bulk size ${addresses.length} exceeds max ${WOC_BULK_BATCH_MAX}`,
+      );
+    }
+    interface RawHistoryEntry {
+      tx_hash: string;
+      height?: number;
+    }
+    interface RawHistorySection {
+      result?: RawHistoryEntry[];
+      error?: string;
+    }
+    interface RawHistoryRow {
+      address?: string;
+      confirmed?: RawHistorySection;
+      unconfirmed?: RawHistorySection;
+      error?: string;
+    }
+    const raw = await this.request<RawHistoryRow[] | { error?: string }>(
+      "POST",
+      "/addresses/history/all",
+      { addresses },
+    );
+    if (!Array.isArray(raw)) {
+      const msg =
+        raw && typeof raw === "object" && "error" in raw
+          ? String(raw.error)
+          : "unexpected shape";
+      throw new WocError("/addresses/history/all", 200, `unexpected payload: ${msg}`);
+    }
+    const failed = raw.find(
+      (e) =>
+        (typeof e.error === "string" && e.error.length > 0) ||
+        (typeof e.confirmed?.error === "string" && e.confirmed.error.length > 0) ||
+        (typeof e.unconfirmed?.error === "string" && e.unconfirmed.error.length > 0),
+    );
+    if (failed) {
+      const msg =
+        failed.error ||
+        failed.confirmed?.error ||
+        failed.unconfirmed?.error ||
+        "unknown";
+      throw new WocError(
+        "/addresses/history/all",
+        200,
+        `address ${failed.address ?? "?"} failed: ${msg}`,
+      );
+    }
+    const byAddress = new Map<string, WocAddressHistoryEntry[]>();
+    for (const a of addresses) byAddress.set(a, []);
+    const upsert = (
+      list: WocAddressHistoryEntry[],
+      txid: string,
+      blockHeight: number,
+    ): void => {
+      const existing = list.find((e) => e.txid === txid);
+      if (!existing) {
+        list.push({ txid, blockHeight });
+        return;
+      }
+      if (blockHeight > existing.blockHeight) {
+        existing.blockHeight = blockHeight;
+      }
+    };
+    for (const row of raw) {
+      if (!row.address) continue;
+      const list = byAddress.get(row.address);
+      if (!list) continue;
+      for (const section of [row.confirmed, row.unconfirmed]) {
+        for (const h of section?.result ?? []) {
+          if (!h.tx_hash) continue;
+          upsert(list, h.tx_hash, h.height ?? 0);
+        }
+      }
+    }
+    return addresses.map((address) => ({
+      address,
+      entries: byAddress.get(address) ?? [],
+    }));
+  }
+
+  /** `GET /tx/{txid}` — decoded tx with vout addresses for history deltas. */
+  async getTxDetail(txid: string): Promise<WocTxDetail> {
+    interface RawVin {
+      txid?: string;
+      vout?: number;
+      coinbase?: string;
+    }
+    interface RawVout {
+      value?: number;
+      scriptPubKey?: { addresses?: string[] };
+    }
+    interface RawTx {
+      txid?: string;
+      time?: number;
+      blockheight?: number;
+      blocktime?: number;
+      vin?: RawVin[];
+      vout?: RawVout[];
+    }
+    const raw = await this.request<RawTx>(
+      "GET",
+      `/tx/${encodeURIComponent(txid)}`,
+    );
+    return {
+      txid: raw.txid ?? txid,
+      time: raw.blocktime ?? raw.time ?? 0,
+      blockHeight: raw.blockheight ?? 0,
+      vin: (raw.vin ?? []).map((v) => ({
+        txid: v.txid ?? "",
+        vout: v.vout ?? 0,
+        coinbase: v.coinbase,
+      })),
+      vout: (raw.vout ?? []).map((v) => ({
+        valueBsv: v.value ?? 0,
+        address: v.scriptPubKey?.addresses?.[0],
+      })),
+    };
   }
 
   /** `GET /tx/{txid}/hex` — raw transaction hex string. */

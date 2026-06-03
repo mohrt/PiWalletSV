@@ -79,6 +79,11 @@ export interface WalletScanSnapshot {
   lastChangeUsed: number;
   /** Total addresses probed across both branches. */
   addressesScanned: number;
+  /**
+   * Per-branch gap-walk stop index (next unprobed index). Used by history
+   * fetch to query spent addresses, not just indices with current UTXOs.
+   */
+  stoppedAt?: { receive: number; change: number };
 }
 
 /** Helper that fills in defaults for fields added after schema v1. */
