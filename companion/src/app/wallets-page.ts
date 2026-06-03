@@ -48,7 +48,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
 
       <div class="wallets-toolbar">
         <p class="muted-line" id="walletHint" hidden></p>
-        <p class="muted-line" id="walletStatus"></p>
+        <p class="muted-line" id="walletStatus" aria-live="polite"></p>
         <div class="wallets-toolbar-right">
           <select id="listUnitSelect" class="list-unit-select">
             <option value="sats"${listUnit === "sats" ? " selected" : ""}>sats</option>

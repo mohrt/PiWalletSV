@@ -19,9 +19,21 @@ import {
 
 const MODAL_ID = "piwallet-terms-modal";
 
+function focusableIn(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), textarea, select, [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((el) => el.offsetParent !== null || el === document.activeElement);
+}
+
 export async function ensureTermsAccepted(): Promise<void> {
   if (isTermsAccepted()) return;
   return new Promise<void>((resolve) => {
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+
     const overlay = document.createElement("div");
     overlay.id = MODAL_ID;
     overlay.className = "terms-overlay";
@@ -93,15 +105,44 @@ export async function ensureTermsAccepted(): Promise<void> {
 
     const $check = overlay.querySelector<HTMLInputElement>("#termsAccept")!;
     const $btn = overlay.querySelector<HTMLButtonElement>("#termsContinue")!;
+
+    function dismiss(): void {
+      recordAcceptance();
+      overlay.remove();
+      document.body.classList.remove("terms-locked");
+      previousFocus?.focus();
+      resolve();
+    }
+
+    overlay.addEventListener("keydown", (e) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === "Escape") {
+        ke.preventDefault();
+        $check.focus();
+        return;
+      }
+      if (ke.key !== "Tab") return;
+      const items = focusableIn(overlay);
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (ke.shiftKey && document.activeElement === first) {
+        ke.preventDefault();
+        last.focus();
+      } else if (!ke.shiftKey && document.activeElement === last) {
+        ke.preventDefault();
+        first.focus();
+      }
+    });
+
     $check.addEventListener("change", () => {
       $btn.disabled = !$check.checked;
     });
     $btn.addEventListener("click", () => {
       if (!$check.checked) return;
-      recordAcceptance();
-      overlay.remove();
-      document.body.classList.remove("terms-locked");
-      resolve();
+      dismiss();
     });
+
+    $check.focus();
   });
 }

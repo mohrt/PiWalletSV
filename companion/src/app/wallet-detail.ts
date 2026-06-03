@@ -131,6 +131,8 @@ type SendStep =
 
 const VALID_TABS = new Set(["balance", "send", "receive", "history", "advanced"]);
 
+const TAB_ORDER = ["balance", "send", "receive", "history", "advanced"] as const;
+
 function normalizeTab(tab: string | undefined): string | undefined {
   if (tab === "share") return "advanced";
   return tab;
@@ -236,6 +238,16 @@ export function mountWalletDetailPage(
         ? ' <span class="testnet-badge" title="This wallet is on BSV testnet (TBSV).">TESTNET</span>'
         : "";
 
+    const tabBtn = (tab: Tab, label: string): string => {
+      const sel = activeTab === tab;
+      return (
+        `<button role="tab" id="tab-btn-${tab}" data-tab="${tab}" ` +
+        `class="${sel ? "active" : ""}" aria-controls="tab-${tab}" ` +
+        `aria-selected="${sel ? "true" : "false"}" tabindex="${sel ? "0" : "-1"}">` +
+        `${label}</button>`
+      );
+    };
+
     root.innerHTML = `
       <main class="page">
         ${renderHeader(escapeHtml(wallet.label), "wallets", netBadge)}
@@ -249,13 +261,13 @@ export function mountWalletDetailPage(
           <p><a href="#/wallets">← Back to wallets</a></p>
         </section>
 
-        <nav class="tab-nav" role="tablist">
+        <nav class="tab-nav" role="tablist" aria-label="Wallet sections">
           <div class="tab-nav-tabs">
-            <button role="tab" data-tab="balance" class="${activeTab === "balance" ? "active" : ""}">Balance</button>
-            <button role="tab" data-tab="send" class="${activeTab === "send" ? "active" : ""}">Send</button>
-            <button role="tab" data-tab="receive" class="${activeTab === "receive" ? "active" : ""}">Receive</button>
-            <button role="tab" data-tab="history" class="${activeTab === "history" ? "active" : ""}">History</button>
-            <button role="tab" data-tab="advanced" class="${activeTab === "advanced" ? "active" : ""}">Advanced</button>
+            ${tabBtn("balance", "Balance")}
+            ${tabBtn("send", "Send")}
+            ${tabBtn("receive", "Receive")}
+            ${tabBtn("history", "History")}
+            ${tabBtn("advanced", "Advanced")}
           </div>
           <select id="unitSelect" class="tab-unit-select" aria-label="Display unit">
             <option value="sats"${displayUnit === "sats" ? " selected" : ""}>sats</option>
@@ -265,11 +277,12 @@ export function mountWalletDetailPage(
         </nav>
 
         <!-- Balance tab -->
-        <section id="tab-balance" class="card tab-panel${activeTab === "balance" ? " active" : ""}" role="tabpanel">
+        <section id="tab-balance" class="card tab-panel${activeTab === "balance" ? " active" : ""}" role="tabpanel" aria-labelledby="tab-btn-balance" tabindex="${activeTab === "balance" ? "0" : "-1"}">
           <div class="balance-hero-row">
             <div class="balance-hero">
               <button id="balanceToggle" class="balance-hero-value" type="button"
-                title="Tap to cycle sats, BSV, or ${getFiatCurrency()}">
+                title="Tap to cycle sats, BSV, or ${getFiatCurrency()}"
+                aria-label="Cycle balance display unit">
                 <span id="balanceHero">—</span>
               </button>
               <div id="balancePending" class="balance-pending" hidden></div>
@@ -281,7 +294,7 @@ export function mountWalletDetailPage(
           </div>
           <p class="muted-line" id="balanceMeta"></p>
           <p class="muted-line balance-spv-note" id="balanceSpvNote" hidden></p>
-          <p class="muted-line balance-status" id="balanceStatus"></p>
+          <p class="muted-line balance-status" id="balanceStatus" aria-live="polite"></p>
           <details id="utxoDetails" class="panel-details" hidden>
             <summary><span class="panel-details-label">UTXOs (<span id="utxoCount">0</span>)</span></summary>
             <div class="panel-details-body">
@@ -291,7 +304,7 @@ export function mountWalletDetailPage(
         </section>
 
         <!-- Send tab -->
-        <section id="tab-send" class="card tab-panel${activeTab === "send" ? " active" : ""}" role="tabpanel">
+        <section id="tab-send" class="card tab-panel${activeTab === "send" ? " active" : ""}" role="tabpanel" aria-labelledby="tab-btn-send" tabindex="${activeTab === "send" ? "0" : "-1"}">
           <div id="sendProgress" class="send-progress" aria-live="polite">
             <p id="sendProgressLabel" class="send-progress-label muted-line">Step 1 of 3 — Amount & fee</p>
             <div class="send-progress-track" aria-hidden="true">
@@ -318,7 +331,8 @@ export function mountWalletDetailPage(
               <div class="address-input-row">
                 <input id="sendAddress" type="text" autocomplete="off"
                   placeholder="${wallet.network === "test" ? "m… or n… (testnet)" : "1… (mainnet)"}" />
-                <button id="scanAddress" type="button" class="icon-btn" title="Scan address QR">
+                <button id="scanAddress" type="button" class="icon-btn"
+                  title="Scan address QR" aria-label="Scan address QR">
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
@@ -371,7 +385,7 @@ export function mountWalletDetailPage(
                 <button id="sendMax" type="button" class="send-max-btn">Max</button>
               </div>
             </label>
-            <p class="muted-line" id="sendFormStatus"></p>
+            <p class="muted-line" id="sendFormStatus" aria-live="polite"></p>
             <div class="actions">
               <button id="sendNext" type="button" class="primary">Review →</button>
             </div>
@@ -392,8 +406,8 @@ export function mountWalletDetailPage(
               <li class="sign-step" id="spvStep-proofs">Verify SPV proofs</li>
               <li class="sign-step" id="spvStep-build">Build proposal</li>
             </ol>
-            <p class="muted-line" id="spvDetail" hidden></p>
-            <p class="muted-line" id="reviewStatus"></p>
+            <p class="muted-line" id="spvDetail" hidden aria-live="polite"></p>
+            <p class="muted-line" id="reviewStatus" aria-live="polite"></p>
             <div class="actions">
               <button id="reviewBack" type="button">← Back</button>
               <button id="reviewConfirm" type="button" class="primary">Build QR →</button>
@@ -479,7 +493,7 @@ export function mountWalletDetailPage(
 
               <div id="broadcastWidget" class="send-broadcast-panel" hidden>
                 <p id="broadcastInfo" class="send-broadcast-message muted-line"></p>
-                <p id="broadcastStatus" class="send-broadcast-message muted-line"></p>
+                <p id="broadcastStatus" class="send-broadcast-message muted-line" aria-live="polite"></p>
                 <div class="actions send-broadcast-actions">
                   <button id="broadcastBtn" type="button" class="primary">Broadcast</button>
                   <a id="broadcastExplorer" target="_blank" rel="noopener noreferrer"
@@ -495,7 +509,7 @@ export function mountWalletDetailPage(
         </section>
 
         <!-- Receive tab -->
-        <section id="tab-receive" class="card tab-panel${activeTab === "receive" ? " active" : ""}" role="tabpanel">
+        <section id="tab-receive" class="card tab-panel${activeTab === "receive" ? " active" : ""}" role="tabpanel" aria-labelledby="tab-btn-receive" tabindex="${activeTab === "receive" ? "0" : "-1"}">
           <h2 class="receive-heading">Receive</h2>
           <p class="receive-verify-line muted-line">
             Confirm this address on the Pi before sharing it.
@@ -551,12 +565,12 @@ export function mountWalletDetailPage(
         </section>
 
         <!-- History tab -->
-        <section id="tab-history" class="card tab-panel${activeTab === "history" ? " active" : ""}" role="tabpanel">
+        <section id="tab-history" class="card tab-panel${activeTab === "history" ? " active" : ""}" role="tabpanel" aria-labelledby="tab-btn-history" tabindex="${activeTab === "history" ? "0" : "-1"}">
           <div class="history-header">
             <h2>Transaction history</h2>
             <button id="refreshHistory" class="primary" type="button">Refresh</button>
           </div>
-          <p class="muted-line" id="historyStatus"></p>
+          <p class="muted-line" id="historyStatus" aria-live="polite"></p>
           <div id="historyEmpty" class="empty-state" hidden>
             <p id="historyEmptyTitle">No transaction history yet.</p>
             <p class="muted-line" id="historyEmptyHint">Click Refresh to fetch history from Bitails.</p>
@@ -568,7 +582,7 @@ export function mountWalletDetailPage(
         </section>
 
         <!-- Share tab -->
-        <section id="tab-advanced" class="card tab-panel${activeTab === "advanced" ? " active" : ""}" role="tabpanel">
+        <section id="tab-advanced" class="card tab-panel${activeTab === "advanced" ? " active" : ""}" role="tabpanel" aria-labelledby="tab-btn-advanced" tabindex="${activeTab === "advanced" ? "0" : "-1"}">
           <h2>Export to another companion</h2>
           <p class="muted-line">
             Show an animated QR so another companion can pair with this
@@ -658,6 +672,18 @@ export function mountWalletDetailPage(
         const tab = btn.dataset.tab as Tab;
         switchTab(tab);
       });
+    });
+    root.querySelector<HTMLElement>(".tab-nav-tabs")?.addEventListener("keydown", (e) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key !== "ArrowLeft" && ke.key !== "ArrowRight") return;
+      ke.preventDefault();
+      const idx = TAB_ORDER.indexOf(activeTab);
+      if (idx < 0) return;
+      const next = ke.key === "ArrowRight"
+        ? TAB_ORDER[(idx + 1) % TAB_ORDER.length]
+        : TAB_ORDER[(idx - 1 + TAB_ORDER.length) % TAB_ORDER.length];
+      switchTab(next);
+      root.querySelector<HTMLButtonElement>(`#tab-btn-${next}`)?.focus();
     });
 
     // Balance tab
@@ -870,6 +896,17 @@ export function mountWalletDetailPage(
     }
   }
 
+  function syncTabAria(tab: Tab): void {
+    root.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
+      const selected = btn.dataset.tab === tab;
+      btn.setAttribute("aria-selected", selected ? "true" : "false");
+      btn.tabIndex = selected ? 0 : -1;
+    });
+    root.querySelectorAll<HTMLElement>(".tab-panel[role=tabpanel]").forEach((p) => {
+      p.tabIndex = p.id === `tab-${tab}` ? 0 : -1;
+    });
+  }
+
   function switchTab(tab: Tab): void {
     activeTab = tab;
     root.querySelectorAll<HTMLElement>(".tab-panel").forEach((p) => {
@@ -878,6 +915,7 @@ export function mountWalletDetailPage(
     root.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tab === tab);
     });
+    syncTabAria(tab);
     // Lazy-load history when tab first opened (requires balance scan first)
     if (
       tab === "history" &&
