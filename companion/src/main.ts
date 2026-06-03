@@ -43,7 +43,7 @@ function render(): void {
   } else if (route === "#/scan/tx") {
     sessionStorage.setItem(
       "piwallet-signed-tx-hint",
-      "Signed TX submit lives in Send → Step 2. Open a wallet and continue there.",
+      "Signed TX submit lives in Send → Step 2 → Advanced. Open a wallet and continue there.",
     );
     window.location.hash = "#/wallets";
     return;
