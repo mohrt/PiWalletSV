@@ -123,27 +123,24 @@ def test_cycle_at_existing_letter_does_not_grow_buffer() -> None:
 
 
 def test_b_press_deletes_letter_at_cursor_mid_word() -> None:
-    """Cursor on an interior letter -> delete it; next letter slides in."""
     s = WalletLabelEntryScreen(suggested_default="alpha")
     s.cursor = 2  # on 'p'
     s.on_event(_evt(Button.B, EventKind.PRESS))
     assert s.buffer == ["a", "l", "h", "a"]
-    assert s.cursor == 2  # cursor stays in place; 'h' is now under it
+    assert s.cursor == 1
 
 
 def test_b_press_deletes_letter_at_cursor_last() -> None:
-    """Cursor on last letter -> delete it; cursor decrements to new last."""
     s = WalletLabelEntryScreen(suggested_default="alpha")
     assert s.cursor == 4
     s.on_event(_evt(Button.B, EventKind.PRESS))
     assert s.buffer == ["a", "l", "p", "h"]
-    assert s.cursor == 3  # clamped to the new last index
+    assert s.cursor == 3
 
 
 def test_b_press_at_cursor_zero_deletes_first_letter() -> None:
-    """B at cursor=0 with a multi-letter buffer deletes the first letter."""
     s = WalletLabelEntryScreen(suggested_default="ab")
-    s.on_event(_evt(Button.LEFT))  # cursor -> 0
+    s.on_event(_evt(Button.LEFT))
     assert s.cursor == 0
     s.on_event(_evt(Button.B, EventKind.PRESS))
     assert s.buffer == ["b"]
@@ -153,16 +150,25 @@ def test_b_press_at_cursor_zero_deletes_first_letter() -> None:
 
 def test_b_press_from_new_slot_deletes_last_letter() -> None:
     s = WalletLabelEntryScreen(suggested_default="ab")
-    s.on_event(_evt(Button.RIGHT))  # cursor -> 2 (new slot)
+    s.on_event(_evt(Button.RIGHT))
     assert s.cursor == 2
     s.on_event(_evt(Button.B, EventKind.PRESS))
     assert s.buffer == ["a"]
-    assert s.cursor == 0  # always land on a real letter after DEL
+    assert s.cursor == 0
 
 
-def test_b_press_with_single_letter_is_noop() -> None:
-    """The editor always keeps at least one letter; B with a single letter is a no-op."""
-    s = WalletLabelEntryScreen()  # buffer=['a'], cursor=0
+def test_b_repeat_deletes_multiple_letters() -> None:
+    s = WalletLabelEntryScreen(suggested_default="abc")
+    assert s.cursor == 2
+    s.on_event(_evt(Button.B, EventKind.REPEAT))
+    s.on_event(_evt(Button.B, EventKind.REPEAT))
+    assert s.buffer == ["a"]
+    assert s.cursor == 0
+
+
+def test_b_press_with_single_letter_resets_to_a() -> None:
+    s = WalletLabelEntryScreen()
+    s.buffer[0] = "z"
     s.on_event(_evt(Button.B, EventKind.PRESS))
     assert s.buffer == ["a"]
     assert s.cursor == 0
@@ -173,6 +179,13 @@ def test_b_long_cancels_with_none() -> None:
     s = WalletLabelEntryScreen()
     s.on_event(_evt(Button.B, EventKind.LONG))
     assert s.done is True
+    assert s.result is None
+
+
+def test_b_long_ignored_when_restore_naming() -> None:
+    s = WalletLabelEntryScreen(suggested_default="restored-1", ignore_hold_b_long=True)
+    s.on_event(_evt(Button.B, EventKind.LONG))
+    assert not s.done
     assert s.result is None
 
 
@@ -189,11 +202,11 @@ def test_a_saves_immediately() -> None:
     assert s.result == "cold"
 
 
-def test_select_saves_immediately() -> None:
+def test_select_does_not_save() -> None:
     s = WalletLabelEntryScreen(suggested_default="cold")
     s.on_event(_evt(Button.SELECT))
-    assert s.done is True
-    assert s.result == "cold"
+    assert not s.done
+    assert s.result is None
 
 
 def test_blank_after_strip_blocks_save() -> None:

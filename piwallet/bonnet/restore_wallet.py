@@ -115,9 +115,15 @@ def run_restore_wallet(
         return RestoreWalletOutcome(error=entry.error)
 
     suggested = _next_default_label(vault)
-    name_scr = WalletLabelEntryScreen(suggested_default=suggested)
+    name_scr = WalletLabelEntryScreen(
+        suggested_default=suggested,
+        ignore_hold_b_long=True,
+    )
     run_screen(display, input_mgr, name_scr, target_fps=target_fps, idle_wake=idle_wake)
-    label = name_scr.result.strip() if name_scr.result else suggested
+    if name_scr.result is None:
+        label = suggested
+    else:
+        label = name_scr.result.strip() or suggested
 
     coin_type, account_index = chosen_path
     try:

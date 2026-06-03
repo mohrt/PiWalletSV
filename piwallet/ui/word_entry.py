@@ -9,32 +9,27 @@ Controls (type mode)
 =========  =================================================================
 UP         Cycle candidate letter back  (a -> z -> y -> ... -> a).
 DOWN       Cycle candidate letter fwd   (a -> b -> c -> ... -> z -> a).
-LEFT       Backspace: throw away the candidate and re-open the previously
-           committed letter for editing. No-op when prefix is empty.
-RIGHT      Commit the candidate to the prefix and open a new candidate
-           slot starting at 'a'.
-SELECT     If the current stem has more than one completion (or exactly
-           one shortened stem), open pick mode to choose from the full
-           match list. Otherwise same as A — confirm exact or accept a
-           unique completion.
-A          Confirm. Accepts ``prefix + candidate`` if it's a BIP39 word,
-           else the unique match starting with that string (if any).
-B PRESS    Clear the whole in-progress word (prefix reset, candidate='a').
+LEFT       Move cursor back one letter (no delete). No-op at the first
+           letter.
+RIGHT      Move cursor forward; at the end of the word, append a new
+           letter slot starting at ``a``.
+A          Select the word if exact or uniquely determined; if 2+ stem
+           matches, open pick mode.
+B PRESS    Delete the letter under the cursor and move back one slot.
 B LONG     Cancel the whole flow (result=None, done=True).
 
 Mnemonic restore (``MnemonicEntryScreen`` in ``restore`` mode) adds a
-post-entry **review** list (checksum banner + per-word edit) and treats
-**hold LEFT** during word entry as “reopen previous word” (see footer).
+post-entry **review** list (checksum banner + per-word edit). During
+entry, **L** on the first letter (or **hold L** anywhere) reopens the
+previous word for editing.
 
 Controls (pick mode)
 --------------------
 =========  =================================================================
 UP/DOWN    Move highlight through every BIP39 word matching the typed stem
            (wraps at the ends).
-A          Commit the highlighted word.
-LEFT /     Return to type mode without changing the typed stem.
-SELECT
-B PRESS    Same as type mode — clears the word and closes pick mode.
+A          Select the highlighted word.
+B          Return to type mode (typed stem preserved). No cancel from here.
 
 Design note
 -----------
@@ -95,8 +90,8 @@ class WordEntryScreen:
     """
 
     title: str = "Word"
-    prefix: str = ""
-    candidate: str = "a"
+    letters: list[str] = field(default_factory=lambda: ["a"])
+    cursor: int = 0
     done: bool = False
     result: str | None = None
     #: For the create-confirm flow, the caller can pass the expected
@@ -112,12 +107,25 @@ class WordEntryScreen:
     pick_index: int = 0
 
     def __post_init__(self) -> None:
-        if not isinstance(self.prefix, str):
-            raise TypeError("prefix must be a str")
-        if not (isinstance(self.candidate, str) and len(self.candidate) == 1):
-            raise ValueError("candidate must be a single character")
-        if not self.candidate.isalpha() or not self.candidate.islower():
-            raise ValueError("candidate must be a lowercase a-z letter")
+        if not self.letters:
+            self.letters = ["a"]
+        if self.cursor < 0 or self.cursor >= len(self.letters):
+            raise ValueError("cursor out of range for letters")
+        for ch in self.letters:
+            if not (isinstance(ch, str) and len(ch) == 1):
+                raise ValueError("each letter must be a single character")
+            if not ch.isalpha() or not ch.islower():
+                raise ValueError("letters must be lowercase a-z")
+
+    @property
+    def prefix(self) -> str:
+        """Letters before the cursor (read-only compat for tests)."""
+        return "".join(self.letters[: self.cursor])
+
+    @property
+    def candidate(self) -> str:
+        """Letter under the cursor (read-only compat for tests)."""
+        return self.letters[self.cursor]
 
     # -- input ---------------------------------------------------------
 
@@ -134,18 +142,13 @@ class WordEntryScreen:
         elif b == Button.DOWN and k in (EventKind.PRESS, EventKind.REPEAT):
             self._cycle(+1)
         elif b == Button.LEFT and k in (EventKind.PRESS, EventKind.REPEAT):
-            self._backspace()
+            self._move_left()
         elif b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
-            self._commit_and_advance()
+            self._move_right()
         elif b == Button.A and k == EventKind.PRESS:
             self._confirm()
-        elif b == Button.SELECT and k == EventKind.PRESS:
-            if self.match_state() in ("many", "one"):
-                self._enter_pick_mode()
-            else:
-                self._confirm()
         elif b == Button.B and k == EventKind.PRESS:
-            self._clear_word()
+            self._delete_and_back()
         elif b == Button.B and k == EventKind.LONG:
             self._exit_pick_mode()
             self.done = True
@@ -181,20 +184,7 @@ class WordEntryScreen:
         n = len(m)
         self.pick_index %= n
 
-        if b == Button.B and k == EventKind.LONG:
-            self._exit_pick_mode()
-            self.done = True
-            self.result = None
-            return
-
-        if b == Button.B and k == EventKind.PRESS:
-            self._clear_word()
-            return
-
-        if b == Button.LEFT and k == EventKind.PRESS:
-            self._exit_pick_mode()
-            return
-        if b == Button.SELECT and k == EventKind.PRESS:
+        if b == Button.B and k in (EventKind.PRESS, EventKind.LONG):
             self._exit_pick_mode()
             return
 
@@ -212,26 +202,30 @@ class WordEntryScreen:
             self.result = m[self.pick_index]
 
     def _cycle(self, delta: int) -> None:
-        idx = (ord(self.candidate) - ord("a") + delta) % 26
-        self.candidate = chr(ord("a") + idx)
+        ch = self.letters[self.cursor]
+        idx = (ord(ch) - ord("a") + delta) % 26
+        self.letters[self.cursor] = chr(ord("a") + idx)
 
-    def _backspace(self) -> None:
-        if not self.prefix:
-            # nothing committed; reset candidate to 'a'
-            self.candidate = "a"
-            return
-        # Pop the last committed letter and re-open it as the candidate.
-        self.candidate = self.prefix[-1]
-        self.prefix = self.prefix[:-1]
+    def _move_left(self) -> None:
+        if self.cursor > 0:
+            self.cursor -= 1
 
-    def _commit_and_advance(self) -> None:
-        self.prefix = self.prefix + self.candidate
-        self.candidate = "a"
+    def _move_right(self) -> None:
+        if self.cursor < len(self.letters) - 1:
+            self.cursor += 1
+        else:
+            self.letters.append("a")
+            self.cursor = len(self.letters) - 1
 
-    def _clear_word(self) -> None:
+    def _delete_and_back(self) -> None:
         self._exit_pick_mode()
-        self.prefix = ""
-        self.candidate = "a"
+        if len(self.letters) == 1:
+            self.letters[0] = "a"
+            self.cursor = 0
+            return
+        del self.letters[self.cursor]
+        if self.cursor > 0:
+            self.cursor -= 1
 
     def _confirm(self) -> None:
         word = self.typed_text()
@@ -243,12 +237,15 @@ class WordEntryScreen:
         if len(all_m) == 1:
             self.done = True
             self.result = all_m[0]
+            return
+        if len(all_m) >= 2:
+            self._enter_pick_mode()
 
     # -- introspection -------------------------------------------------
 
     def typed_text(self) -> str:
-        """The full prefix + active candidate letter."""
-        return self.prefix + self.candidate
+        """All letters in the buffer (full in-progress word)."""
+        return "".join(self.letters)
 
     def stem_matches(self) -> list[str]:
         """Every BIP39 word starting with :meth:`typed_text` (long stems ok)."""
@@ -359,17 +356,8 @@ class WordEntryScreen:
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 32,
-            "UP/DWN pick   A confirm",
-            size=10,
-            color=COLOR_DIM,
-            anchor="mm",
-        )
-        draw_text(
-            fb,
-            DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 16,
-            "L / SEL back   B clr   hold B cancel",
+            DISPLAY_HEIGHT - 12,
+            "UP/DWN pick   A select   B back",
             size=10,
             color=COLOR_DIM,
             anchor="mm",
@@ -404,13 +392,12 @@ class WordEntryScreen:
         }[state]
 
         prefix_text = self.prefix
+        suffix_text = "".join(self.letters[self.cursor + 1 :])
         gap_px = 6
-
-        cand_bb = text_bbox(self.candidate, size=fz)
-        cand_px_w = cand_bb[2] - cand_bb[0]
-        cand_px_h = cand_bb[3] - cand_bb[1]
         pad_x, pad_y = 6, 4
-        cand_box_w = max(cand_px_w + 2 * pad_x, 22)
+        cand_bb = text_bbox(self.candidate, size=fz)
+        cand_px_h = cand_bb[3] - cand_bb[1]
+        cand_box_w = max(cand_bb[2] - cand_bb[0], 8) + 2 * pad_x
         cand_box_h = max(cand_px_h + 2 * pad_y, 28)
 
         prefix_px_w = 0
@@ -418,22 +405,31 @@ class WordEntryScreen:
             pb = text_bbox(prefix_text, size=fz)
             prefix_px_w = pb[2] - pb[0]
 
-        gutter = gap_px if prefix_text else 0
-        cluster_w = prefix_px_w + gutter + cand_box_w
+        suffix_px_w = 0
+        if suffix_text:
+            sb = text_bbox(suffix_text, size=fz)
+            suffix_px_w = sb[2] - sb[0]
+
+        gutter_before = gap_px if prefix_text else 0
+        gutter_after = gap_px if suffix_text else 0
+        cluster_w = prefix_px_w + gutter_before + cand_box_w + gutter_after + suffix_px_w
         start_x = max(4, (DISPLAY_WIDTH - cluster_w) // 2)
         text_y = 52
 
+        x = start_x
         if prefix_text:
             draw_text(
                 fb,
-                start_x,
+                x,
                 text_y,
                 prefix_text,
                 size=fz,
                 color=COLOR_FG,
                 anchor="lm",
             )
-        cand_left = start_x + prefix_px_w + gutter
+            x += prefix_px_w + gutter_before
+
+        cand_left = x
         cand_top = text_y - cand_box_h // 2
         cand_right = cand_left + cand_box_w
         cand_bottom = cand_top + cand_box_h
@@ -453,6 +449,16 @@ class WordEntryScreen:
             color=cand_color,
             anchor="mm",
         )
+        if suffix_text:
+            draw_text(
+                fb,
+                cand_right + gutter_after,
+                text_y,
+                suffix_text,
+                size=fz,
+                color=COLOR_FG,
+                anchor="lm",
+            )
 
         # Match counter / state message (lazily so we don't index an
         # empty match list).
@@ -510,11 +516,14 @@ class WordEntryScreen:
             color=COLOR_DIM,
             anchor="mm",
         )
-        footer2 = "A confirm   SEL list   B clr   hold B X"
-        if state not in ("many", "one"):
-            footer2 = "A confirm (SEL)   B clr   hold B X"
+        if state == "many":
+            footer2 = "A pick   B del   hold B cancel"
+        elif state in ("one", "exact"):
+            footer2 = "A select   B del   hold B cancel"
+        else:
+            footer2 = "B del   hold B cancel"
         if self.show_hold_left_prev_hint:
-            footer2 += "   hold L prev"
+            footer2 += "   L prev word"
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
@@ -542,8 +551,8 @@ class MnemonicEntryScreen:
     * ``"restore"``         — user types each word; after the last word a
                               **review** screen lists every word with a
                               ✓/✗ checksum banner. From there they may edit
-                              any slot or confirm when valid. Hold **LEFT**
-                              (long) during entry backs up one word.
+                              any slot or confirm when valid. **L** on the
+                              first letter (or hold **L**) backs up one word.
     * ``"create-confirm"``  — Pi generated the phrase and showed it to the
                               user; user re-types each word; the screen
                               compares each entry against the expected
@@ -605,12 +614,27 @@ class MnemonicEntryScreen:
 
     # -- driver --------------------------------------------------------
 
-    def _previous_word_long_left(self, event: Event) -> bool:
-        return (
-            len(self.words) > 0
-            and event.button == Button.LEFT
-            and event.kind == EventKind.LONG
+    def _maybe_go_previous_word(self, event: Event) -> bool:
+        """True when the operator wants to re-edit the prior word slot."""
+        if not self.words or event.button != Button.LEFT:
+            return False
+        if event.kind == EventKind.LONG:
+            return True
+        if event.kind == EventKind.PRESS:
+            return not self.current.pick_mode and self.current.cursor == 0
+        return False
+
+    def _go_to_previous_word(self) -> None:
+        prev_word = self.words.pop()
+        n = len(self.words) + 1
+        w = WordEntryScreen(
+            title=f"Word {n} of {self.word_count}",
+            letters=list(prev_word),
+            cursor=max(0, len(prev_word) - 1),
+            expected_position=n if self.mode == "create-confirm" else None,
         )
+        w.show_hold_left_prev_hint = len(self.words) > 0
+        self.current = w
 
     def _enter_review(self) -> None:
         self.phase = "review"
@@ -672,8 +696,8 @@ class MnemonicEntryScreen:
                 self._finalize_restore_success()
             return
 
-        # SELECT / RIGHT = edit the currently highlighted word.
-        if b in (Button.SELECT, Button.RIGHT) and k == EventKind.PRESS:
+        # RIGHT = edit the currently highlighted word.
+        if b == Button.RIGHT and k == EventKind.PRESS:
             self.review_cursor = self.review_view.cursor
             payload = self.review_view.items[self.review_view.cursor].value
             if isinstance(payload, tuple) and payload[0] == "edit":
@@ -710,9 +734,8 @@ class MnemonicEntryScreen:
             self._edit_on_event(event)
             return
 
-        if self._previous_word_long_left(event):
-            self.words.pop()
-            self.current = self._new_word_screen()
+        if self._maybe_go_previous_word(event):
+            self._go_to_previous_word()
             return
 
         self.current.on_event(event)
@@ -748,9 +771,9 @@ class MnemonicEntryScreen:
             self.review_view.draw(fb)
             ok = self.mnemonic_checksum_ok()
             hint = (
-                "A save   SEL edit word   hold B cancel"
+                "A save   R edit word   hold B cancel"
                 if ok
-                else "SEL edit word   hold B cancel"
+                else "R edit word   hold B cancel"
             )
             draw_text(
                 fb,

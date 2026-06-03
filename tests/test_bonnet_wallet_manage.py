@@ -116,6 +116,35 @@ def test_run_rename_with_stubbed_screens(
     assert wallets[0].label == "omega"
 
 
+def test_run_rename_hold_b_cancel_discards_changes(
+    monkeypatch: pytest.MonkeyPatch,
+    vault_and_wallet: tuple[Vault, str, WalletRecord],
+) -> None:
+    vault, pin, rec = vault_and_wallet
+    display = HeadlessDisplay()
+    from piwallet.ui.input import FakeInputBackend, InputManager
+
+    mgr = InputManager(FakeInputBackend())
+
+    def fake_run_screen(display, mgr, screen, **_):
+        if isinstance(screen, WalletManageMenuScreen):
+            screen.done = True
+            screen.result = WalletManageAction.RENAME
+            return screen.result
+        if isinstance(screen, WalletLabelEntryScreen):
+            assert screen.cancel_on_hold_b is True
+            screen.done = True
+            screen.result = None
+            return screen.result
+        raise AssertionError(f"unexpected {type(screen)}")
+
+    monkeypatch.setattr(wm, "run_screen", fake_run_screen)
+
+    out = wm.run_wallet_manage(display, mgr, vault, pin, rec, toast_seconds=0)
+    assert out == "stay"
+    assert vault.list_wallets()[0].label == "alpha"
+
+
 def test_run_erase_with_stubbed_screens(
     monkeypatch: pytest.MonkeyPatch,
     vault_and_wallet: tuple[Vault, str, WalletRecord],

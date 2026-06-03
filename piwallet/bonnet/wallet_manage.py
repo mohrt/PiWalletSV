@@ -85,8 +85,8 @@ class WalletManageMenuScreen:
                 ListItem(label="Wallet info", value=WalletManageAction.INFO),
                 ListItem(label="Rename", value=WalletManageAction.RENAME),
                 ListItem(label="Erase from Pi", value=WalletManageAction.DELETE),
-                ListItem(label="< Back", value=WalletManageAction.BACK),
             ],
+            footer="A: select   B: back",
         )
 
     def on_event(self, event: Event) -> None:
@@ -163,7 +163,8 @@ def run_wallet_manage(
     Returns one of :data:`WalletManageResult`. The caller is expected to
     loop, calling this function until the wallet is deleted, the user
     backs out to the wallet list, or the user long-presses B inside a
-    sub-screen to exit the bonnet app.
+    sub-screen to exit the bonnet app (only where that screen still
+    handles long B, e.g. sign flow).
     """
     menu = WalletManageMenuScreen(wallet=wallet)
     run_screen(display, input_mgr, menu, target_fps=target_fps, idle_wake=idle_wake)
@@ -240,6 +241,7 @@ def run_wallet_manage(
         editor = WalletLabelEntryScreen(
             title="Rename wallet",
             suggested_default=wallet.label,
+            cancel_on_hold_b=True,
         )
         run_screen(display, input_mgr, editor, target_fps=target_fps, idle_wake=idle_wake)
         if editor.result is None:

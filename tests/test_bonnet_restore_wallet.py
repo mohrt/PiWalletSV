@@ -56,8 +56,9 @@ def _stub_run_screen(
 
 
 def _label_use_default(s: WalletLabelEntryScreen) -> None:
+    """Simulate **A OK** with the pre-filled suggested name."""
     s.done = True
-    s.result = None
+    s.result = s.typed_text().strip()
 
 
 def _label_custom(label: str) -> Callable[[WalletLabelEntryScreen], None]:
