@@ -112,21 +112,12 @@ class WalletInfoScreen:
             )
             y += 26
 
-        # Footer hints.
-        draw_text(
-            fb,
-            DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 24,
-            "Path is fixed at create time",
-            size=10,
-            color=COLOR_DIM,
-            anchor="mm",
-        )
+        # Footer hint.
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 10,
-            "A / B back   hold B quit app",
+            "A/B exit",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

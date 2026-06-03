@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pathlib import Path
+
 from PIL import ImageFont
 
 from piwallet.ui.display import (
@@ -30,18 +32,29 @@ from piwallet.ui.display import (
 )
 from piwallet.ui.input import Button, Event, EventKind
 
-# Cached PIL bitmap fonts. ``load_default(size=...)`` is the
-# zero-dependency path that works on every Pillow >= 10.1 install; we
-# use it across all widgets so headless tests don't need TTF files on
-# disk.
+# PIL ``load_default(size=…)`` scales a tiny bitmap font; at 10–12 px
+# the space glyph often has **zero advance width**, so footers like
+# ``"A/B exit"`` render as ``"A/Bexit"``. Prefer DejaVu (installed on
+# Pi OS images via ``fonts-dejavu-core``) and fall back only when absent.
+_FONT_PATHS: tuple[str, ...] = (
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/Library/Fonts/Arial.ttf",
+)
 _FONT_CACHE: dict[int, ImageFont.ImageFont] = {}
 
 
 def font(size: int = 12) -> ImageFont.ImageFont:
-    """Return a cached PIL bitmap font sized for the 240x240 panel."""
+    """Return a cached PIL font sized for the 240x240 panel."""
     cached = _FONT_CACHE.get(size)
     if cached is not None:
         return cached
+    for path in _FONT_PATHS:
+        if Path(path).is_file():
+            font_obj = ImageFont.truetype(path, size)
+            _FONT_CACHE[size] = font_obj
+            return font_obj
     font_obj = ImageFont.load_default(size=size)
     _FONT_CACHE[size] = font_obj
     return font_obj
@@ -103,6 +116,10 @@ class ListView:
         Optional top-bar title.
     items : list[ListItem]
         Rows to draw.
+    footer : str
+        Optional one-line hint rendered in the bottom strip of the panel
+        (e.g. ``"A: select   B: back"``).  Fits in the ~16 px gap that
+        remains below 7 rows of 28 px on a 240 px panel.
     cursor : int
         Index into ``items`` of the highlighted row.
     confirmed : object | None
@@ -112,6 +129,7 @@ class ListView:
 
     items: list[ListItem]
     title: str = ""
+    footer: str = ""
     #: When set, used for the title bar text instead of :data:`COLOR_ACCENT`.
     title_color: tuple[int, int, int] | None = None
     cursor: int = 0
@@ -219,6 +237,18 @@ class ListView:
             fb.draw.rectangle(
                 (DISPLAY_WIDTH - 4, thumb_y, DISPLAY_WIDTH - 2, thumb_y + thumb_h),
                 fill=COLOR_ACCENT,
+            )
+
+        # Footer hint strip — rendered in the ~16 px gap below 7 rows.
+        if self.footer:
+            draw_text(
+                fb,
+                DISPLAY_WIDTH // 2,
+                DISPLAY_HEIGHT - 5,
+                self.footer,
+                size=10,
+                color=COLOR_DIM,
+                anchor="mb",
             )
 
 

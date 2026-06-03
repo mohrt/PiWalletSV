@@ -32,11 +32,42 @@ fork, daemonize, or open any network sockets.
 
 from __future__ import annotations
 
+import fcntl
 import logging
+import os
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+# ---------------------------------------------------------------------------
+# Single-instance display lock
+# ---------------------------------------------------------------------------
+
+_DISPLAY_LOCK_PATH = "/tmp/piwallet-display.lock"
+_display_lock_fd: int = -1  # kept open for the lifetime of the process
+
+
+def _acquire_display_lock() -> bool:
+    """Acquire an exclusive process lock on the bonnet display.
+
+    Uses ``flock(LOCK_EX | LOCK_NB)`` so the lock is automatically released
+    by the OS when this process exits (even on crash / SIGKILL).  Returns
+    ``True`` if the lock was acquired, ``False`` if another process holds it.
+    """
+    global _display_lock_fd
+    fd = -1
+    try:
+        fd = os.open(_DISPLAY_LOCK_PATH, os.O_CREAT | os.O_WRONLY, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.ftruncate(fd, 0)
+        os.write(fd, f"{os.getpid()}\n".encode())
+        _display_lock_fd = fd
+        return True
+    except OSError:
+        if fd >= 0:
+            os.close(fd)
+        return False
 
 from piwallet.bonnet.airgap_screen import AirgapScreen
 from piwallet.bonnet.change_pin import run_change_pin
@@ -375,6 +406,14 @@ def run_bonnet(
 
     prepare_runtime_for_bonnet()
 
+    if not _acquire_display_lock():
+        log.error(
+            "Another piwallet bonnet process is already running "
+            "(lock held at %s). Stop it before starting a new instance.",
+            _DISPLAY_LOCK_PATH,
+        )
+        return 4
+
     # One-shot migration for developer Pis that still have the legacy
     # `~/.piwallet-dev/` directory from before the rename. No-op on a
     # freshly-flashed image (canonical dir is created later by the
@@ -382,12 +421,26 @@ def run_bonnet(
     # journald captures the fact for the operator.
     migrate_legacy_dev_dir()
 
+    import signal
+
     own_display = display is None
     own_input = input_mgr is None
     if display is None:
         display = open_display("auto")
     if input_mgr is None:
         input_mgr = make_input_manager(open_input("auto"))
+
+    # Release GPIO/SPI cleanly on Ctrl-C so the display resets properly
+    # on the next run. Without this the RST pin stays claimed and the
+    # ST7789 never gets a hardware reset, leaving the screen blank.
+    def _shutdown(sig: int, frame: object) -> None:
+        if own_display:
+            display.set_backlight(False)
+            display.close()
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _shutdown)
+    signal.signal(signal.SIGTERM, _shutdown)
 
     # Apply persisted brightness up front so the disclaimer / unlock
     # screens already reflect the operator's preference. The sleep
@@ -399,6 +452,15 @@ def run_bonnet(
     idle_wake = IdleWakeTracker(input_mgr, timeout_ms=settings.sleep_timeout_ms)
 
     try:
+        # ---- 0. Splash ------------------------------------------
+        # Draw the logo once, sleep, then move on. Running the full
+        # animation loop (60 SPI transfers at 24 MHz) leaves the ST7789
+        # in a corrupted state that makes all subsequent frames appear
+        # black, so we use a single flip + sleep instead.
+        from piwallet.bonnet.splash import show_splash_once
+
+        show_splash_once(display)
+
         # ---- 1. Disclaimer --------------------------------------
         if requires_acceptance(terms_path):
             screen = DisclaimerScreen()

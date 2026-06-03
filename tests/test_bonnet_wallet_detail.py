@@ -43,10 +43,12 @@ def test_right_advances_index() -> None:
     assert s.current_address() == "addr-0-1"
 
 
-def test_a_advances_index_same_as_right() -> None:
+def test_a_returns_back() -> None:
     s = WalletDetailScreen(wallet=_wallet(), derive_address=_derive_stub)
     s.on_event(_evt(Button.A))
-    assert s.index == 1
+    assert s.done is True
+    assert s.result == "back"
+    assert s.index == 0
 
 
 def test_left_decrements_clamped_at_zero() -> None:
@@ -73,11 +75,11 @@ def test_b_press_returns_back() -> None:
     assert s.result == "back"
 
 
-def test_b_long_exits() -> None:
+def test_b_long_is_inert() -> None:
     s = WalletDetailScreen(wallet=_wallet(), derive_address=_derive_stub)
     s.on_event(_evt(Button.B, EventKind.LONG))
-    assert s.done is True
-    assert s.result == "exit"
+    assert not s.done
+    assert s.result is None
 
 
 def test_address_is_cached_per_index() -> None:
