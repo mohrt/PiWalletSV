@@ -1642,6 +1642,36 @@ button.danger-outline:hover {
   margin-top: 0.5rem;
 }
 
+.receive-qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+}
+
+.receive-qr-size-btn {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.65rem;
+  min-height: 2.25rem;
+}
+
+.receive-advance-confirm {
+  margin: 0.25rem 0 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(212, 158, 63, 0.45);
+  background: rgba(212, 158, 63, 0.08);
+}
+
+.receive-advance-confirm .remove-confirm-msg {
+  margin: 0 0 0.5rem;
+}
+
+.receive-actions {
+  margin-top: 0;
+}
+
 #tab-receive canvas {
   background: white;
   border-radius: 8px;
@@ -1924,6 +1954,15 @@ button.danger-outline:hover {
   .receive-row {
     flex-direction: column;
     align-items: center;
+  }
+
+  .receive-qr-wrap {
+    width: 100%;
+  }
+
+  #tab-receive canvas {
+    max-width: 100%;
+    height: auto;
   }
 
   .receive-detail {
