@@ -11,12 +11,23 @@
  *   - Clear all data (removes all IndexedDB wallets + localStorage)
  */
 import { renderHeader } from "./nav.js";
-import { _clearAllWallets } from "../lib/wallets.js";
+import { _clearAllWallets, listWallets } from "../lib/wallets.js";
 import {
   buildWalletBackupFile,
+  buildWalletBackupPw1Lines,
+  formatImportWalletResult,
   importWalletBackup,
+  importWalletBackupBytes,
+  type ImportWalletMode,
   serializeWalletBackup,
+  walletBackupBytesToJson,
 } from "../lib/wallet-backup.js";
+import { startPw1Scan, type Pw1ScanHandle } from "../lib/camera-scan-pw1.js";
+import {
+  clearPw1QrCanvas,
+  startPw1QrPlayback,
+  type Pw1QrPlayback,
+} from "../lib/pw1-qr-playback.js";
 import { WocClient, effectiveWocBase } from "../lib/woc.js";
 import {
   DEFAULT_FEE_RATE_SATSKB,
@@ -112,36 +123,142 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       </section>
 
       <section class="card">
-        <h2>Offline use</h2>
-        <p class="muted-line">
-          After the first load, the app shell and your paired wallets stay
-          cached in this browser. You can open wallets and view the last
-          cached balance or history without network access.
-        </p>
-        <p class="muted-line">
-          Live balance scans, transaction history, fee estimates, and broadcast
-          need internet. Camera pairing works offline once the app is loaded,
-          but chain data always requires connectivity.
-        </p>
-      </section>
+        <details class="backup-section" id="backupSection">
+          <summary>Backup &amp; migration</summary>
+          <p class="muted-line">
+            Move paired wallets to another phone or browser (xpub and labels
+            only — no seed phrases or private keys).
+          </p>
 
-      <section class="card">
-        <h2>Backup &amp; migration</h2>
-        <p class="muted-line">
-          Export a JSON file of your paired wallets (xpub and labels only —
-          no seed phrases or private keys). Import it on another phone or
-          after clearing browser data to avoid re-scanning the Pi.
-        </p>
-        <div class="actions">
-          <button id="exportWallets" class="primary" type="button">
-            Export paired wallets
-          </button>
-          <label class="button-like">
-            Import backup…
-            <input id="importWalletsFile" type="file" accept=".json,application/json" hidden />
-          </label>
-        </div>
-        <p id="backupStatus" class="muted-line" aria-live="polite"></p>
+          <details class="backup-fold" id="backupFold-export">
+            <summary>Export</summary>
+            <div class="backup-fold-body">
+            <div class="backup-tabs backup-sub-tabs" role="tablist" aria-label="Export method">
+              <button type="button" class="backup-tab active" role="tab"
+                data-export-tab="qr" aria-selected="true" aria-controls="exportTab-qr">
+                Transfer QR
+              </button>
+              <button type="button" class="backup-tab" role="tab"
+                data-export-tab="json" aria-selected="false" aria-controls="exportTab-json">
+                View / copy JSON
+              </button>
+            </div>
+            <div id="exportTab-qr" class="backup-tab-panel" role="tabpanel">
+              <div class="actions">
+                <button id="exportQrToggle" class="primary" type="button">
+                  Show transfer QR
+                </button>
+              </div>
+              <div id="exportQrPanel" class="backup-qr-panel" hidden>
+                <p class="muted-line">
+                  Point the other phone at this animated QR.
+                </p>
+                <canvas id="exportQrCanvas" width="320" height="320"></canvas>
+                <p id="exportQrProgress" class="muted-line">Frame 1 / 1</p>
+                <div class="actions">
+                  <button id="exportQrPause" type="button">Pause</button>
+                </div>
+              </div>
+            </div>
+            <div id="exportTab-json" class="backup-tab-panel" role="tabpanel" hidden>
+              <div class="backup-json-row">
+                <textarea id="exportJsonView" class="hex-blob" rows="8" readonly
+                  spellcheck="false" autocorrect="off"
+                  aria-label="Exported wallet backup JSON"></textarea>
+                <div class="backup-json-actions">
+                  <button id="exportDownload" type="button" class="icon-btn"
+                    title="Download JSON" aria-label="Download JSON">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                      aria-hidden="true">
+                      <path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>
+                    </svg>
+                  </button>
+                  <button id="exportCopy" type="button" class="icon-btn"
+                    title="Copy JSON" aria-label="Copy JSON">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                      aria-hidden="true">
+                      <rect x="9" y="9" width="13" height="13" rx="2"/>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            </div>
+          </details>
+
+          <details class="backup-fold" id="backupFold-import">
+            <summary>Import</summary>
+            <div class="backup-fold-body">
+            <fieldset class="import-mode-field">
+              <legend>Import mode</legend>
+              <label>
+                <input type="radio" name="importMode" value="merge" checked />
+                Add to existing wallets
+              </label>
+              <label>
+                <input type="radio" name="importMode" value="replace" />
+                Replace all wallets on this device
+              </label>
+            </fieldset>
+            <p id="importReplaceWarning" class="warning-text" hidden>
+              Replace removes every paired wallet in this browser before
+              importing the backup. This cannot be undone.
+            </p>
+            <div id="importReplaceStrip" hidden>
+              <p id="importReplaceMsg" class="remove-confirm-msg warning-text"></p>
+              <div class="actions">
+                <button id="importReplaceConfirm" class="danger" type="button">
+                  Yes, replace and import
+                </button>
+                <button id="importReplaceCancel" type="button">Cancel</button>
+              </div>
+            </div>
+            <div class="backup-tabs backup-sub-tabs" role="tablist" aria-label="Import method">
+              <button type="button" class="backup-tab active" role="tab"
+                data-import-tab="qr" aria-selected="true" aria-controls="importTab-qr">
+                Scan transfer QR
+              </button>
+              <button type="button" class="backup-tab" role="tab"
+                data-import-tab="json" aria-selected="false" aria-controls="importTab-json">
+                JSON file / paste
+              </button>
+            </div>
+            <div id="importTab-qr" class="backup-tab-panel" role="tabpanel">
+              <div class="actions">
+                <button id="importQrToggle" class="primary" type="button">
+                  Scan transfer QR
+                </button>
+              </div>
+              <div id="importQrPanel" class="backup-scan-panel" hidden>
+                <video id="importQrVideo" playsinline muted autoplay></video>
+                <p id="importQrStatus" class="muted-line" aria-live="polite"></p>
+                <p id="importQrProgress" class="muted-line"></p>
+              </div>
+            </div>
+            <div id="importTab-json" class="backup-tab-panel" role="tabpanel" hidden>
+              <label class="button-like">
+                Choose JSON file…
+                <input id="importWalletsFile" type="file"
+                  accept=".json,application/json" hidden />
+              </label>
+              <textarea id="importPasteJson" class="hex-blob" rows="6"
+                placeholder='{"format":"piwallet-companion-wallets",…}'
+                spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
+              <div class="actions">
+                <button id="importPasteBtn" class="primary" type="button">
+                  Import pasted JSON
+                </button>
+                <button id="importPasteClear" type="button">Clear</button>
+              </div>
+            </div>
+            </div>
+          </details>
+
+          <p id="backupStatus" class="muted-line" aria-live="polite"></p>
+        </details>
       </section>
 
       <section class="card">
@@ -183,9 +300,36 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $clearStatus     = root.querySelector<HTMLElement>("#clearStatus")!;
   const $savedBanner     = root.querySelector<HTMLElement>("#settingsSavedBanner")!;
   const $customRateInput = root.querySelector<HTMLInputElement>("#sCustomRate")!;
-  const $exportWallets   = root.querySelector<HTMLButtonElement>("#exportWallets")!;
-  const $importFile      = root.querySelector<HTMLInputElement>("#importWalletsFile")!;
-  const $backupStatus    = root.querySelector<HTMLElement>("#backupStatus")!;
+  const $exportDownload   = root.querySelector<HTMLButtonElement>("#exportDownload")!;
+  const $exportCopy       = root.querySelector<HTMLButtonElement>("#exportCopy")!;
+  const $exportQrToggle   = root.querySelector<HTMLButtonElement>("#exportQrToggle")!;
+  const $exportQrPanel    = root.querySelector<HTMLElement>("#exportQrPanel")!;
+  const $exportQrCanvas   = root.querySelector<HTMLCanvasElement>("#exportQrCanvas")!;
+  const $exportQrProgress = root.querySelector<HTMLElement>("#exportQrProgress")!;
+  const $exportQrPause    = root.querySelector<HTMLButtonElement>("#exportQrPause")!;
+  const $exportJsonView   = root.querySelector<HTMLTextAreaElement>("#exportJsonView")!;
+  const $importFile       = root.querySelector<HTMLInputElement>("#importWalletsFile")!;
+  const $importPaste      = root.querySelector<HTMLTextAreaElement>("#importPasteJson")!;
+  const $importPasteBtn   = root.querySelector<HTMLButtonElement>("#importPasteBtn")!;
+  const $importPasteClear = root.querySelector<HTMLButtonElement>("#importPasteClear")!;
+  const $importQrToggle   = root.querySelector<HTMLButtonElement>("#importQrToggle")!;
+  const $importQrPanel    = root.querySelector<HTMLElement>("#importQrPanel")!;
+  const $importQrVideo    = root.querySelector<HTMLVideoElement>("#importQrVideo")!;
+  const $importQrStatus   = root.querySelector<HTMLElement>("#importQrStatus")!;
+  const $importQrProgress = root.querySelector<HTMLElement>("#importQrProgress")!;
+  const $importReplaceWarning = root.querySelector<HTMLElement>("#importReplaceWarning")!;
+  const $importReplaceStrip = root.querySelector<HTMLElement>("#importReplaceStrip")!;
+  const $importReplaceMsg = root.querySelector<HTMLElement>("#importReplaceMsg")!;
+  const $importReplaceConfirm = root.querySelector<HTMLButtonElement>("#importReplaceConfirm")!;
+  const $importReplaceCancel = root.querySelector<HTMLButtonElement>("#importReplaceCancel")!;
+  const $backupSection    = root.querySelector<HTMLDetailsElement>("#backupSection")!;
+  const $backupExportFold = root.querySelector<HTMLDetailsElement>("#backupFold-export")!;
+  const $backupImportFold = root.querySelector<HTMLDetailsElement>("#backupFold-import")!;
+  const $backupStatus     = root.querySelector<HTMLElement>("#backupStatus")!;
+
+  let exportQrPlayback: Pw1QrPlayback | null = null;
+  let importQrScan: Pw1ScanHandle | null = null;
+  let pendingReplaceRaw: string | null = null;
 
   // ---- saved flash ----
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
@@ -279,12 +423,219 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     $backupStatus.classList.toggle("error", isError);
   }
 
-  $exportWallets.addEventListener("click", async () => {
-    $exportWallets.disabled = true;
+  function applyImportResult(result: Awaited<ReturnType<typeof importWalletBackup>>): void {
+    const summary = formatImportWalletResult(result);
+    setBackupStatus(
+      summary,
+      result.failed.length > 0 && result.imported === 0,
+    );
+    if (result.imported > 0) flashSaved();
+  }
+
+  async function loadBackupJson(): Promise<string> {
+    const file = await buildWalletBackupFile();
+    return serializeWalletBackup(file);
+  }
+
+  function getImportMode(): ImportWalletMode {
+    const checked = root.querySelector<HTMLInputElement>(
+      'input[name="importMode"]:checked',
+    );
+    return checked?.value === "replace" ? "replace" : "merge";
+  }
+
+  function syncImportModeUi(): void {
+    const replace = getImportMode() === "replace";
+    $importReplaceWarning.hidden = !replace;
+    if (!replace) hideReplaceStrip();
+  }
+
+  function hideReplaceStrip(): void {
+    pendingReplaceRaw = null;
+    $importReplaceStrip.hidden = true;
+    $importReplaceMsg.textContent = "";
+  }
+
+  for (const r of root.querySelectorAll<HTMLInputElement>('input[name="importMode"]')) {
+    r.addEventListener("change", syncImportModeUi);
+  }
+  syncImportModeUi();
+
+  type ExportBackupTab = "qr" | "json";
+  type ImportBackupTab = "qr" | "json";
+
+  function isExportJsonTabActive(): boolean {
+    return root.querySelector<HTMLButtonElement>('[data-export-tab="json"]')
+      ?.classList.contains("active") ?? false;
+  }
+
+  function onExportFoldToggle(): void {
+    if (!$backupExportFold.open) {
+      stopExportQr();
+      return;
+    }
+    if (isExportJsonTabActive()) void refreshExportJsonView();
+  }
+
+  function onImportFoldToggle(): void {
+    if (!$backupImportFold.open) {
+      stopImportQrScan();
+      hideReplaceStrip();
+    }
+  }
+
+  $backupExportFold.addEventListener("toggle", onExportFoldToggle);
+  $backupImportFold.addEventListener("toggle", onImportFoldToggle);
+
+  $backupSection.addEventListener("toggle", () => {
+    if (!$backupSection.open) {
+      stopExportQr();
+      stopImportQrScan();
+      hideReplaceStrip();
+    }
+  });
+
+  function switchExportTab(tab: ExportBackupTab): void {
+    if (tab !== "qr" && isExportQrVisible()) stopExportQr();
+    root.querySelector<HTMLElement>("#exportTab-qr")!.hidden = tab !== "qr";
+    root.querySelector<HTMLElement>("#exportTab-json")!.hidden = tab !== "json";
+    root.querySelectorAll<HTMLButtonElement>("[data-export-tab]").forEach((btn) => {
+      const active = btn.dataset.exportTab === tab;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    if (tab === "json") void refreshExportJsonView();
+  }
+
+  async function refreshExportJsonView(): Promise<void> {
+    $exportJsonView.value = "Loading…";
+    try {
+      $exportJsonView.value = await loadBackupJson();
+    } catch (e) {
+      $exportJsonView.value = "";
+      setBackupStatus(`export failed: ${(e as Error).message}`, true);
+    }
+  }
+
+  function switchImportTab(tab: ImportBackupTab): void {
+    if (tab !== "qr" && isImportQrActive()) stopImportQrScan();
+    root.querySelector<HTMLElement>("#importTab-qr")!.hidden = tab !== "qr";
+    root.querySelector<HTMLElement>("#importTab-json")!.hidden = tab !== "json";
+    root.querySelectorAll<HTMLButtonElement>("[data-import-tab]").forEach((btn) => {
+      const active = btn.dataset.importTab === tab;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    });
+  }
+
+  root.querySelectorAll<HTMLButtonElement>("[data-export-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      switchExportTab(btn.dataset.exportTab as ExportBackupTab);
+    });
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-import-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      switchImportTab(btn.dataset.importTab as ImportBackupTab);
+    });
+  });
+
+  function stopExportQr(): void {
+    exportQrPlayback?.stop();
+    exportQrPlayback = null;
+    clearPw1QrCanvas($exportQrCanvas);
+    $exportQrPanel.hidden = true;
+    $exportQrPause.textContent = "Pause";
+    $exportQrToggle.textContent = "Show transfer QR";
+  }
+
+  function stopImportQrScan(): void {
+    importQrScan?.stop();
+    importQrScan = null;
+    $importQrVideo.srcObject = null;
+    $importQrPanel.hidden = true;
+    $importQrProgress.textContent = "";
+    $importQrStatus.textContent = "";
+    $importQrToggle.textContent = "Scan transfer QR";
+    $importQrToggle.disabled = false;
+  }
+
+  function isExportQrVisible(): boolean {
+    return exportQrPlayback !== null;
+  }
+
+  function isImportQrActive(): boolean {
+    return importQrScan !== null;
+  }
+
+  async function runImportRaw(raw: string, confirmed = false): Promise<void> {
+    hideReplaceStrip();
+    const mode = getImportMode();
+    if (mode === "replace" && !confirmed) {
+      const existing = await listWallets();
+      if (existing.length > 0) {
+        pendingReplaceRaw = raw;
+        $importReplaceMsg.textContent =
+          `Replace ${existing.length} existing wallet${existing.length === 1 ? "" : "s"} with this backup?`;
+        $importReplaceStrip.hidden = false;
+        return;
+      }
+    }
+
+    setBackupStatus("Importing…");
+    try {
+      const result = await importWalletBackup(raw.trim(), { mode });
+      applyImportResult(result);
+    } catch (e) {
+      setBackupStatus(`import failed: ${(e as Error).message}`, true);
+    }
+  }
+
+  async function runImportBytes(bytes: Uint8Array, confirmed = false): Promise<void> {
+    hideReplaceStrip();
+    const mode = getImportMode();
+    if (mode === "replace" && !confirmed) {
+      const existing = await listWallets();
+      if (existing.length > 0) {
+        pendingReplaceRaw = walletBackupBytesToJson(bytes);
+        $importReplaceMsg.textContent =
+          `Replace ${existing.length} existing wallet${existing.length === 1 ? "" : "s"} with this backup?`;
+        $importReplaceStrip.hidden = false;
+        return;
+      }
+    }
+
+    setBackupStatus("Importing…");
+    try {
+      const result = await importWalletBackupBytes(bytes, { mode });
+      applyImportResult(result);
+    } catch (e) {
+      setBackupStatus(
+        `scan import failed: ${(e as Error).message}. ` +
+          "Make sure you scanned the transfer QR from Settings on the other phone.",
+        true,
+      );
+    }
+  }
+
+  $importReplaceConfirm.addEventListener("click", () => {
+    const raw = pendingReplaceRaw;
+    if (!raw) return;
+    void runImportRaw(raw, true);
+  });
+
+  $importReplaceCancel.addEventListener("click", hideReplaceStrip);
+
+  $exportDownload.addEventListener("click", async () => {
+    $exportDownload.disabled = true;
     setBackupStatus("");
     try {
-      const file = await buildWalletBackupFile();
-      const json = serializeWalletBackup(file);
+      const json = $exportJsonView.value.trim() || await loadBackupJson();
+      if (json === "Loading…") {
+        setBackupStatus("JSON still loading — try again in a moment", true);
+        return;
+      }
+      $exportJsonView.value = json;
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -295,16 +646,85 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      const count = (JSON.parse(json) as { wallets: unknown[] }).wallets.length;
       setBackupStatus(
-        file.wallets.length === 0
-          ? "Exported empty backup — no paired wallets yet."
-          : `Exported ${file.wallets.length} wallet${file.wallets.length === 1 ? "" : "s"}.`,
+        count === 0
+          ? "Downloaded empty backup — no paired wallets yet."
+          : `Downloaded JSON for ${count} wallet${count === 1 ? "" : "s"}.`,
       );
       flashSaved();
     } catch (e) {
       setBackupStatus(`export failed: ${(e as Error).message}`, true);
     } finally {
-      $exportWallets.disabled = false;
+      $exportDownload.disabled = false;
+    }
+  });
+
+  $exportCopy.addEventListener("click", async () => {
+    $exportCopy.disabled = true;
+    setBackupStatus("");
+    try {
+      const json = $exportJsonView.value.trim() || await loadBackupJson();
+      if (json === "Loading…") {
+        setBackupStatus("JSON still loading — try again in a moment", true);
+        return;
+      }
+      await navigator.clipboard.writeText(json);
+      const count = (JSON.parse(json) as { wallets: unknown[] }).wallets.length;
+      setBackupStatus(
+        count === 0
+          ? "Copied empty backup JSON."
+          : `Copied JSON for ${count} wallet${count === 1 ? "" : "s"}.`,
+      );
+      flashSaved();
+    } catch (e) {
+      setBackupStatus(`copy failed: ${(e as Error).message}`, true);
+    } finally {
+      $exportCopy.disabled = false;
+    }
+  });
+
+  $exportQrToggle.addEventListener("click", async () => {
+    if (isExportQrVisible()) {
+      stopExportQr();
+      return;
+    }
+    $exportQrToggle.disabled = true;
+    setBackupStatus("");
+    $exportQrPanel.hidden = true;
+    try {
+      const { lines, walletCount } = await buildWalletBackupPw1Lines();
+      if (lines.length === 0) {
+        setBackupStatus("Nothing to show — no paired wallets yet.", true);
+        return;
+      }
+      exportQrPlayback = await startPw1QrPlayback($exportQrCanvas, lines, {
+        onFrame: (idx, total) => {
+          $exportQrProgress.textContent = `Frame ${idx} / ${total}`;
+        },
+      });
+      $exportQrPanel.hidden = false;
+      $exportQrPause.textContent = "Pause";
+      $exportQrToggle.textContent = "Hide transfer QR";
+      setBackupStatus(
+        `Showing transfer QR (${lines.length} frame${lines.length === 1 ? "" : "s"}, ${walletCount} wallet${walletCount === 1 ? "" : "s"}).`,
+      );
+    } catch (e) {
+      stopExportQr();
+      setBackupStatus(`QR export failed: ${(e as Error).message}`, true);
+    } finally {
+      $exportQrToggle.disabled = false;
+    }
+  });
+
+  $exportQrPause.addEventListener("click", () => {
+    if (!exportQrPlayback) return;
+    if (exportQrPlayback.isRunning()) {
+      exportQrPlayback.pause();
+      $exportQrPause.textContent = "Resume";
+    } else {
+      exportQrPlayback.resume();
+      $exportQrPause.textContent = "Pause";
     }
   });
 
@@ -313,32 +733,61 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     $importFile.value = "";
     if (!file) return;
     void (async () => {
-      setBackupStatus("Importing…");
       try {
         const raw = await file.text();
-        const result = await importWalletBackup(raw);
-        const parts: string[] = [];
-        if (result.imported > 0) {
-          parts.push(
-            `imported ${result.imported} wallet${result.imported === 1 ? "" : "s"}`,
-          );
-        }
-        if (result.skippedDuplicates > 0) {
-          parts.push(
-            `skipped ${result.skippedDuplicates} duplicate${result.skippedDuplicates === 1 ? "" : "s"}`,
-          );
-        }
-        if (result.failed.length > 0) {
-          parts.push(
-            `${result.failed.length} failed (${result.failed.map((f) => f.label).join(", ")})`,
-          );
-        }
-        const summary = parts.length > 0 ? parts.join("; ") + "." : "Nothing to import.";
-        setBackupStatus(summary, result.failed.length > 0 && result.imported === 0);
-        if (result.imported > 0) flashSaved();
+        $importPaste.value = raw;
+        await runImportRaw(raw);
       } catch (e) {
         setBackupStatus(`import failed: ${(e as Error).message}`, true);
       }
+    })();
+  });
+
+  $importPasteBtn.addEventListener("click", () => {
+    const raw = $importPaste.value.trim();
+    if (!raw) {
+      setBackupStatus("paste a JSON backup first", true);
+      return;
+    }
+    void runImportRaw(raw);
+  });
+
+  $importPasteClear.addEventListener("click", () => {
+    $importPaste.value = "";
+    $importPaste.focus();
+    setBackupStatus("");
+  });
+
+  $importQrToggle.addEventListener("click", () => {
+    if (isImportQrActive()) {
+      stopImportQrScan();
+      return;
+    }
+    $importQrToggle.disabled = true;
+    $importQrToggle.textContent = "Stop scanning";
+    $importQrPanel.hidden = true;
+    void (async () => {
+      importQrScan = await startPw1Scan(
+        $importQrVideo,
+        (received, total) => {
+          $importQrProgress.textContent = total
+            ? `Frame ${received} / ${total}`
+            : received > 0
+              ? `${received} frame${received > 1 ? "s" : ""} received…`
+              : "";
+        },
+        (bytes) => {
+          stopImportQrScan();
+          void runImportBytes(bytes);
+        },
+        (err) => {
+          stopImportQrScan();
+          setBackupStatus(err, true);
+        },
+      );
+      $importQrPanel.hidden = false;
+      $importQrStatus.textContent = "Scanning for transfer QR…";
+      $importQrToggle.disabled = false;
     })();
   });
 
@@ -377,5 +826,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
 
   return () => {
     if (savedTimer) clearTimeout(savedTimer);
+    stopExportQr();
+    stopImportQrScan();
   };
 }
