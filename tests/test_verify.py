@@ -49,6 +49,28 @@ def test_happy_path(proposal: env.UnsignedProposal, account_xpub_str: str) -> No
     assert result.change_index == 1
     assert result.change_derivation == (1, 0)
     assert result.fee_sats == 500
+    assert len(result.input_heights) == 1
+    assert result.input_heights[0] > 0
+
+
+def test_verify_progress_callback(
+    proposal: env.UnsignedProposal, account_xpub_str: str
+) -> None:
+    messages: list[str] = []
+
+    result = v.verify_proposal(
+        proposal, account_xpub_str, on_progress=messages.append
+    )
+
+    assert isinstance(result, v.VerifiedProposal)
+    assert messages[0] == "Checking anchors…"
+    assert any(m.startswith("SPV 1/1: Merkle") for m in messages)
+    assert any("OK @" in m for m in messages)
+    assert "Checking change…" in messages
+    assert messages[-1] == "Fee OK"
+    merkle_idx = next(i for i, m in enumerate(messages) if "Merkle" in m)
+    ok_idx = next(i for i, m in enumerate(messages) if "OK @" in m)
+    assert merkle_idx < ok_idx
 
 
 def test_returns_real_prevout_values_not_claimed(

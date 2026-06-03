@@ -35,6 +35,7 @@ The module deliberately does NOT mutate the proposal or build a
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from bsv import P2PKH, ChainTracker, MerklePath, Transaction
@@ -113,6 +114,8 @@ class VerifiedProposal:
     change_index: int
     change_derivation: tuple[int, int]
     locktime: int
+    """Block heights where each input's funding tx was confirmed (SPV anchors)."""
+    input_heights: tuple[int, ...] = ()
     _source_txs: dict[str, Transaction] = field(
         default_factory=dict, compare=False, repr=False
     )
@@ -141,6 +144,7 @@ def verify_proposal(
     *,
     max_fee_rate_satskb: int | None = None,
     network: deriv.Network = deriv.DEFAULT_NETWORK,
+    on_progress: Callable[[str], None] | None = None,
 ) -> VerifiedProposal:
     """Validate `proposal` against `account_xpub_str` and the included anchors.
 
@@ -162,6 +166,10 @@ def verify_proposal(
     :returns: `VerifiedProposal` ready for sign.py.
     :raises ProposalVerificationError: with a short, user-displayable reason.
     """
+    def progress(msg: str) -> None:
+        if on_progress is not None:
+            on_progress(msg)
+
     if not proposal.header_anchors:
         raise ProposalVerificationError("no header anchors supplied")
 
@@ -172,6 +180,8 @@ def verify_proposal(
 
     account_xpub = deriv.parse_xpub(account_xpub_str)
 
+    progress("Checking anchors…")
+
     # ---- per-input verification -----------------------------------------
     # ``proposal.header_anchors`` maps height -> raw 32-byte merkle root.
     # bsv-sdk's MerklePath.verify expects displayed-hex roots, so we
@@ -179,10 +189,14 @@ def verify_proposal(
     anchors_hex = {h: r[::-1].hex() for h, r in proposal.header_anchors.items()}
     tracker = OfflineChainTracker(anchors_hex)
     verified_inputs: list[VerifiedInput] = []
+    input_heights: list[int] = []
     source_txs: dict[str, Transaction] = {}
+    n_inputs = len(proposal.inputs)
 
     for idx, ip in enumerate(proposal.inputs):
         ctx = f"input #{idx}"
+        n = idx + 1
+        progress(f"SPV {n}/{n_inputs}: Merkle…")
         try:
             funding_tx = Transaction.from_beef(ip.beef)
         except Exception as exc:
@@ -212,6 +226,8 @@ def verify_proposal(
             raise ProposalVerificationError(
                 f"{ctx}: merkle root mismatch at height {block_height}"
             )
+
+        progress(f"SPV {n}/{n_inputs}: OK @ {block_height}")
 
         # ---- prior tx output sanity
         if ip.vout >= len(prior.outputs):
@@ -259,8 +275,10 @@ def verify_proposal(
                 derivation=ip.derivation,
             )
         )
+        input_heights.append(block_height)
         source_txs[ip.txid] = prior
 
+    progress("Checking change…")
     # ---- change output verification --------------------------------------
     out = proposal.outputs[proposal.change_index]
     cd_branch, cd_index = proposal.change_derivation
@@ -286,12 +304,15 @@ def verify_proposal(
             f"outputs ({total_out}) exceed inputs ({total_in})"
         )
 
+    progress("Fee OK")
+
     return VerifiedProposal(
         inputs=tuple(verified_inputs),
         outputs=tuple((o.script_hex, o.sats) for o in proposal.outputs),
         change_index=proposal.change_index,
         change_derivation=proposal.change_derivation,
         locktime=proposal.locktime,
+        input_heights=tuple(input_heights),
         _source_txs=source_txs,
     )
 
