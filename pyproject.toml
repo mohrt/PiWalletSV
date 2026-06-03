@@ -57,6 +57,9 @@ Issues = "https://github.com/mohrt/PiWalletSV/issues"
 where = ["."]
 include = ["piwallet*"]
 
+[tool.setuptools.package-data]
+piwallet = ["assets/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

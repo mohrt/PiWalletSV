@@ -14,10 +14,8 @@ Controls
 =========  ==================================================
 LEFT       Previous receive index (clamped at 0).
 RIGHT      Next receive index.
-A          Same as RIGHT (advance to a fresh address).
-SELECT     Same as B PRESS (back to manage menu).
-B PRESS    Back to the manage menu.
-B LONG     Exit the bonnet app (returned to caller).
+A / B      Back to the manage menu.
+SELECT     Same as A / B.
 =========  ==================================================
 """
 
@@ -70,17 +68,13 @@ class WalletDetailScreen:
         if b == Button.LEFT and k in (EventKind.PRESS, EventKind.REPEAT):
             if self.index > 0:
                 self.index -= 1
-        elif b in (Button.RIGHT, Button.A) and k == EventKind.PRESS:
+        elif b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
             self.index += 1
-        elif b == Button.SELECT and k == EventKind.PRESS:
+        elif (b == Button.B and k == EventKind.PRESS) or (
+            b in (Button.A, Button.SELECT) and k == EventKind.PRESS
+        ):
             self.done = True
             self.result = "back"
-        elif b == Button.B and k == EventKind.PRESS:
-            self.done = True
-            self.result = "back"
-        elif b == Button.B and k == EventKind.LONG:
-            self.done = True
-            self.result = "exit"
 
     # -- helpers -----------------------------------------------------
 
@@ -164,21 +158,12 @@ class WalletDetailScreen:
             anchor="mm",
         )
 
-        # Footer hints.
-        draw_text(
-            fb,
-            DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 24,
-            "L/R index   A next",
-            size=10,
-            color=COLOR_DIM,
-            anchor="mm",
-        )
+        # Footer hint.
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 10,
-            "B back   hold B quit app",
+            "L/R index   A/B exit",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

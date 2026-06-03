@@ -318,6 +318,8 @@ class SettingsScreen:
             anchor="mm",
         )
 
+        _CYCLER_KEYS = {"sleep_timer", "camera_type"}
+
         row_y = title_h + 4
         row_h = 32
         for idx, row in enumerate(self.rows):
@@ -337,11 +339,16 @@ class SettingsScreen:
                 color=COLOR_FG,
                 anchor="lm",
             )
+            val = row.value_text(self._draft)
+            # Wrap left/right cycler values in < > brackets when selected
+            # so the operator sees that LEFT/RIGHT scrolls through options.
+            if is_cursor and row.key in _CYCLER_KEYS:
+                val = f"< {val} >"
             draw_text(
                 fb,
                 DISPLAY_WIDTH - 12,
                 top + row_h // 2,
-                row.value_text(self._draft),
+                val,
                 size=14,
                 color=COLOR_FG if is_cursor else COLOR_DIM,
                 anchor="rm",
@@ -351,10 +358,16 @@ class SettingsScreen:
         if self.rows[self.cursor].key == "brightness":
             self._draw_slider(fb, self._draft.brightness)
 
-        # Footer hints — A's verb depends on whether the cursor sits on
-        # a value row (save-and-exit) or an action row (open sub-flow).
-        on_action = self.rows[self.cursor].is_action
-        upper_hint = "U/D row" if on_action else "L/R adjust   U/D row"
+        # Footer hints — vary by row type.
+        cur_row = self.rows[self.cursor]
+        on_action = cur_row.is_action
+        on_cycler = cur_row.key in _CYCLER_KEYS
+        if on_action:
+            upper_hint = "U/D row"
+        elif on_cycler:
+            upper_hint = "< / > cycle   U/D row"
+        else:
+            upper_hint = "L/R adjust   U/D row"
         a_verb = "open" if on_action else "save"
         draw_text(
             fb,

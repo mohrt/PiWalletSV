@@ -122,6 +122,14 @@ class Display(ABC):
         """
         self.brightness = clamp_brightness(level)
 
+    def recover(self) -> None:  # noqa: B027 (optional override; default no-op)
+        """Called by the run loop after any button event.
+
+        Real hardware subclasses may override this to re-assert the display
+        state in case a GPIO button press capacitively perturbed the RST or
+        DC lines and left the panel in sleep / display-off mode.
+        """
+
     def close(self) -> None:  # noqa: B027 (optional override; default no-op by design)
         """Optional teardown hook. Default is a no-op."""
 
@@ -272,12 +280,32 @@ class ST7789Display(Display):
         if self._backlight is not None:
             self._backlight.value = bool(on)
 
+    def recover(self) -> None:  # pragma: no cover
+        """Restore the display after an accidental hardware reset.
+
+        Pressing the RIGHT joystick (GPIO D23 / physical pin 16) can
+        capacitively couple to the RST line (GPIO D24 / physical pin 18)
+        and trigger a brief hardware reset.
+
+        Key constraint from the ST7789 datasheet: after SLPOUT (0x11) the
+        **frame memory is locked for 120 ms**.  Any RAMWR that arrives during
+        that window is silently ignored, so the flip() that follows must wait
+        until the 120 ms has elapsed.  We put the sleep *inside* recover() so
+        by the time run_screen calls flip() the panel is ready.
+        """
+        import time as _time
+
+        try:
+            self._device.write(0x11)       # SLPOUT — exits sleep / re-init power
+            _time.sleep(0.120)             # ST7789: GRAM locked for 120 ms after SLPOUT
+            self._device.write(0x3A, bytes([0x55]))  # COLMOD 16-bit colour
+            self._device.write(0x36, bytes([0xC0]))  # MADCTL rotation=180 RGB
+            self._device.write(0x13)       # NORON  normal display mode
+            self._device.write(0x29)       # DISPON turn panel on
+        except Exception as exc:  # pragma: no cover
+            logger.warning("ST7789 recover() failed: %s", exc)
+
     def flip(self, framebuf: FrameBuffer) -> None:  # pragma: no cover
-        # Apply software dimming when configured below 1.0. PIL's
-        # ImageEnhance.Brightness is implemented in C against MUL tables
-        # and runs in a few ms for a 240x240 RGB image — well within the
-        # bonnet's per-frame budget. When brightness is 1.0 (the common
-        # case) we skip the work entirely.
         img = framebuf.image
         if self.brightness < MAX_BRIGHTNESS:
             from PIL import ImageEnhance

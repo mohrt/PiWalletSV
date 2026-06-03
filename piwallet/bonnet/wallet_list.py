@@ -74,7 +74,7 @@ class WalletListScreen:
         # restore — even on a fresh vault (empty wallets list).
         items.append(ListItem(label="+ New wallet", value=WalletListAction.NEW))
         items.append(ListItem(label="+ Restore wallet", value=WalletListAction.RESTORE))
-        self._list = ListView(items=items, title=self.title)
+        self._list = ListView(items=items, title=self.title, footer="A: select   B: exit")
 
     @staticmethod
     def _format_label(w: WalletRecord) -> str:

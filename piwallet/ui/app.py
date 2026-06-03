@@ -168,6 +168,11 @@ def run_screen(
             screen.on_event(event)
             if screen.done:
                 break
+        if events:
+            # A button press may have capacitively coupled to the RST or DC
+            # line and left the ST7789 in sleep mode.  recover() re-asserts
+            # SLPOUT + MADCTL + DISPON so the next flip is visible.
+            display.recover()
         if not suppress_paint:
             screen.draw(fb)
             display.flip(fb)
