@@ -7,7 +7,7 @@
  * cancel early.
  */
 import jsQR from "jsqr";
-import { MultipartAssembler, MultipartQrError } from "../pw1.js";
+import { MultipartAssembler, MultipartQrError, pw1LineMeta } from "../pw1.js";
 
 const SCAN_INTERVAL_MS = 100;
 
@@ -77,7 +77,12 @@ export async function startPw1Scan(
               asm = new MultipartAssembler();
             }
           }
-          onProgress(asm.partsReceived, asm.expectedTotal);
+          const meta = pw1LineMeta(trimmed);
+          if (out !== null && meta) {
+            onProgress(meta[0], meta[0]);
+          } else {
+            onProgress(asm.partsReceived, asm.expectedTotal);
+          }
           if (out !== null) {
             release();
             onResult(out);

@@ -50,3 +50,21 @@ export function splitConfirmedPending(utxos: readonly UtxoLike[]): BalanceSplit 
     allPending: pendingCount > 0 && confirmedCount === 0,
   };
 }
+
+/** Human-readable reason when send cannot pick any confirmed inputs. */
+export function noSpendableUtxosMessage(
+  utxos: readonly UtxoLike[],
+  formatSats: (n: number) => string,
+): string {
+  if (utxos.length === 0) {
+    return "no UTXOs known — switch to the Balance tab and click Refresh first";
+  }
+  const split = splitConfirmedPending(utxos);
+  if (split.confirmedSats > 0) {
+    return `${formatSats(split.confirmedSats)} confirmed but not spendable — refresh Balance and try again`;
+  }
+  if (split.hasPending) {
+    return `only confirmed coins can be sent; ${formatSats(split.pendingSats)} is still in the mempool — wait for confirmation, then refresh Balance`;
+  }
+  return "no confirmed UTXOs in the last scan — refresh Balance on the Balance tab";
+}

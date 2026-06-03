@@ -37,7 +37,7 @@ import {
 } from "../lib/wallets.js";
 import { ENVELOPE_VERSION } from "../lib/envelope.js";
 import type { NetworkT } from "../lib/envelope.js";
-import { WocClient, WocError, effectiveWocBase } from "../lib/woc.js";
+import { WocClient, WocError, effectiveWocBase, wocExplorerTxUrl } from "../lib/woc.js";
 
 const SCAN_INTERVAL_MS = 80; // ~12.5 fps; plenty for animated QR
 const TEXT_DISPLAY_CAP = 64 * 1024; // truncate displayed body for huge payloads
@@ -639,7 +639,7 @@ export function mountScannerPage(
       woc = new WocClient({ baseUrl });
     }
     try {
-      const txid = await woc.broadcastRaw(signedTxRawHex);
+      const txid = await woc.broadcastRaw(signedTxRawHex, signedTxId);
       setSignStep("done");
       const $success = root.querySelector<HTMLElement>("#broadcastSuccess");
       if ($success) $success.hidden = false;
@@ -649,11 +649,7 @@ export function mountScannerPage(
         $broadcastStatus.textContent =
           `WARNING: WoC returned txid ${txid} but the Pi signed ${signedTxId}.`;
       }
-      const explorerBase =
-        signedTxNetwork === "test"
-          ? "https://test.whatsonchain.com/tx/"
-          : "https://whatsonchain.com/tx/";
-      $broadcastExplorer.href = `${explorerBase}${txid}`;
+      $broadcastExplorer.href = wocExplorerTxUrl(txid, signedTxNetwork);
       $broadcastExplorer.hidden = false;
       $broadcastBtn.textContent = "Broadcasted";
     } catch (e) {

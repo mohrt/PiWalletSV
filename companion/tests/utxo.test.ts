@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { deriveAddress } from "../src/lib/derive.js";
-import { scanWalletUtxos } from "../src/lib/utxo.js";
+import { confirmedUtxos, scanWalletUtxos } from "../src/lib/utxo.js";
 import {
   WocClient,
   type WocBulkUnspentResult,
@@ -207,7 +207,8 @@ describe("scanWalletUtxos", () => {
     // endpoints and merges them; this test pins the contract that
     // `scanWalletUtxos` honours `height: 0` rows the same as
     // confirmed ones — they're spendable (or at least visible) and
-    // belong in the balance.
+    // belong in the balance (but are excluded from send/coin-select until
+    // confirmed — SPV proofs require an on-chain height).
     const recvAddr0 = deriveAddress(XPUB, 0, 0).address;
     const fund: Record<string, WocUnspentEntry[]> = {
       [recvAddr0]: [
@@ -229,5 +230,24 @@ describe("scanWalletUtxos", () => {
       derivation: [0, 0],
     });
     expect(result.lastReceiveUsed).toBe(0);
+  });
+
+  it("confirmedUtxos drops mempool entries used for send selection", () => {
+    const utxos = [
+      { txid: "aa".repeat(32), vout: 0, sats: 1000, height: 800001, address: "1", derivation: [0, 0] as [number, number] },
+      { txid: "bb".repeat(32), vout: 1, sats: 2500, height: 0, address: "1", derivation: [0, 1] as [number, number] },
+    ];
+    expect(confirmedUtxos(utxos)).toHaveLength(1);
+    expect(confirmedUtxos(utxos)[0]?.txid).toBe("aa".repeat(32));
+  });
+
+  it("confirmedUtxos dedupes duplicate outpoints keeping confirmed height", () => {
+    const utxos = [
+      { txid: "aa".repeat(32), vout: 0, sats: 1000, height: 0, address: "1", derivation: [0, 0] as [number, number] },
+      { txid: "aa".repeat(32), vout: 0, sats: 1000, height: 800001, address: "1", derivation: [0, 0] as [number, number] },
+    ];
+    expect(confirmedUtxos(utxos)).toEqual([
+      expect.objectContaining({ txid: "aa".repeat(32), height: 800001 }),
+    ]);
   });
 });

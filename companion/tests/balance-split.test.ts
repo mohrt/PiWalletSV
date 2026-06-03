@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { splitConfirmedPending } from "../src/lib/balance-split.js";
+import { noSpendableUtxosMessage, splitConfirmedPending } from "../src/lib/balance-split.js";
 
 /**
  * Pin the wallet-detail card's confirmed/pending split — drives both
@@ -79,5 +79,14 @@ describe("splitConfirmedPending", () => {
     const before = JSON.stringify(utxos);
     splitConfirmedPending(utxos);
     expect(JSON.stringify(utxos)).toBe(before);
+  });
+
+  it("noSpendableUtxosMessage explains mempool-only balance", () => {
+    const msg = noSpendableUtxosMessage(
+      [{ sats: 5000, height: 0 }],
+      (n) => `${n} sats`,
+    );
+    expect(msg).toContain("5000 sats");
+    expect(msg).toContain("mempool");
   });
 });

@@ -12,6 +12,9 @@ import {
   WocError,
   effectiveWocBase,
   wocBaseForNetwork,
+  wocExplorerTxUrl,
+  WOC_EXPLORER_MAIN,
+  WOC_EXPLORER_TEST,
 } from "../src/lib/woc.js";
 
 interface StubCall {
@@ -346,6 +349,29 @@ describe("WocClient", () => {
     await expect(w.broadcastRaw("abc")).rejects.toBeInstanceOf(WocError); // odd length
   });
 
+  it("broadcastRaw treats already-in-mempool as success when knownTxid provided", async () => {
+    const { fetch } = stubFetch(() =>
+      new Response(
+        'unexpected response code 500: Transaction already in the mempool',
+        { status: 400, statusText: "Bad Request" },
+      ),
+    );
+    const w = new WocClient({ fetch, maxRetries: 0, minIntervalMs: 0 });
+    const txid = await w.broadcastRaw("0100abcd", "abc123deadbeef");
+    expect(txid).toBe("abc123deadbeef");
+  });
+
+  it("broadcastRaw still throws already-in-mempool without knownTxid", async () => {
+    const { fetch } = stubFetch(() =>
+      new Response(
+        'Transaction already in the mempool',
+        { status: 400, statusText: "Bad Request" },
+      ),
+    );
+    const w = new WocClient({ fetch, maxRetries: 0, minIntervalMs: 0 });
+    await expect(w.broadcastRaw("0100abcd")).rejects.toBeInstanceOf(WocError);
+  });
+
   it("non-2xx http errors become WocError with status", async () => {
     const { fetch } = stubFetch(() =>
       new Response("Too Many Requests", {
@@ -427,6 +453,16 @@ describe("WocClient", () => {
   it("wocBaseForNetwork picks the right base per network", () => {
     expect(wocBaseForNetwork("main")).toBe(WOC_MAINNET_BASE);
     expect(wocBaseForNetwork("test")).toBe(WOC_TESTNET_BASE);
+  });
+
+  it("wocExplorerTxUrl uses WoC Next.js /tx/ routes", () => {
+    const txid = "487a85551ae412cc91f14e6ede083af920338262336f9281cde83cbd2eda4136";
+    expect(wocExplorerTxUrl(txid, "test")).toBe(
+      `${WOC_EXPLORER_TEST}/tx/${txid}`,
+    );
+    expect(wocExplorerTxUrl(txid, "main")).toBe(
+      `${WOC_EXPLORER_MAIN}/tx/${txid}`,
+    );
   });
 
   // The dev branch of effectiveWocBase shields mobile WebKit clients
@@ -553,5 +589,47 @@ describe("WocClient", () => {
     const out = await w.getHeaderChain(800_000, 0);
     expect(out).toEqual([]);
     expect(calls).toHaveLength(0);
+  });
+
+  it("dedupes duplicate outpoints preferring confirmed height", async () => {
+    const { fetch } = stubFetch((url) => {
+      if (url.endsWith("/addresses/confirmed/unspent")) {
+        return jsonResponse([
+          {
+            address: "addrA",
+            result: [
+              {
+                tx_hash: "aa".repeat(32),
+                tx_pos: 0,
+                value: 1000,
+                height: 800001,
+              },
+            ],
+            error: "",
+          },
+        ]);
+      }
+      if (url.endsWith("/addresses/unconfirmed/unspent")) {
+        return jsonResponse([
+          {
+            address: "addrA",
+            result: [
+              {
+                tx_hash: "aa".repeat(32),
+                tx_pos: 0,
+                value: 1000,
+              },
+            ],
+            error: "",
+          },
+        ]);
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const w = new WocClient({ fetch });
+    const rows = await w.getUnspentBatch(["addrA"]);
+    expect(rows[0]?.utxos).toEqual([
+      { txid: "aa".repeat(32), vout: 0, sats: 1000, height: 800001 },
+    ]);
   });
 });

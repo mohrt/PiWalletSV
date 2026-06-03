@@ -36,9 +36,9 @@ import {
   ProposalBuilderError,
   buildUnsignedProposal,
 } from "../lib/proposal.js";
-import { splitConfirmedPending } from "../lib/balance-split.js";
-import { scanWalletUtxos, scanNextReceiveIndex } from "../lib/utxo.js";
-import { WocClient, WocError, effectiveWocBase } from "../lib/woc.js";
+import { noSpendableUtxosMessage, splitConfirmedPending } from "../lib/balance-split.js";
+import { confirmedUtxos, scanWalletUtxos, scanNextReceiveIndex } from "../lib/utxo.js";
+import { WocClient, WocError, effectiveWocBase, wocExplorerTxUrl } from "../lib/woc.js";
 import {
   BitailsClient,
   effectiveBitailsBase,
@@ -162,6 +162,7 @@ export function mountWalletDetailPage(
   let feeRec: FeeRecommendation | null = null;
   let addrScanHandle: CameraScanHandle | null = null;
   let pw1ScanHandle: Pw1ScanHandle | null = null;
+  let sendQrTab: "proposal" | "scan" = "proposal";
   let selectedFeeRate = DEFAULT_FEE_RATE_SATSKB;
 
   let proposalFrames: string[] | null = null;
@@ -279,6 +280,7 @@ export function mountWalletDetailPage(
             </div>
           </div>
           <p class="muted-line" id="balanceMeta"></p>
+          <p class="muted-line balance-spv-note" id="balanceSpvNote" hidden></p>
           <p class="muted-line balance-status" id="balanceStatus"></p>
           <details id="utxoDetails" hidden>
             <summary>UTXOs (<span id="utxoCount">0</span>)</summary>
@@ -289,7 +291,12 @@ export function mountWalletDetailPage(
         <!-- Send tab -->
         <section id="tab-send" class="card tab-panel${activeTab === "send" ? " active" : ""}" role="tabpanel">
           <p class="send-balance-line muted-line">
-            Balance: <span id="sendBalanceHero">—</span>
+            Spendable: <span id="sendBalanceHero">—</span>
+            <span id="sendBalancePending" hidden></span>
+          </p>
+          <p class="muted-line send-spv-tip">
+            Sending uses SPV verification — only confirmed on-chain coins are
+            spendable. Mempool (pending) UTXOs must confirm first.
           </p>
           <div id="sendStep-form">
             <h2>Send</h2>
@@ -390,6 +397,12 @@ export function mountWalletDetailPage(
               <tr><td class="review-label">Change</td><td id="reviewChange" class="review-value"></td></tr>
               <tr><td class="review-label">Fee rate</td><td id="reviewFeeRate" class="review-value"></td></tr>
             </table>
+            <ol class="sign-steps spv-steps" id="spvSteps" hidden aria-label="SPV build progress">
+              <li class="sign-step" id="spvStep-select">Select inputs</li>
+              <li class="sign-step" id="spvStep-proofs">Verify SPV proofs</li>
+              <li class="sign-step" id="spvStep-build">Build proposal</li>
+            </ol>
+            <p class="muted-line" id="spvDetail" hidden></p>
             <p class="muted-line" id="reviewStatus"></p>
             <div class="actions">
               <button id="reviewBack" type="button">← Back</button>
@@ -398,62 +411,78 @@ export function mountWalletDetailPage(
           </div>
 
           <div id="sendStep-qr" hidden>
-            <h2>Step 1 — show proposal to Pi</h2>
-            <p class="muted-line">Point the Pi camera at this animated QR.</p>
-            <canvas id="proposalQr" width="320" height="320"></canvas>
-            <p class="muted-line">
-              Frame <span id="proposalFrameIdx">0</span> /
-              <span id="proposalFrameCount">0</span> ·
-              <span id="proposalByteCount">0</span> bytes
-            </p>
-            <div class="actions">
-              <button id="proposalToggle" type="button" class="primary">Pause</button>
-              <button id="proposalDone" type="button">New send</button>
+            <div class="scanner-tabs send-qr-tabs" role="tablist">
+              <button role="tab" data-send-qr-tab="proposal"
+                class="scanner-tab active" type="button">
+                Step 1 — Show QR
+              </button>
+              <button role="tab" data-send-qr-tab="scan"
+                class="scanner-tab" type="button">
+                Step 2 — Scan
+              </button>
             </div>
 
-            <hr class="section-divider" />
-
-            <h2>Step 2 — scan Pi's signed response</h2>
-            <p class="muted-line">
-              After the Pi signs, point this camera at the Pi's response QR.
-            </p>
-            <div id="pw1ScanWidget" hidden>
-              <video id="pw1ScanVideo" class="addr-scan-video" playsinline muted autoplay></video>
-              <p class="muted-line" id="pw1ScanStatus">Scanning for signed TX…</p>
-              <p class="muted-line" id="pw1ScanProgress"></p>
-              <div class="actions">
-                <button id="pw1ScanCancel" type="button">Cancel</button>
-              </div>
-            </div>
-            <div id="pw1ScanActions" class="actions">
-              <button id="pw1ScanStart" type="button" class="primary">Scan Pi's response</button>
-            </div>
-
-            <div id="broadcastWidget" hidden>
-              <p id="broadcastInfo" class="muted-line"></p>
-              <div class="actions">
-                <button id="broadcastBtn" type="button" class="primary">Broadcast</button>
-                <button id="proposalDone2" type="button">New send</button>
-              </div>
-              <p id="broadcastStatus" class="muted-line"></p>
-            </div>
-
-            <details class="advanced proposal-hex-details">
-              <summary>Sign over SSH instead (paste hex)</summary>
+            <div id="sendQrTab-proposal" role="tabpanel">
+              <p id="spvCompleteBanner" class="spv-complete-banner" hidden></p>
+              <p class="muted-line">Point the Pi camera at this animated QR.</p>
+              <canvas id="proposalQr" width="320" height="320"></canvas>
               <p class="muted-line">
-                Copy the hex below, then on the Pi run:<br>
-                <code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code><br>
-                Then paste the signed hex on the
-                <a href="#/scan/tx">Submit signed TX</a> page.
+                Frame <span id="proposalFrameIdx">0</span> /
+                <span id="proposalFrameCount">0</span> ·
+                <span id="proposalByteCount">0</span> bytes
               </p>
-              <textarea id="proposalHex" class="hex-blob" rows="6"
-                readonly spellcheck="false" autocorrect="off"></textarea>
               <div class="actions">
-                <button id="copyProposalHex" type="button" class="primary">Copy hex</button>
-                <a href="#/scan/tx" class="primary-link">Submit signed TX →</a>
+                <button id="proposalToggle" type="button" class="primary">Pause</button>
+                <button id="sendQrGoScan" type="button">Step 2 →</button>
+                <button id="proposalDone" type="button">New send</button>
               </div>
-              <p class="muted-line" id="proposalHexStatus"></p>
-            </details>
+
+              <details class="advanced proposal-hex-details">
+                <summary>Sign over SSH instead (paste hex)</summary>
+                <p class="muted-line">
+                  Copy the hex below, then on the Pi run:<br>
+                  <code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code><br>
+                  Then paste the signed hex on the
+                  <a href="#/scan/tx">Submit signed TX</a> page.
+                </p>
+                <textarea id="proposalHex" class="hex-blob" rows="6"
+                  readonly spellcheck="false" autocorrect="off"></textarea>
+                <div class="actions">
+                  <button id="copyProposalHex" type="button" class="primary">Copy hex</button>
+                  <a href="#/scan/tx" class="primary-link">Submit signed TX →</a>
+                </div>
+                <p class="muted-line" id="proposalHexStatus"></p>
+              </details>
+            </div>
+
+            <div id="sendQrTab-scan" role="tabpanel" hidden>
+              <p class="muted-line">
+                After the Pi signs, point this camera at the Pi's response QR.
+              </p>
+              <div id="pw1ScanWidget" hidden>
+                <video id="pw1ScanVideo" class="addr-scan-video" playsinline muted autoplay></video>
+                <p class="muted-line" id="pw1ScanStatus">Scanning for signed TX…</p>
+                <p class="muted-line" id="pw1ScanProgress"></p>
+                <div class="actions">
+                  <button id="pw1ScanCancel" type="button">Cancel</button>
+                </div>
+              </div>
+              <div id="pw1ScanActions" class="actions send-scan-actions">
+                <button id="pw1ScanStart" type="button" class="primary">Scan Pi's response</button>
+              </div>
+
+              <div id="broadcastWidget" class="send-broadcast-panel" hidden>
+                <p id="broadcastInfo" class="send-broadcast-message muted-line"></p>
+                <p id="broadcastStatus" class="send-broadcast-message muted-line"></p>
+                <div class="actions send-broadcast-actions">
+                  <button id="broadcastBtn" type="button" class="primary">Broadcast</button>
+                  <button id="broadcastDone" type="button" class="primary" hidden>
+                    Done
+                  </button>
+                  <button id="proposalDone2" type="button">New send</button>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -622,6 +651,8 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", () => void onBuildProposal());
     root.querySelector<HTMLButtonElement>("#proposalToggle")
       ?.addEventListener("click", toggleAnimation);
+    root.querySelector<HTMLButtonElement>("#sendQrGoScan")
+      ?.addEventListener("click", () => switchSendQrTab("scan"));
     root.querySelector<HTMLButtonElement>("#proposalDone")
       ?.addEventListener("click", resetSendCard);
     root.querySelector<HTMLButtonElement>("#proposalDone2")
@@ -634,6 +665,14 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", stopPw1Scan);
     root.querySelector<HTMLButtonElement>("#broadcastBtn")
       ?.addEventListener("click", () => void onBroadcast());
+    root.querySelector<HTMLButtonElement>("#broadcastDone")
+      ?.addEventListener("click", () => void onBroadcastDone());
+    root.querySelectorAll<HTMLButtonElement>("[data-send-qr-tab]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tab = btn.dataset.sendQrTab as "proposal" | "scan";
+        switchSendQrTab(tab);
+      });
+    });
 
     // Fee tier radio — highlight selected
     root.querySelectorAll<HTMLInputElement>('input[name="feeTier"]').forEach((r) => {
@@ -648,11 +687,13 @@ export function mountWalletDetailPage(
         if (!$customInput || !$est || sendStep.step !== "fee" || !wallet?.lastScan) return;
         const rate = parseInt($customInput.value, 10);
         if (!Number.isInteger(rate) || rate <= 0) { $est.textContent = "—"; return; }
+        const utxos = spendableUtxos();
+        if (utxos.length === 0) { $est.textContent = "—"; return; }
         try {
-          const fee = selectUtxosGreedy(wallet.lastScan.utxos, sendStep.sats, rate).feeSats;
+          const fee = selectUtxosGreedy(utxos, sendStep.sats, rate).feeSats;
           $est.textContent = `~${fee.toLocaleString("en-US")} sats`;
         } catch {
-          const bytes = wallet.lastScan.utxos.length * 148 + 2 * 34 + 10;
+          const bytes = utxos.length * 148 + 2 * 34 + 10;
           $est.textContent = `~${Math.ceil(bytes * rate / 1000).toLocaleString("en-US")} sats`;
         }
       });
@@ -854,13 +895,15 @@ export function mountWalletDetailPage(
     const $bsv = root.querySelector<HTMLElement>("#balanceBsv");
     const $meta = root.querySelector<HTMLElement>("#balanceMeta");
     const $pending = root.querySelector<HTMLElement>("#balancePending");
+    const $spvNote = root.querySelector<HTMLElement>("#balanceSpvNote");
     const $details = root.querySelector<HTMLDetailsElement>("#utxoDetails");
     const $count = root.querySelector<HTMLElement>("#utxoCount");
     const $list = root.querySelector<HTMLUListElement>("#utxoList");
-    if (!$hero || !$bsv || !$meta || !$pending || !$details || !$count || !$list)
+    if (!$hero || !$bsv || !$meta || !$pending || !$spvNote || !$details || !$count || !$list)
       return;
 
     const $sendBal = root.querySelector<HTMLElement>("#sendBalanceHero");
+    const $sendPending = root.querySelector<HTMLElement>("#sendBalancePending");
 
     const scan = wallet.lastScan;
     if (!scan) {
@@ -869,11 +912,26 @@ export function mountWalletDetailPage(
       $meta.textContent = "Not scanned yet — click Refresh to query WhatsOnChain.";
       $pending.hidden = true;
       $details.hidden = true;
+      if ($spvNote) $spvNote.hidden = true;
       if ($sendBal) $sendBal.textContent = "—";
+      if ($sendPending) $sendPending.hidden = true;
       return;
     }
 
-    if ($sendBal) $sendBal.textContent = formatBalance(scan.totalSats);
+    const split = splitConfirmedPending(scan.utxos);
+    if ($sendBal) {
+      $sendBal.textContent = formatBalance(split.confirmedSats);
+    }
+    if ($sendPending) {
+      if (split.hasPending) {
+        $sendPending.hidden = false;
+        $sendPending.textContent =
+          ` · ${formatBalance(split.pendingSats)} pending (not spendable yet)`;
+      } else {
+        $sendPending.hidden = true;
+        $sendPending.textContent = "";
+      }
+    }
     $hero.textContent = formatBalance(scan.totalSats);
     $bsv.textContent =
       displayUnit === "sats" ? formatBsv(scan.totalSats) :
@@ -883,14 +941,18 @@ export function mountWalletDetailPage(
       `${scan.utxos.length} UTXO${scan.utxos.length === 1 ? "" : "s"} · ` +
       `last refreshed ${relativeTimeFrom(scan.at)}`;
 
-    const split = splitConfirmedPending(scan.utxos);
     if (split.hasPending) {
       $pending.hidden = false;
       $pending.textContent = split.allPending
         ? "unconfirmed"
         : `+${formatSats(split.pendingSats)} unconfirmed`;
+      $spvNote.hidden = false;
+      $spvNote.textContent =
+        "Pending (mempool) coins are included in your total but cannot be spent until " +
+        "they confirm — SPV requires an on-chain Merkle proof for each input.";
     } else {
       $pending.hidden = true;
+      $spvNote.hidden = true;
     }
 
     $details.hidden = scan.utxos.length === 0;
@@ -1021,9 +1083,6 @@ export function mountWalletDetailPage(
       const isPending = tx.blockHeight === 0;
       li.className = `history-row ${isReceive ? "receive" : "send"}${isPending ? " pending" : ""}`;
       const network = wallet.network ?? "main";
-      const explorerBase = network === "test"
-        ? "https://test.whatsonchain.com/tx/"
-        : "https://whatsonchain.com/tx/";
       li.innerHTML = `
         <div class="history-top">
           <span class="history-delta ${isReceive ? "positive" : "negative"}">
@@ -1032,7 +1091,7 @@ export function mountWalletDetailPage(
           <span class="history-time muted-line">${escapeHtml(formatTxTimestamp(tx.timestamp))}</span>
         </div>
         <div class="history-meta muted-line">
-          <a href="${explorerBase}${escapeHtml(tx.txid)}" target="_blank"
+          <a href="${escapeHtml(wocExplorerTxUrl(tx.txid, network))}" target="_blank"
              rel="noopener noreferrer">${escapeHtml(shortTxid(tx.txid))}</a>
           ${isPending
             ? '<span class="utxo-pending-tag">unconfirmed</span>'
@@ -1128,16 +1187,133 @@ export function mountWalletDetailPage(
       const el = root.querySelector<HTMLElement>(`#sendStep-${s}`);
       if (el) el.hidden = s !== step;
     }
+    if (step === "qr") switchSendQrTab("proposal");
+  }
+
+  type SpvBuildStep = "idle" | "select" | "proofs" | "build" | "done" | "error";
+
+  function resetSpvUi(): void {
+    const $steps = root.querySelector<HTMLElement>("#spvSteps");
+    const $detail = root.querySelector<HTMLElement>("#spvDetail");
+    const $banner = root.querySelector<HTMLElement>("#spvCompleteBanner");
+    if ($steps) $steps.hidden = true;
+    if ($detail) {
+      $detail.hidden = true;
+      $detail.textContent = "";
+      $detail.classList.remove("error");
+    }
+    if ($banner) {
+      $banner.hidden = true;
+      $banner.textContent = "";
+    }
+    for (const id of ["spvStep-select", "spvStep-proofs", "spvStep-build"]) {
+      const el = root.querySelector<HTMLElement>(`#${id}`);
+      if (el) el.className = "sign-step";
+    }
+  }
+
+  function setSpvBuildStep(
+    step: SpvBuildStep,
+    detail?: string,
+    failedAt?: "select" | "proofs" | "build",
+  ): void {
+    const $steps = root.querySelector<HTMLElement>("#spvSteps");
+    const $detail = root.querySelector<HTMLElement>("#spvDetail");
+    const $select = root.querySelector<HTMLElement>("#spvStep-select");
+    const $proofs = root.querySelector<HTMLElement>("#spvStep-proofs");
+    const $build = root.querySelector<HTMLElement>("#spvStep-build");
+    if (!$steps || !$select || !$proofs || !$build) return;
+
+    if (step === "idle") {
+      resetSpvUi();
+      return;
+    }
+
+    $steps.hidden = false;
+    for (const el of [$select, $proofs, $build]) {
+      el.className = "sign-step";
+    }
+
+    if ($detail) {
+      if (detail) {
+        $detail.hidden = false;
+        $detail.textContent = detail;
+        $detail.classList.toggle("error", step === "error");
+      } else {
+        $detail.hidden = true;
+        $detail.textContent = "";
+        $detail.classList.remove("error");
+      }
+    }
+
+    if (step === "select") {
+      $select.classList.add("active");
+    } else if (step === "proofs") {
+      $select.classList.add("done");
+      $proofs.classList.add("active");
+    } else if (step === "build") {
+      $select.classList.add("done");
+      $proofs.classList.add("done");
+      $build.classList.add("active");
+    } else if (step === "done") {
+      for (const el of [$select, $proofs, $build]) {
+        el.classList.add("done");
+      }
+    } else if (step === "error" && failedAt) {
+      if (failedAt === "select") {
+        $select.classList.add("error");
+      } else if (failedAt === "proofs") {
+        $select.classList.add("done");
+        $proofs.classList.add("error");
+      } else {
+        $select.classList.add("done");
+        $proofs.classList.add("done");
+        $build.classList.add("error");
+      }
+    }
+  }
+
+  function showSpvCompleteBanner(inputCount: number, heights: number[]): void {
+    const $banner = root.querySelector<HTMLElement>("#spvCompleteBanner");
+    if (!$banner) return;
+    const uniqueHeights = [...new Set(heights)].sort((a, b) => a - b);
+    const heightText = uniqueHeights.length === 1
+      ? `block ${uniqueHeights[0]}`
+      : `blocks ${uniqueHeights[0]}–${uniqueHeights[uniqueHeights.length - 1]}`;
+    $banner.hidden = false;
+    $banner.textContent =
+      `✓ SPV verified — ${inputCount} confirmed input${inputCount === 1 ? "" : "s"} ` +
+      `anchored at ${heightText}. The Pi re-verifies each Merkle proof before signing.`;
+  }
+
+  function switchSendQrTab(tab: "proposal" | "scan"): void {
+    if (tab !== "scan" && sendQrTab === "scan") stopPw1Scan();
+    sendQrTab = tab;
+    const $proposal = root.querySelector<HTMLElement>("#sendQrTab-proposal");
+    const $scan = root.querySelector<HTMLElement>("#sendQrTab-scan");
+    if ($proposal) $proposal.hidden = tab !== "proposal";
+    if ($scan) $scan.hidden = tab !== "scan";
+    root.querySelectorAll<HTMLButtonElement>("[data-send-qr-tab]").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.sendQrTab === tab);
+    });
+  }
+
+  /** Confirmed UTXOs only — mempool coins can't carry SPV proofs yet. */
+  function spendableUtxos() {
+    if (!wallet?.lastScan) return [];
+    return confirmedUtxos(wallet.lastScan.utxos);
   }
 
   function onSendMax(): void {
     if (!wallet?.lastScan) return;
+    const utxos = spendableUtxos();
+    if (utxos.length === 0) return;
     const $amount = root.querySelector<HTMLInputElement>("#sendAmount");
     const $unit = root.querySelector<HTMLSelectElement>("#sendUnit");
     if (!$amount || !$unit) return;
     const feeRate = selectedFeeRate;
-    const totalIn = wallet.lastScan.utxos.reduce((a, u) => a + u.sats, 0);
-    const estimatedFee = Math.ceil((wallet.lastScan.utxos.length * 148 + 2 * 34 + 10) * feeRate / 1000);
+    const totalIn = utxos.reduce((a, u) => a + u.sats, 0);
+    const estimatedFee = Math.ceil((utxos.length * 148 + 2 * 34 + 10) * feeRate / 1000);
     const maxSats = Math.max(0, totalIn - estimatedFee);
     const unit = $unit.value as "sats" | "bsv" | "usd";
     if (unit === "sats") {
@@ -1201,6 +1377,15 @@ export function mountWalletDetailPage(
       $status.textContent = "no UTXOs known — switch to the Balance tab and click Refresh first";
       return;
     }
+    const utxos = spendableUtxos();
+    if (utxos.length === 0) {
+      $status.classList.add("error");
+      $status.textContent = noSpendableUtxosMessage(
+        wallet.lastScan.utxos,
+        formatSats,
+      );
+      return;
+    }
 
     sendStep = { step: "fee", recipient, sats };
     showSendStep("fee");
@@ -1226,10 +1411,12 @@ export function mountWalletDetailPage(
     const feeStep = sendStep.step === "fee" ? sendStep : null;
     const estSats = feeStep && wallet?.lastScan
       ? (rate: number) => {
+          const utxos = spendableUtxos();
+          if (utxos.length === 0) return null;
           try {
-            return selectUtxosGreedy(wallet!.lastScan!.utxos, feeStep.sats, rate).feeSats;
+            return selectUtxosGreedy(utxos, feeStep.sats, rate).feeSats;
           } catch {
-            const bytes = (wallet!.lastScan!.utxos.length) * 148 + 2 * 34 + 10;
+            const bytes = utxos.length * 148 + 2 * 34 + 10;
             return Math.ceil(bytes * rate / 1000);
           }
         }
@@ -1278,16 +1465,30 @@ export function mountWalletDetailPage(
     }
     selectedFeeRate = rate;
 
+    const utxos = spendableUtxos();
+    if (utxos.length === 0) {
+      const $status = root.querySelector<HTMLElement>("#feeLoading");
+      if ($status) {
+        $status.hidden = false;
+        $status.classList.add("error");
+        $status.textContent = noSpendableUtxosMessage(
+          wallet.lastScan.utxos,
+          formatSats,
+        );
+      }
+      return;
+    }
+
     // Estimate fee and change for the review screen
     let feeSats = 0;
     let changeSats = 0;
     try {
-      const sel = selectUtxosGreedy(wallet.lastScan.utxos, sendStep.sats, rate);
+      const sel = selectUtxosGreedy(utxos, sendStep.sats, rate);
       feeSats = sel.feeSats;
       changeSats = sel.changeSats;
     } catch {
       // Use rough estimate if coin select fails (will re-run on confirm)
-      const estimatedBytes = wallet.lastScan.utxos.length * 148 + 2 * 34 + 10;
+      const estimatedBytes = utxos.length * 148 + 2 * 34 + 10;
       feeSats = Math.ceil(estimatedBytes * rate / 1000);
       changeSats = 0;
     }
@@ -1320,30 +1521,56 @@ export function mountWalletDetailPage(
     const $status = root.querySelector<HTMLElement>("#reviewStatus")!;
     const $confirm = root.querySelector<HTMLButtonElement>("#reviewConfirm")!;
     $status.classList.remove("error");
+    resetSpvUi();
 
     sendBusy = true;
     $confirm.disabled = true;
     $confirm.textContent = "Building…";
-    $status.textContent = "Selecting UTXOs…";
+    setSpvBuildStep("select", "Selecting confirmed UTXOs for SPV…");
+    $status.textContent = "";
 
+    let spvPhase: SpvBuildStep = "select";
     try {
+      const utxos = spendableUtxos();
+      if (utxos.length === 0) {
+        throw new CoinSelectError(
+          noSpendableUtxosMessage(wallet.lastScan!.utxos, formatSats),
+        );
+      }
       const selection = selectUtxosGreedy(
-        wallet.lastScan!.utxos,
+        utxos,
         sendStep.sats,
         sendStep.feeRate,
       );
-      $status.textContent =
-        `Selected ${selection.inputs.length} UTXO(s). Fetching SPV proofs…`;
+      spvPhase = "proofs";
+      setSpvBuildStep(
+        "proofs",
+        `Fetching and verifying SPV proofs for ${selection.inputs.length} input` +
+          `${selection.inputs.length === 1 ? "" : "s"}…`,
+      );
 
       if (!woc) woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
       const proofs = [];
+      const proofHeights: number[] = [];
       for (let i = 0; i < selection.inputs.length; i++) {
         const u = selection.inputs[i];
-        $status.textContent =
-          `Fetching proof ${i + 1}/${selection.inputs.length} for ${u.txid.slice(0, 8)}…`;
+        setSpvBuildStep(
+          "proofs",
+          `SPV ${i + 1}/${selection.inputs.length}: ${u.txid.slice(0, 8)}… — ` +
+            "fetching Merkle proof and block header…",
+        );
         const proof = await fetchInputProof(woc, u.txid);
+        proofHeights.push(proof.height);
         proofs.push({ utxo: u, proof });
+        setSpvBuildStep(
+          "proofs",
+          `SPV ${i + 1}/${selection.inputs.length}: verified at block ${proof.height} ` +
+            `(Merkle root matches header)`,
+        );
       }
+
+      spvPhase = "build";
+      setSpvBuildStep("build", "Assembling unsigned proposal with BEEF proofs…");
 
       const nextChangeIdx = (wallet.lastScan!.lastChangeUsed ?? -1) + 1;
       const changeDerived = deriveAddress(wallet.xpub, CHANGE_BRANCH, nextChangeIdx, wallet.network);
@@ -1379,8 +1606,13 @@ export function mountWalletDetailPage(
       const $proposalHex = root.querySelector<HTMLTextAreaElement>("#proposalHex");
       if ($proposalHex) $proposalHex.value = wrapHex(bytesToHex(blob), 64);
 
+      setSpvBuildStep("done", "All SPV checks passed — proposal ready for the Pi.");
+      showSpvCompleteBanner(selection.inputs.length, proofHeights);
+      $status.textContent = "";
+
       showSendStep("qr");
       sendStep = { step: "qr" };
+      resetBroadcastWidget();
       startProposalAnimation();
     } catch (e) {
       $status.classList.add("error");
@@ -1392,6 +1624,7 @@ export function mountWalletDetailPage(
           ? e.message
           : (e as Error).message;
       $status.textContent = `build failed: ${msg}`;
+      setSpvBuildStep("error", msg, spvPhase === "build" ? "build" : spvPhase);
     } finally {
       sendBusy = false;
       $confirm.disabled = false;
@@ -1501,6 +1734,13 @@ export function mountWalletDetailPage(
     );
   }
 
+  function showBroadcastWidget(): void {
+    const $broadcast = root.querySelector<HTMLElement>("#broadcastWidget");
+    const $pw1Actions = root.querySelector<HTMLElement>("#pw1ScanActions");
+    if ($broadcast) $broadcast.hidden = false;
+    if ($pw1Actions) $pw1Actions.hidden = true;
+  }
+
   async function onSignedTxReceived(bytes: Uint8Array): Promise<void> {
     const $broadcast = root.querySelector<HTMLElement>("#broadcastWidget");
     const $info = root.querySelector<HTMLElement>("#broadcastInfo");
@@ -1512,13 +1752,15 @@ export function mountWalletDetailPage(
       env = await decodeEnvelope(bytes);
     } catch (e) {
       if ($info) $info.textContent = `decode error: ${(e as Error).message}`;
-      $broadcast.hidden = false;
+      showBroadcastWidget();
+      switchSendQrTab("scan");
       return;
     }
 
     if (env.kind !== KIND_SIGNED) {
       if ($info) $info.textContent = `unexpected envelope type: ${env.kind}`;
-      $broadcast.hidden = false;
+      showBroadcastWidget();
+      switchSendQrTab("scan");
       return;
     }
 
@@ -1536,7 +1778,8 @@ export function mountWalletDetailPage(
         $info.textContent =
           `signed_tx Atomic BEEF parse failed: ${(e as Error).message}`;
       }
-      $broadcast.hidden = false;
+      showBroadcastWidget();
+      switchSendQrTab("scan");
       return;
     }
 
@@ -1544,7 +1787,9 @@ export function mountWalletDetailPage(
       $info.innerHTML = `Ready to broadcast<br><code class="mono" style="font-size:0.75rem;word-break:break-all">${txid}</code>${sizeBytes ? `<br><span class="muted-line">${sizeBytes} bytes</span>` : ""}`;
     }
     if ($broadcastStatus) $broadcastStatus.textContent = "";
-    $broadcast.hidden = false;
+    showBroadcastWidget();
+    switchSendQrTab("scan");
+    hideBroadcastDone();
 
     const $btn = root.querySelector<HTMLButtonElement>("#broadcastBtn");
     if ($btn) {
@@ -1553,6 +1798,20 @@ export function mountWalletDetailPage(
       $btn.disabled = false;
       $btn.textContent = "Broadcast";
     }
+  }
+
+  function hideBroadcastDone(): void {
+    const $done = root.querySelector<HTMLButtonElement>("#broadcastDone");
+    if ($done) $done.hidden = true;
+    const $newSend = root.querySelector<HTMLButtonElement>("#proposalDone2");
+    if ($newSend) $newSend.hidden = false;
+  }
+
+  function showBroadcastDone(): void {
+    const $done = root.querySelector<HTMLButtonElement>("#broadcastDone");
+    if ($done) $done.hidden = false;
+    const $newSend = root.querySelector<HTMLButtonElement>("#proposalDone2");
+    if ($newSend) $newSend.hidden = true;
   }
 
   async function onBroadcast(): Promise<void> {
@@ -1566,21 +1825,24 @@ export function mountWalletDetailPage(
 
     $btn.disabled = true;
     $btn.textContent = "Broadcasting…";
-    $status.classList.remove("error");
+    hideBroadcastDone();
+    $status.classList.remove("error", "success");
     $status.textContent = "";
 
     try {
       if (!woc) woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
-      await woc.broadcastRaw(rawHex);
       const txid = $btn.dataset.txid ?? "";
-      const explorer = wallet.network === "test"
-        ? `https://test.whatsonchain.com/tx/${txid}`
-        : `https://whatsonchain.com/tx/${txid}`;
+      await woc.broadcastRaw(rawHex, txid || undefined);
+      const explorer = wocExplorerTxUrl(txid, wallet.network);
       $status.classList.remove("error");
-      $status.innerHTML = `✓ Broadcast! <a href="${explorer}" target="_blank" rel="noopener noreferrer">View on explorer ↗</a>`;
-      $btn.textContent = "Broadcasted";
+      $status.classList.add("success");
+      $status.innerHTML = `✓ Sent! <a href="${explorer}" target="_blank" rel="noopener noreferrer">View on explorer ↗</a>`;
+      delete $btn.dataset.signedHex;
+      $btn.hidden = true;
+      showBroadcastDone();
     } catch (e) {
       $status.classList.add("error");
+      $status.classList.remove("success");
       let msg: string;
       if (e instanceof WocError) {
         msg = e.message;
@@ -1590,8 +1852,39 @@ export function mountWalletDetailPage(
       }
       $status.textContent = `broadcast failed: ${msg}`;
       $btn.disabled = false;
+      $btn.hidden = false;
       $btn.textContent = "Retry broadcast";
+      hideBroadcastDone();
     }
+  }
+
+  async function onBroadcastDone(): Promise<void> {
+    resetSendCard();
+    switchTab("balance");
+    await onRefreshBalance();
+  }
+
+  function resetBroadcastWidget(): void {
+    const $broadcast = root.querySelector<HTMLElement>("#broadcastWidget");
+    const $pw1Actions = root.querySelector<HTMLElement>("#pw1ScanActions");
+    if ($broadcast) $broadcast.hidden = true;
+    if ($pw1Actions) $pw1Actions.hidden = false;
+    const $broadcastBtn = root.querySelector<HTMLButtonElement>("#broadcastBtn");
+    if ($broadcastBtn) {
+      $broadcastBtn.hidden = false;
+      $broadcastBtn.disabled = false;
+      $broadcastBtn.textContent = "Broadcast";
+      delete $broadcastBtn.dataset.signedHex;
+      delete $broadcastBtn.dataset.txid;
+    }
+    hideBroadcastDone();
+    const $broadcastStatus = root.querySelector<HTMLElement>("#broadcastStatus");
+    if ($broadcastStatus) {
+      $broadcastStatus.classList.remove("error", "success");
+      $broadcastStatus.textContent = "";
+    }
+    const $broadcastInfo = root.querySelector<HTMLElement>("#broadcastInfo");
+    if ($broadcastInfo) $broadcastInfo.textContent = "";
   }
 
   function resetSendCard(): void {
@@ -1601,13 +1894,13 @@ export function mountWalletDetailPage(
     proposalFrameIdx = 0;
     sendStep = { step: "form" };
     showSendStep("form");
-    // Reset broadcast widget
-    const $broadcast = root.querySelector<HTMLElement>("#broadcastWidget");
-    const $pw1Actions = root.querySelector<HTMLElement>("#pw1ScanActions");
-    if ($broadcast) $broadcast.hidden = true;
-    if ($pw1Actions) $pw1Actions.hidden = false;
+    resetBroadcastWidget();
+    resetSpvUi();
     const $status = root.querySelector<HTMLElement>("#sendFormStatus");
-    if ($status) { $status.classList.remove("error"); $status.textContent = ""; }
+    if ($status) {
+      $status.classList.remove("error");
+      $status.textContent = "";
+    }
   }
 
   // ---------------------------------------------------------------------------
