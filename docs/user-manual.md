@@ -164,9 +164,37 @@ re-scan. The scanner walks both `m/0/*` and `m/1/*` with a default
 gap-limit of 20 and reports total sats, total BSV, UTXO count, and
 the per-UTXO details (txid, vout, amount, derivation).
 
+### Confirmed vs. pending (mempool) balance
+
+The balance scan includes **both** confirmed on-chain UTXOs and
+**pending** UTXOs still in the mempool (shown with `height = 0` /
+"mempool" in the UTXO list). Your **total** includes both.
+
+Only **confirmed** coins can be used as inputs when you send. This is
+a deliberate SPV requirement, not a bug:
+
+- Each spend input must carry a **Merkle proof** tying the funding
+  transaction to a specific block header.
+- Mempool transactions are not yet in a block, so no Merkle proof
+  exists for them.
+- The companion therefore refuses to build a proposal that spends
+  unconfirmed UTXOs, and the Pi would reject one if it were supplied.
+
+After you send, your **change** output often lands in the mempool
+first. It appears in Balance as pending but is **not spendable** until
+it confirms (typically one block). The Send tab shows **Spendable:**
+as confirmed-only and labels any pending amount separately.
+
+See [SPV verification](protocol/spv.md) for the full trust model and
+what the Pi re-checks before signing.
+
 ## 6. Send (Build a proposal)
 
 On `/#/wallets/<id>` find the **Send** card.
+
+The **Spendable** line at the top shows confirmed coins only. If you
+have mempool UTXOs, they are listed separately as pending and cannot
+be selected for the next send until they confirm.
 
 1. Enter the **Recipient address**. Any valid BSV mainnet P2PKH
    address is accepted. The companion validates the checksum
@@ -179,16 +207,17 @@ On `/#/wallets/<id>` find the **Send** card.
 
 What happens next, in order:
 
-1. Greedy coin selection picks UTXOs largest-first until the target
-   + estimated fee is covered.
-2. For each selected UTXO, the proof fetcher calls the
-   block-explorer endpoint to get the prior tx hex, its TSC Merkle
-   proof, and the containing block's header.
-3. The TSC proof is translated into the `@bsv/sdk` `MerklePath`
-   format, then re-checked against the header's Merkle root. If
-   the computed root doesn't match the header, the build aborts
-   with a clear error — that's the companion's last-mile sanity
-   check before it relies on the proof.
+1. **Select confirmed inputs.** Greedy coin selection picks from
+   confirmed UTXOs only (largest-first) until the target + estimated
+   fee is covered. Mempool UTXOs are skipped entirely.
+2. **Fetch and verify SPV proofs.** For each selected UTXO, the proof
+   fetcher calls the block-explorer endpoint to get the prior tx hex,
+   its TSC Merkle proof, and the containing block's header.
+3. **Cross-check Merkle roots.** The TSC proof is translated into the
+   `@bsv/sdk` `MerklePath` format, then re-checked against the
+   header's Merkle root. If the computed root doesn't match the
+   header, the build aborts with a clear error — that's the
+   companion's last-mile sanity check before it relies on the proof.
 4. A BEEF blob is assembled from the prior tx + path.
 5. The change address is derived at `m/1/<lastChangeUsed + 1>`.
    If the residue after fees is below the 546-sat dust threshold,
@@ -197,6 +226,13 @@ What happens next, in order:
    [Envelope spec](protocol/envelopes.md) §4.
 7. The envelope is gzipped + CBORed + split into PW1 multipart
    frames and animated on the canvas.
+
+While steps 1–3 run, the companion shows an **SPV build progress**
+indicator (Select inputs → Verify SPV proofs → Build proposal) with
+per-input status such as "verified at block N (Merkle root matches
+header)." When all checks pass, a green banner confirms that SPV
+verification completed and reminds you that the Pi will re-verify
+before signing.
 
 The card now shows:
 
@@ -224,15 +260,25 @@ at the QR canvas.
     Press **B** at any time to abort the scan; long-press **B**
     to quit the bonnet entirely.
 
-    Once assembly completes, the bonnet runs `verify_proposal`
-    and shows a **review** screen with:
+    Once assembly completes, the bonnet shows a **Verifying SPV**
+    screen with a progress bar and a live status line as each input's
+    BEEF path, Merkle proof, and block anchor are checked. On success
+    it advances automatically to the **review** screen, which includes
+    a green **SPV verified** badge (input count and block height
+    range) above:
 
-    - Total `In` / `Out` / `Fee` (sats).
-    - Input and output counts (output count flags whether change
-      is included).
-    - The wallet's network (`main` / `test`).
+    - **Send** / **Fee** / **Net** (sats and network).
 
-    If verification rejected the proposal, the screen shows the
+    This is the Pi's **second SPV gate**: it re-parses each input's
+    BEEF, recomputes the Merkle root from the embedded BUMP path,
+    and checks it against the `header_anchors` map the companion
+    supplied. Signing only proceeds if every input passes.
+
+    If verification fails on the SPV screen, the rejection reason
+    is shown there; press **B** to return to the manage menu.
+
+    If verification rejected the proposal on the review screen (legacy
+    path when no pre-verify result is injected), the screen shows the
     rejection reason instead of the summary, and pressing **A**
     is a no-op.
 
@@ -364,6 +410,16 @@ and wipe after a configurable threshold of consecutive failures.
 You'll need to restore from the mnemonic.
 
 ## 11. Troubleshooting
+
+**Send says "no spendable UTXOs" or "only confirmed coins can be sent"
+but Balance shows a non-zero total.**
+
+- Your wallet may hold only **mempool (unconfirmed)** UTXOs — for
+  example change from a send you just broadcast. Refresh Balance,
+  check the UTXO list for "mempool" tags, and wait for confirmation.
+- SPV requires each input to be anchored in a mined block. Until
+  pending coins confirm, they count toward your displayed total but
+  cannot be spent. This is by design; see §5 "Confirmed vs. pending."
 
 **The Pi camera doesn't see the companion's animated QR.**
 
