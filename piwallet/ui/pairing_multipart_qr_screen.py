@@ -2,7 +2,7 @@
 
 Each frame encodes one ``PW1|...`` barcode string (:mod:`piwallet.qr.multipart`).
 The companion app scans an animated sequence; this screen advances
-automatically and allows manual L/R to jump frames.
+automatically between frames.
 
 Layout note
 -----------
@@ -15,12 +15,8 @@ camera needs to autofocus through the TFT's backlight glow.
 Controls
 --------
 =========  ==================================================
-LEFT       Previous frame (wraps; resets the auto-advance timer).
-RIGHT      Next frame (wraps; resets the auto-advance timer).
-A / SEL    Done viewing -> back to the parent screen.
-B PRESS    Back to the parent screen (mirrors the deposit-address
-           screen so B is always "back").
-B LONG     Exit the bonnet app entirely.
+A / B      Back to the parent screen.
+SELECT     Same as A / B.
 =========  ==================================================
 """
 
@@ -102,14 +98,7 @@ class PairingMultipartQrScreen:
             return
         b = event.button
         k = event.kind
-        n = len(self.pw1_frames)
-        if b == Button.LEFT and k in (EventKind.PRESS, EventKind.REPEAT):
-            self.idx = (self.idx - 1) % n
-            self._next_advance_after_ms = self._mono() + self.auto_advance_ms
-        elif b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
-            self.idx = (self.idx + 1) % n
-            self._next_advance_after_ms = self._mono() + self.auto_advance_ms
-        elif b == Button.B and k == EventKind.LONG:
+        if b == Button.B and k == EventKind.LONG:
             self.done = True
             self.result = "exit"
         elif (b == Button.B and k == EventKind.PRESS) or (
@@ -181,7 +170,7 @@ class PairingMultipartQrScreen:
             fb,
             DISPLAY_WIDTH // 2,
             y_footer,
-            "L/R frame · A/B back · hold B quit",
+            "A/B exit",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

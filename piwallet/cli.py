@@ -885,11 +885,20 @@ def firstboot_run(
     input_backend: str,
     force: bool,
 ) -> None:
+    from piwallet.bonnet.app import _acquire_display_lock
     from piwallet.firstboot.disclaimer import DisclaimerScreen
     from piwallet.firstboot.terms import mark_accepted, requires_acceptance
     from piwallet.ui.app import IdleWakeTracker, make_input_manager, run_screen
     from piwallet.ui.display import open_display
     from piwallet.ui.input import open_input
+
+    if display != "headless" and not _acquire_display_lock():
+        click.echo(
+            "Another piwallet process is already using the display. "
+            "Stop it first (e.g. sudo systemctl stop piwallet).",
+            err=True,
+        )
+        sys.exit(4)
 
     if not force and not requires_acceptance(state_path):
         click.echo("disclaimer already accepted; use --force to re-run.")

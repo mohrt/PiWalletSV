@@ -13,6 +13,8 @@ import time
 from contextlib import suppress
 from pathlib import Path
 
+from piwallet.camera_lcd import PIWALLET_CAMERA_ROTATION_DEG, rotate_rgb888
+
 log = logging.getLogger(__name__)
 
 # Full-res still used for mnemonic hashing when still-capture succeeds.
@@ -157,10 +159,12 @@ class EntropyDualStreamCamera:
         if self._cam is None:
             raise RuntimeError("camera not opened")
         if self._mode == "dual":
-            return self._cam.capture_array("lores")
-        if self._mode == "preview_still":
-            return self._cam.capture_array("main")
-        raise RuntimeError("camera mode unset")
+            raw = self._cam.capture_array("lores")
+        elif self._mode == "preview_still":
+            raw = self._cam.capture_array("main")
+        else:
+            raise RuntimeError("camera mode unset")
+        return rotate_rgb888(raw, PIWALLET_CAMERA_ROTATION_DEG)
 
     def read_lores_rgb(self):
         """Backward-compatible alias (:func:`read_preview_rgb`)."""

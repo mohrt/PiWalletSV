@@ -99,6 +99,15 @@ def encode_multipart_lines(data: bytes, **kwargs: int) -> list[str]:
     return split_envelope_to_lines(data, **kwargs)
 
 
+def pw1_line_meta(line: str) -> tuple[int, int] | None:
+    """Return ``(total, index)`` for a PW1 barcode line, or ``None`` if not PW1."""
+
+    m = _PREFIX_RE.match(line.strip())
+    if not m:
+        return None
+    return int(m.group("t")), int(m.group("i"))
+
+
 class MultipartAssembler:
     """Stateful decoder fed one scanned barcode string at a time."""
 

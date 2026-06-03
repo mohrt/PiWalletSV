@@ -17,8 +17,8 @@ from typing import TYPE_CHECKING
 
 from PIL import Image
 
-from piwallet.camera_lcd import rgb888_thumbnail
-from piwallet.qr.multipart import MultipartAssembler, MultipartQrError
+from piwallet.camera_lcd import PIWALLET_CAMERA_ROTATION_DEG, rgb888_thumbnail, rotate_rgb888
+from piwallet.qr.multipart import MultipartAssembler, MultipartQrError, pw1_line_meta
 
 if TYPE_CHECKING:
     from pyzbar.pyzbar import Decoded  # noqa: F401
@@ -104,6 +104,7 @@ def scan_multipart_from_camera(
     mono_s: Callable[[], float] | None = None,
     cancel_check: Callable[[], bool] | None = None,
     save_frame_path: str | None = None,
+    rotation_degrees: int = PIWALLET_CAMERA_ROTATION_DEG,
 ) -> bytes:
     """Block until all PW1 QR fragments are seen, then return assembled bytes.
 
@@ -163,7 +164,7 @@ def scan_multipart_from_camera(
             if cancel_check is not None and cancel_check():
                 raise ScanCancelled("scan cancelled by caller")
             frame_no += 1
-            frame = cam.capture_array("main")
+            frame = rotate_rgb888(cam.capture_array("main"), rotation_degrees)
             if save_frame_path is not None and not _saved_frame:
                 _saved_frame = True
                 Image.fromarray(frame).save(save_frame_path)
@@ -184,13 +185,22 @@ def scan_multipart_from_camera(
                 text = r.data.decode("utf-8", errors="strict")
                 if not text.startswith("PW1|"):
                     continue
+                meta = pw1_line_meta(text)
+                total_before = asm.expected_total
+                have_before = asm.parts_received
                 try:
                     done = asm.feed(text)
                 except MultipartQrError:
                     cam.close()
                     raise
-                total = asm.expected_total or 0
-                have = asm.parts_received if asm.expected_total else 0
+                if done is not None:
+                    # ``feed`` resets the assembler on completion, so read
+                    # the final count from the line we just ingested.
+                    total = meta[0] if meta else (total_before or 0)
+                    have = total if total else max(have_before, total_before or 0)
+                else:
+                    total = asm.expected_total or 0
+                    have = asm.parts_received if asm.expected_total else 0
                 msg = f"fragment {have}/{total}" if total else "fragment"
                 if on_progress:
                     on_progress(have, msg)
