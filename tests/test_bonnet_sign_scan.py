@@ -20,9 +20,12 @@ from piwallet.bonnet import wallet_manage as wm
 from piwallet.bonnet.sign_scan import (
     ConfirmProposalScreen,
     ScanProposalScreen,
+    VerifyProposalScreen,
     _ScanState,
+    _VerifyState,
     run_sign_flow,
 )
+from piwallet.core import verify as vfy
 from piwallet.bonnet.wallet_manage import (
     WalletManageAction,
     WalletManageMenuScreen,
@@ -110,6 +113,37 @@ def test_scan_screen_finishes_when_worker_publishes_blob() -> None:
     assert screen.result == blob
 
 
+def test_apply_scan_progress_does_not_regress_on_bare_fragment() -> None:
+    state = _ScanState()
+    ss._apply_scan_progress(state, 1, "fragment 1/10")
+    assert state.parts_received == 1
+    assert state.parts_total == 10
+    ss._apply_scan_progress(state, 0, "fragment")
+    assert state.parts_received == 1
+    assert state.parts_total == 10
+    ss._apply_scan_progress(state, 10, "fragment 10/10")
+    assert state.parts_received == 10
+    assert state.parts_total == 10
+
+
+def test_scan_screen_paints_complete_count_when_worker_finishes() -> None:
+    """Final draw must show N/N even if the last callback regressed to 0."""
+
+    def start_worker(state: _ScanState) -> None:
+        with state.lock:
+            state.parts_received = 0
+            state.parts_total = 10
+            state.status_text = "fragment"
+            state.assembled = b"\xde\xad"
+            state.finished = True
+
+    screen = ScanProposalScreen(start_worker=start_worker)
+    fb = FrameBuffer()
+    screen.draw(fb)
+    assert screen.done is True
+    assert screen.result == b"\xde\xad"
+
+
 def test_scan_screen_b_press_cancels_and_signals_worker() -> None:
     screen = ScanProposalScreen(start_worker=_make_progress_only_worker())
     fb = FrameBuffer()
@@ -122,11 +156,21 @@ def test_scan_screen_b_press_cancels_and_signals_worker() -> None:
         assert screen.state.cancel_requested is True
 
 
-def test_scan_screen_long_b_propagates_exit() -> None:
+def test_scan_screen_a_press_cancels_and_signals_worker() -> None:
+    screen = ScanProposalScreen(start_worker=_make_progress_only_worker())
+    screen.draw(FrameBuffer())
+    screen.on_event(_press(Button.A))
+    assert screen.done is True
+    assert screen.result == "cancel"
+    with screen.state.lock:
+        assert screen.state.cancel_requested is True
+
+
+def test_scan_screen_long_b_is_inert() -> None:
     screen = ScanProposalScreen(start_worker=_make_progress_only_worker())
     screen.draw(FrameBuffer())
     screen.on_event(_press(Button.B, EventKind.LONG))
-    assert screen.done and screen.result == "exit"
+    assert not screen.done
 
 
 def test_scan_screen_renders_camera_settling_placeholder() -> None:
@@ -194,20 +238,6 @@ def test_confirm_screen_b_cancels(real_proposal) -> None:
     assert screen.done and screen.result == "cancel"
 
 
-def test_confirm_screen_long_b_toggles_advanced(real_proposal) -> None:
-    """Hold B switches to the advanced detail view and back; does not exit."""
-    _blob, proposal, xpub = real_proposal
-    screen = ConfirmProposalScreen(proposal=proposal, account_xpub_str=xpub)
-    assert screen.advanced is False
-    screen.on_event(_press(Button.B, EventKind.LONG))
-    assert not screen.done
-    assert screen.advanced is True
-    # Second hold B returns to summary view.
-    screen.on_event(_press(Button.B, EventKind.LONG))
-    assert screen.advanced is False
-    assert not screen.done
-
-
 def test_confirm_screen_rejects_a_when_verify_fails(real_proposal) -> None:
     """Pressing A on a verify-rejected proposal must not advance to sign."""
     import dataclasses
@@ -222,9 +252,90 @@ def test_confirm_screen_rejects_a_when_verify_fails(real_proposal) -> None:
     screen.draw(FrameBuffer())
     screen.on_event(_press(Button.A))
     assert not screen.done, "A press must not advance past a rejected proposal"
-    # B still drops back.
     screen.on_event(_press(Button.B))
     assert screen.done and screen.result == "cancel"
+
+
+def test_confirm_screen_preverified_skips_reverify(
+    real_proposal, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _blob, proposal, xpub = real_proposal
+    verified = vfy.verify_proposal(proposal, xpub)
+    calls: list[int] = []
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return verified
+
+    monkeypatch.setattr(vfy, "verify_proposal", counting)
+    screen = ConfirmProposalScreen(
+        proposal=proposal, account_xpub_str=xpub, verified=verified
+    )
+    assert calls == []
+    assert screen.verify_error is None
+    screen.draw(FrameBuffer())
+    screen.on_event(_press(Button.A))
+    assert screen.result == "sign"
+
+
+# ===========================================================================
+# VerifyProposalScreen
+# ===========================================================================
+
+
+def _make_immediate_verify_worker(
+    proposal: env.UnsignedProposal, xpub: str
+) -> Callable[[_VerifyState], None]:
+    def start_worker(state: _VerifyState) -> None:
+        verified = vfy.verify_proposal(proposal, xpub)
+        with state.lock:
+            state.verified = verified
+            state.inputs_done = len(proposal.inputs)
+            state.inputs_total = len(proposal.inputs)
+            state.finished = True
+
+    return start_worker
+
+
+def test_verify_screen_auto_advances_on_success(real_proposal) -> None:
+    _blob, proposal, xpub = real_proposal
+    screen = VerifyProposalScreen(
+        proposal=proposal,
+        account_xpub_str=xpub,
+        start_worker=_make_immediate_verify_worker(proposal, xpub),
+    )
+    screen.draw(FrameBuffer())
+    assert screen.done is True
+    assert screen.result is not None
+    assert len(screen.result.inputs) == len(proposal.inputs)
+
+
+def test_verify_screen_surfaces_failure(real_proposal) -> None:
+    import dataclasses
+
+    _blob, proposal, xpub = real_proposal
+    bad = dataclasses.replace(proposal, header_anchors={})
+
+    def start_worker(state: _VerifyState) -> None:
+        try:
+            vfy.verify_proposal(bad, xpub)
+        except vfy.ProposalVerificationError as exc:
+            with state.lock:
+                state.error = str(exc)
+                state.finished = True
+
+    screen = VerifyProposalScreen(
+        proposal=bad,
+        account_xpub_str=xpub,
+        start_worker=start_worker,
+    )
+    screen.draw(FrameBuffer())
+    assert not screen.done
+    assert screen.result is None
+    with screen.state.lock:
+        assert screen.state.error is not None
+    screen.on_event(_press(Button.B))
+    assert screen.done is True
 
 
 # ===========================================================================
@@ -256,8 +367,14 @@ def test_run_sign_flow_happy_path(
             screen.done = True
             screen.result = blob
             return screen.result
+        if isinstance(screen, VerifyProposalScreen):
+            screen._ensure_started()
+            screen.draw(FrameBuffer())
+            assert screen.result is not None
+            return screen.result
         if isinstance(screen, ConfirmProposalScreen):
             assert screen.verify_error is None
+            assert screen.verified is not None
             screen.done = True
             screen.result = "sign"
             return screen.result
@@ -273,6 +390,15 @@ def test_run_sign_flow_happy_path(
         # Real worker isn't used because run_screen is stubbed.
         return None
 
+    def fake_start_verify_worker(state: _VerifyState) -> None:
+        _blob, proposal, xpub = real_proposal
+        verified = vfy.verify_proposal(proposal, xpub)
+        with state.lock:
+            state.verified = verified
+            state.inputs_done = len(proposal.inputs)
+            state.inputs_total = len(proposal.inputs)
+            state.finished = True
+
     monkeypatch.setattr(ss, "run_screen", fake_run_screen)
 
     out = run_sign_flow(
@@ -283,6 +409,7 @@ def test_run_sign_flow_happy_path(
         rec,
         toast_seconds=0,
         start_worker=fake_start_worker,
+        start_verify_worker=fake_start_verify_worker,
     )
     assert out == "stay"
     assert len(saw_qr_with_frames) == 1
@@ -311,10 +438,11 @@ def test_run_sign_flow_cancel_returns_stay(
     ) == "stay"
 
 
-def test_run_sign_flow_long_b_during_scan_returns_exit(
+def test_run_sign_flow_a_during_scan_returns_stay(
     monkeypatch: pytest.MonkeyPatch,
     canonical_vault: tuple[Vault, str, WalletRecord],
 ) -> None:
+    """A during scan exits back to manage menu without invoking confirm/sign."""
     vault, pin, rec = canonical_vault
     display = HeadlessDisplay()
     mgr = InputManager(FakeInputBackend())
@@ -322,14 +450,14 @@ def test_run_sign_flow_long_b_during_scan_returns_exit(
     def fake_run_screen(_d, _m, screen, **_kw):
         if isinstance(screen, ScanProposalScreen):
             screen.done = True
-            screen.result = "exit"
+            screen.result = "cancel"
             return screen.result
         raise AssertionError(f"unexpected {type(screen)!r}")
 
     monkeypatch.setattr(ss, "run_screen", fake_run_screen)
     assert run_sign_flow(
         display, mgr, vault, pin, rec, toast_seconds=0, start_worker=lambda _s: None
-    ) == "exit"
+    ) == "stay"
 
 
 def test_run_sign_flow_rejects_wrong_envelope_type(
