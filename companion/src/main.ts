@@ -40,8 +40,15 @@ function render(): void {
 
   if (route === "" || route === "#" || route === "#/" || route === "#/wallets") {
     mounted = mountWalletsPage(app);
-  } else if (route === "#/scan" || route === "#/scan/tx") {
-    mounted = mountScannerPage(app, route === "#/scan/tx" ? "tx" : "wallet");
+  } else if (route === "#/scan/tx") {
+    sessionStorage.setItem(
+      "piwallet-signed-tx-hint",
+      "Signed TX submit lives in Send → Step 2. Open a wallet and continue there.",
+    );
+    window.location.hash = "#/wallets";
+    return;
+  } else if (route === "#/scan") {
+    mounted = mountScannerPage(app);
   } else if (route === "#/settings") {
     mounted = mountSettingsPage(app);
   } else if (route.startsWith("#/wallets/")) {

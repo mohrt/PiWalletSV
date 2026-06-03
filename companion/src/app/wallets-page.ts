@@ -45,6 +45,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
       ${renderHeader("Wallets", "wallets")}
 
       <div class="wallets-toolbar">
+        <p class="muted-line" id="walletHint" hidden></p>
         <p class="muted-line" id="walletStatus"></p>
         <div class="wallets-toolbar-right">
           <select id="listUnitSelect" class="list-unit-select">
@@ -77,7 +78,15 @@ export function mountWalletsPage(root: HTMLElement): () => void {
 
   const $list   = root.querySelector<HTMLUListElement>("#walletsList")!;
   const $empty  = root.querySelector<HTMLElement>("#emptyState")!;
+  const $hint   = root.querySelector<HTMLElement>("#walletHint")!;
   const $status = root.querySelector<HTMLElement>("#walletStatus")!;
+
+  const signedTxHint = sessionStorage.getItem("piwallet-signed-tx-hint");
+  if (signedTxHint) {
+    sessionStorage.removeItem("piwallet-signed-tx-hint");
+    $hint.hidden = false;
+    $hint.textContent = signedTxHint;
+  }
   const $unit   = root.querySelector<HTMLSelectElement>("#listUnitSelect")!;
 
   // ── price fetch ────────────────────────────────────────────────────────────
