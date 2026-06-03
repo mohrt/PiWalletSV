@@ -42,6 +42,8 @@ def _type_word(screen: WordEntryScreen, word: str) -> None:
 
 def test_default_state() -> None:
     s = WordEntryScreen()
+    assert s.letters == ["a"]
+    assert s.cursor == 0
     assert s.prefix == ""
     assert s.candidate == "a"
     assert s.done is False
@@ -51,11 +53,11 @@ def test_default_state() -> None:
 
 def test_invalid_candidate_rejected() -> None:
     with pytest.raises(ValueError):
-        WordEntryScreen(candidate="ab")
+        WordEntryScreen(letters=["ab"])
     with pytest.raises(ValueError):
-        WordEntryScreen(candidate="A")
+        WordEntryScreen(letters=["A"])
     with pytest.raises(ValueError):
-        WordEntryScreen(candidate="1")
+        WordEntryScreen(letters=["1"])
 
 
 # ---------------------------------------------------------------------------
@@ -96,30 +98,41 @@ def test_right_commits_candidate_and_opens_a() -> None:
     assert s.candidate == "a"
 
 
-def test_left_backspace_reopens_last_committed() -> None:
+def test_left_moves_back_without_deleting() -> None:
     s = WordEntryScreen()
     _type_letter(s, "b")
     s.on_event(_evt(Button.RIGHT))
-    assert (s.prefix, s.candidate) == ("b", "a")
+    _type_letter(s, "c")
+    assert s.typed_text() == "bc"
+    assert s.cursor == 1
     s.on_event(_evt(Button.LEFT))
-    assert (s.prefix, s.candidate) == ("", "b")
+    assert s.typed_text() == "bc"
+    assert s.cursor == 0
+    assert s.candidate == "b"
 
 
-def test_left_with_empty_prefix_resets_candidate_to_a() -> None:
-    s = WordEntryScreen(candidate="z")
+def test_left_at_first_letter_is_no_op() -> None:
+    s = WordEntryScreen(letters=["z"])
     s.on_event(_evt(Button.LEFT))
-    assert s.prefix == ""
-    assert s.candidate == "a"
+    assert s.letters == ["z"]
+    assert s.cursor == 0
 
 
-def test_b_press_clears_in_progress_word() -> None:
+def test_b_deletes_letter_and_moves_back() -> None:
     s = WordEntryScreen()
     _type_word(s, "abc")
-    assert s.prefix == "ab"
+    assert s.typed_text() == "abc"
+    assert s.cursor == 2
     s.on_event(_evt(Button.B, EventKind.PRESS))
-    assert s.prefix == ""
-    assert s.candidate == "a"
-    assert s.done is False
+    assert s.typed_text() == "ab"
+    assert s.cursor == 1
+    assert s.candidate == "b"
+    s.on_event(_evt(Button.B, EventKind.PRESS))
+    assert s.typed_text() == "a"
+    assert s.cursor == 0
+    s.on_event(_evt(Button.B, EventKind.PRESS))
+    assert s.typed_text() == "a"
+    assert s.cursor == 0
 
 
 def test_b_long_cancels_flow() -> None:
@@ -130,36 +143,37 @@ def test_b_long_cancels_flow() -> None:
     assert s.result is None
 
 
-def test_select_ambiguous_enters_pick_list() -> None:
+def test_a_ambiguous_enters_pick_list() -> None:
     s = WordEntryScreen()
     _type_word(s, "ab")
     assert s.match_state() == "many"
-    s.on_event(_evt(Button.SELECT))
+    s.on_event(_evt(Button.A))
     assert s.pick_mode is True
     assert not s.done
 
 
-def test_select_exact_word_confirms_not_pick() -> None:
+def test_a_exact_word_selects_not_pick() -> None:
     s = WordEntryScreen()
     _type_word(s, "abandon")
     assert s.match_state() == "exact"
-    s.on_event(_evt(Button.SELECT))
+    s.on_event(_evt(Button.A))
     assert not s.pick_mode
     assert s.done and s.result == "abandon"
 
 
-def test_select_unique_completion_enters_pick() -> None:
+def test_a_unique_completion_selects_without_pick() -> None:
     s = WordEntryScreen()
     _type_word(s, "abi")
     assert s.match_state() == "one"
-    s.on_event(_evt(Button.SELECT))
-    assert s.pick_mode
+    s.on_event(_evt(Button.A))
+    assert not s.pick_mode
+    assert s.done and s.result == "ability"
 
 
 def test_pick_mode_navigation_and_confirm() -> None:
     s = WordEntryScreen()
     _type_word(s, "ab")
-    s.on_event(_evt(Button.SELECT))
+    s.on_event(_evt(Button.A))
     matches = s.stem_matches()
     target_idx = matches.index("ability")
     for _ in range(target_idx):
@@ -168,30 +182,31 @@ def test_pick_mode_navigation_and_confirm() -> None:
     assert s.done and s.result == "ability"
 
 
-def test_pick_mode_left_returns_without_confirm() -> None:
+def test_pick_mode_b_returns_without_confirm() -> None:
     s = WordEntryScreen()
     _type_word(s, "ab")
-    s.on_event(_evt(Button.SELECT))
+    s.on_event(_evt(Button.A))
     assert s.pick_mode
-    s.on_event(_evt(Button.LEFT))
+    s.on_event(_evt(Button.B))
     assert not s.pick_mode
     assert not s.done
+    assert s.typed_text() == "ab"
 
 
-def test_pick_select_exits_pick_mode() -> None:
+def test_pick_mode_b_long_also_returns_not_cancel() -> None:
     s = WordEntryScreen()
     _type_word(s, "ab")
-    s.on_event(_evt(Button.SELECT))
-    assert s.pick_mode
-    s.on_event(_evt(Button.SELECT))
+    s.on_event(_evt(Button.A))
+    s.on_event(_evt(Button.B, EventKind.LONG))
     assert not s.pick_mode
+    assert not s.done
 
 
 def test_draw_pick_mode_smoke() -> None:
     fb = FrameBuffer()
     s = WordEntryScreen()
     _type_word(s, "ab")
-    s.on_event(_evt(Button.SELECT))
+    s.on_event(_evt(Button.A))
     s.draw(fb)
 
 
@@ -272,12 +287,12 @@ def test_a_accepts_unique_completion() -> None:
     assert s.result == "ability"
 
 
-def test_a_ignored_with_ambiguous_prefix() -> None:
+def test_a_enters_pick_with_ambiguous_prefix() -> None:
     s = WordEntryScreen()
     _type_word(s, "ab")  # many matches
     s.on_event(_evt(Button.A))
-    assert s.done is False
-    assert s.result is None
+    assert s.pick_mode is True
+    assert not s.done
 
 
 def test_a_ignored_with_invalid_prefix() -> None:
@@ -340,7 +355,7 @@ def test_restore_via_pick_single_letter_stem(real_12_word_phrase: list[str]) -> 
     for target in real_12_word_phrase:
         we = s.current
         _type_letter(we, target[0])
-        s.on_event(_evt(Button.SELECT))
+        s.on_event(_evt(Button.A))
         assert we.pick_mode
         picks = we.stem_matches()
         idx = picks.index(target)
@@ -397,6 +412,22 @@ def test_restore_long_left_goes_back_one_word(real_12_word_phrase: list[str]) ->
     assert s.current.title == "Word 1 of 12"
 
 
+def test_restore_l_at_first_letter_goes_back_prefilled(
+    real_12_word_phrase: list[str],
+) -> None:
+    s = MnemonicEntryScreen(word_count=12, mode="restore")
+    first = real_12_word_phrase[0]
+    second = real_12_word_phrase[1]
+    _drive_word(s, first)
+    assert len(s.words) == 1
+    _type_word(s.current, second[0])
+    assert s.current.cursor == 0
+    s.on_event(_evt(Button.LEFT))
+    assert s.words == []
+    assert s.current.title == "Word 1 of 12"
+    assert s.current.typed_text() == first
+
+
 def test_restore_review_edit_word_fixes_checksum() -> None:
     """Invalid phrase becomes valid after editing one slot from review."""
     # Canonical test mnemonic (valid checksum).
@@ -408,10 +439,10 @@ def test_restore_review_edit_word_fixes_checksum() -> None:
         _drive_word(s, w)
     assert s.phase == "review"
     assert not s.mnemonic_checksum_ok()
-    # Navigate DOWN to put the cursor on word 12 (index 11), then edit via SELECT.
+    # Navigate to word 12 (index 11), then edit via RIGHT.
     assert s.review_view is not None
     s.review_view.cursor = 11
-    s.on_event(_evt(Button.SELECT))
+    s.on_event(_evt(Button.RIGHT))
     assert s.phase == "edit"
     _drive_word(s, "about")
     assert s.phase == "review"

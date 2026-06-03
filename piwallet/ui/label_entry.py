@@ -1,10 +1,8 @@
 """Bonnet wallet label (name) editor.
 
-Single-phase editor: the user types the name letter by letter and either
-saves with **A** or cancels with **hold B**. There is no follow-on
-confirm screen — the manage flow already gates destructive actions
-elsewhere (delete uses :class:`piwallet.ui.double_confirm.DoubleConfirmScreen`),
-and renaming is recoverable, so a single A press commits.
+Single-phase editor: the user types the name letter by letter and saves
+with **A**. **B** deletes letters. Hold **B** can cancel (rename) or skip
+to the suggested default (create); restore naming ignores hold **B**.
 
 Controls
 --------
@@ -18,17 +16,12 @@ RIGHT       Move cursor one slot right; can land on a "new slot" past the
             last letter so the user can grow the name. ``max_len`` blocks
             growth past the cap (cursor capped at last letter when the
             buffer is already full).
-B PRESS     Delete the letter currently under the cursor. Cursor stays
-            in place; if the deleted letter was the last one, the cursor
-            decrements to the new last letter. When the cursor sits on
-            the trailing "new slot", B deletes the last letter (matching
-            a typical text-editor "Delete" key at end-of-string). The
-            buffer is never allowed to drop below one letter.
-B LONG      Cancel/skip the editor entirely (result = None). Callers
-            interpret this as "use the suggested default" (create flow)
-            or "abort the rename" (rename flow).
-A / SELECT  Save the typed name (result = stripped buffer). Blocked when
-            the name is blank after stripping.
+B PRESS     Delete the letter under the cursor and move back one slot
+            (repeatable). At least one letter always remains.
+B LONG      Optional: cancel (rename), skip to suggested default (create),
+            or ignored (restore naming — accidental hold must not abort).
+A           Save the typed name (result = stripped buffer). Blocked when
+            blank after stripping.
 ==========  ================================================================
 """
 
@@ -82,6 +75,12 @@ class WalletLabelEntryScreen:
     title: str = "Name wallet"
     max_len: int = LABEL_MAX_CHARS
     suggested_default: str = ""
+    #: When True (rename flow), hold **B** aborts without saving and the
+    #: UI reads "hold B cancel" instead of "hold B skip = default".
+    cancel_on_hold_b: bool = False
+    #: When True (restore naming), hold **B** is ignored so a long press
+    #: cannot cancel the restore or commit a default name by accident.
+    ignore_hold_b_long: bool = False
     done: bool = False
     result: str | None = None
     transient_error: str | None = None
@@ -143,32 +142,24 @@ class WalletLabelEntryScreen:
             return
         self.cursor = new
 
-    def _backspace(self) -> None:
-        """Delete the letter currently under the cursor.
-
-        Behaviour summary:
-
-        * cursor on an existing letter -> remove that letter; the next
-          letter (if any) slides into its place under the cursor.
-        * cursor on the trailing "new slot" -> remove the last letter
-          (typical "Delete at end of line" behaviour).
-        * buffer of length 1 -> no-op (the editor always keeps at least
-          one letter so the user can cycle a glyph at it).
-        """
+    def _delete_and_back(self) -> None:
+        """Delete the letter under the cursor and step back one slot."""
         self.transient_error = None
         if self._on_new_slot():
-            target = self.cursor - 1
-        else:
-            target = self.cursor
-        if target < 0:
+            if len(self.buffer) <= 1:
+                self.buffer[0] = "a"
+                self.cursor = 0
+                return
+            del self.buffer[-1]
+            self.cursor = len(self.buffer) - 1
             return
         if len(self.buffer) <= 1:
+            self.buffer[0] = "a"
+            self.cursor = 0
             return
-        del self.buffer[target]
-        # Always land the cursor on a real letter after delete; the user
-        # can press RIGHT to reach the trailing "new slot" again.
-        if self.cursor >= len(self.buffer):
-            self.cursor = len(self.buffer) - 1
+        del self.buffer[self.cursor]
+        if self.cursor > 0:
+            self.cursor -= 1
 
     def _try_save(self) -> None:
         """Commit the typed name (A / SELECT) when not blank."""
@@ -195,12 +186,12 @@ class WalletLabelEntryScreen:
             self._move_cursor(-1)
         elif b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
             self._move_cursor(+1)
-        elif b == Button.B and k == EventKind.PRESS:
-            self._backspace()
-        elif b == Button.B and k == EventKind.LONG:
+        elif b == Button.B and k in (EventKind.PRESS, EventKind.REPEAT):
+            self._delete_and_back()
+        elif b == Button.B and k == EventKind.LONG and not self.ignore_hold_b_long:
             self.done = True
             self.result = None
-        elif b in (Button.A, Button.SELECT) and k == EventKind.PRESS:
+        elif b == Button.A and k == EventKind.PRESS:
             self._try_save()
 
     # -- rendering ----------------------------------------------------
@@ -222,14 +213,19 @@ class WalletLabelEntryScreen:
         )
 
         nchars = len(self.buffer)
-        usage = (
-            "hold B skip = default" if self.suggested_default else "hold B cancel"
-        )
+        if self.ignore_hold_b_long:
+            meta_hint = f"{nchars}/{self.max_len} chars"
+        elif self.cancel_on_hold_b:
+            meta_hint = f"{nchars}/{self.max_len} chars  hold B cancel"
+        elif self.suggested_default:
+            meta_hint = f"{nchars}/{self.max_len} chars  hold B skip = default"
+        else:
+            meta_hint = f"{nchars}/{self.max_len} chars  hold B cancel"
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
             36,
-            f"{nchars}/{self.max_len} chars  {usage}",
+            meta_hint,
             size=10,
             color=COLOR_DIM,
             anchor="mm",
@@ -339,11 +335,21 @@ class WalletLabelEntryScreen:
             color=COLOR_DIM,
             anchor="mm",
         )
+        if self.ignore_hold_b_long:
+            footer_line = "A save   B del"
+        else:
+            if self.cancel_on_hold_b:
+                hold_hint = "hold B cancel"
+            elif self.suggested_default:
+                hold_hint = "hold B skip = default"
+            else:
+                hold_hint = "hold B cancel"
+            footer_line = f"A OK   B del   {hold_hint}"
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 12,
-            "A OK   B DEL   hold B X",
+            footer_line,
             size=10,
             color=COLOR_DIM,
             anchor="mm",
