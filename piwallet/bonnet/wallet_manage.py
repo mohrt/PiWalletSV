@@ -247,7 +247,7 @@ def run_wallet_manage(
         if editor.result is None:
             return "stay"
         new_label = editor.result.strip()
-        if new_label == (wallet.label or "").strip():
+        if not new_label or new_label == (wallet.label or "").strip():
             return "stay"
         try:
             vault.rename_wallet(pin, wallet.id, new_label)

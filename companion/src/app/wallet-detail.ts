@@ -589,12 +589,12 @@ export function mountWalletDetailPage(
           <p class="muted-line">Change the display label for this wallet.</p>
           <label class="field">
             <span>New label</span>
-            <input id="renameInput" type="text" maxlength="64"
+            <input id="renameInput" type="text" maxlength="64" required
               autocorrect="off" spellcheck="false"
               value="${escapeHtml(wallet.label)}" />
           </label>
           <div class="actions">
-            <button id="renameSaveBtn" type="button" class="primary">Save label</button>
+            <button id="renameSaveBtn" type="button" class="primary" disabled>Save label</button>
           </div>
           <p id="renameStatus" class="muted-line"></p>
 
@@ -753,6 +753,9 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", () => void onCopyXpub());
     root.querySelector<HTMLButtonElement>("#renameSaveBtn")
       ?.addEventListener("click", () => void onRenameSave());
+    root.querySelector<HTMLInputElement>("#renameInput")
+      ?.addEventListener("input", syncRenameSaveBtn);
+    syncRenameSaveBtn();
     root.querySelector<HTMLButtonElement>("#removeWalletBtn")
       ?.addEventListener("click", onRemoveWalletOpen);
     root.querySelector<HTMLButtonElement>("#removeWalletConfirmNo")
@@ -776,6 +779,15 @@ export function mountWalletDetailPage(
     }
   }
 
+  function syncRenameSaveBtn(): void {
+    if (!wallet) return;
+    const $input = root.querySelector<HTMLInputElement>("#renameInput");
+    const $btn = root.querySelector<HTMLButtonElement>("#renameSaveBtn");
+    if (!$input || !$btn) return;
+    const trimmed = $input.value.trim();
+    $btn.disabled = !trimmed || trimmed === wallet.label;
+  }
+
   async function onRenameSave(): Promise<void> {
     if (!wallet) return;
     const $input = root.querySelector<HTMLInputElement>("#renameInput");
@@ -797,6 +809,7 @@ export function mountWalletDetailPage(
       const $headerLabel = root.querySelector<HTMLElement>(".page-header h1");
       if ($headerLabel) $headerLabel.firstChild!.textContent = escapeHtml(trimmed);
       $status.textContent = `Renamed to "${trimmed}".`;
+      syncRenameSaveBtn();
       setTimeout(() => { if ($status) $status.textContent = ""; }, 2000);
     } catch (e) {
       $status.textContent = `rename failed: ${(e as Error).message}`;

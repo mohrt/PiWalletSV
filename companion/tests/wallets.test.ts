@@ -88,6 +88,13 @@ describe("wallets store", () => {
     expect(after?.xpub).toBe(DEMO.xpub);
   });
 
+  it("updateLabel rejects empty labels", async () => {
+    const rec = await addWallet(DEMO);
+    await expect(updateLabel(rec.id, "")).rejects.toBeInstanceOf(WalletStoreError);
+    await expect(updateLabel(rec.id, "   ")).rejects.toBeInstanceOf(WalletStoreError);
+    expect((await getWallet(rec.id))?.label).toBe(DEMO.label);
+  });
+
   it("removeWallet deletes by id", async () => {
     const rec = await addWallet(DEMO);
     await removeWallet(rec.id);
