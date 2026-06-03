@@ -1,22 +1,41 @@
 // PiWalletSV reference case — parametric OpenSCAD source.
 //
 // Two-piece press-fit clamshell, :
-// back_tub — deep half with full side walls, integrated camera
-// mount, Pi standoffs, lens cone, lanyard hole.
-// front_lid — flat half with the LCD window, joystick + button
-// cutouts, and a short skirt that press-fits into a
-// registration step on the back tub. No screws needed.
+// back_tub — deep half: camera + Pi standoffs, lens cone, I/O cutouts.
+// front_lid — flat half: LCD window, joystick + button holes.
+// button_cap — flanged pad; actuates via lid platform pocket (×2).
 //
-// Render with `mode = "tub"`, `"lid"`, or `"all"` at the bottom of
-// this file, then File → Render (F6) → Export → STL. `"all"` shows
-// an exploded preview for visual sanity checks; do NOT export it.
+// Render modes: mode = "tub" | "lid" | "cap" | "caps" | "lid_caps" | "all" | "preview"
+// tub — back tub only
+// lid — front lid only (flipped for print)
+// caps — 2× button caps (wide spacing — use brim in slicer)
+// cap — single button cap (reprint one)
+// lid_caps — lid (flipped) + 2 caps nested in LCD window
+// all — tub + lid side-by-side; caps nested in lid window (export this)
+// preview — exploded tub + lid for OpenSCAD sanity only (don't print)
+//
+// Loop 39: bezel inner edge flush with window cutout (23.5 mm); depth still 1.36 mm.
+// Loop 38: restore flange ring width (lcd_bezel_border) — Loop 37 only shortens depth.
+// Loop 37: inner flange depth 1.36 mm (measured 1.86 − 0.5); not border width.
+// Loop 36: remove inner bezel collar + glass clearance pocket — teeter on glass.
+// Loop 35: inner bezel depth −1 mm (0.5) — was hitting LCD glass, lid teetered.
+// Loop 34: deeper joy skirt pocket + stem bore — silicone nub held lid up.
+// Loop 33: bonnet/Pi −1.5 mm in x for CSI ribbon; camera + lens fixed.
+// Loop 32: CM3 in same case height — camera posts stay 3.0 mm; ribbon derived.
+// Loop 31: removed snap brim + tub grooves — lips peeled off lid, tub split.
+// Loop 30: button lid bore chamfers + cap pocket flare — FDM stepped holes.
+// Loop 28: removed lid engravings (wordmark + shield) — unreadable on FDM test.
+// Loop 25: window nudge, even bezel, PWR LED hole, snap brim, taller caps.
+// Loop 24: joystick frustum through full slab — was 8.5 mm straight (bound on tilt).
+// Loop 19: LCD from active area; front_slack 0.2; joy skirt +0.7.
+// Loop 7–16: prior button/lid/joystick iterations (superseded).
+//
+// Loop 6: LCD +2.5 x, USB z, HDMI width, Orange Pill caps (face-down)
+// Loop 5: tub USB spacing, SD offset, silicone pocket
 //
 // Hardware targets: Raspberry Pi Zero 2 W + Adafruit 1.3" 240×240
-// TFT bonnet (product 4506) + Arducam OV5647 Mini camera (Arducam
-// product B0033 / Amazon ASIN B01LY05LOE), with the LCD facing the
-// operator and the camera lens facing the back of the unit on the
-// same optical axis. Camera dimensions in the "Camera" datum block
-// below are PENDING caliper verification on arrival.
+// TFT bonnet (product 4506) + Pi Camera Module 3 / Arducam OV5647
+// (standard 25.1×24.2 mm footprint). See SPEC.md for datums.
 //
 // Every dimension is a named variable. Future hardware swaps (Pi 5,
 // different camera, different bonnet) should be a one-line change in the
@@ -49,24 +68,21 @@ wall = 2.4;
 
 // Stack-up depths driving the cavity height (z).
 //
-// ribbon_under_pi: vertical slot between the camera module's top
-// and the Pi PCB's bottom for the CSI flex's U-turn. The 22→15-pin
-// adapter cable can be coaxed into a ~3 mm radius bend; 6 mm gives
-// that with a little slack for the connector tabs. Verify on
-// hardware before committing the final depth.
+// ribbon_under_pi: CSI flex U-turn slot — derived below from cavity_z_budget
+// so a taller camera (CM3) fits without growing case height.
 // pi_pcb_to_lcd_top: measured 2026-05-15 with the bonnet fully
 // seated on the Pi GPIO header — Pi PCB BOTTOM face to LCD glass
 // TOP face, header pin protrusion under the Pi excluded.
-// front_slack: clamp budget between the LCD top and the front lid's
-// inner face. The silicone joystick base used to be the constraint
-// here (it's ~1.1 mm TALLER than the LCD plane) — Loop 2 moved
-// that constraint into a dedicated pocket on the lid's inner face
-// (see joystick_silicone_pocket_*), so front_slack is now bounded
-// only by the LCD top. Pulled tight to 0.5 mm so the LCD glass
-// sits as close to flush with the lid surface as possible.
-ribbon_under_pi = 6.0;
+// front_slack: gap between LCD top and lid inner face (LCD clearance only).
+// lid_seat_raise: extra tub height so the press-fit lip sits higher; bonnet
+// stack unchanged on the floor. Loop 17 fit-test: +1 mm clears joystick
+// rubber + button cap preload when lid is fully seated.
+// cavity_z_budget: internal stack depth after Loop 17 trims (ov5647 reference
+// stack with 5 mm ribbon). Held constant — taller cameras eat ribbon slack.
+cavity_z_budget = 30.34;
 pi_pcb_to_lcd_top = 14.0;
-front_slack = 0.5;
+front_slack = 0.2;
+lid_seat_raise = 1.0;
 
 // Lid retention — press-fit only, no screws. The back tub's top
 // edge steps inward by `lid_skirt_step` for the last `lid_skirt_h`
@@ -94,6 +110,24 @@ back_lane = chin_height;
 bonnet_pcb_x = 65.5;
 bonnet_pcb_y = 30.6;
 
+// Y-axis clearance gaps between the Pi/bonnet PCB and the case walls.
+// Using purpose-driven asymmetric gaps (Loop 3) instead of the old
+// symmetric formula (+1 mm padding per side) reduces case_y by 1.6 mm
+// while keeping the Pi visually centred (0.2 mm off-centre).
+//
+// pi_io_gap: front (low-y) gap — PCB I/O edge to front wall inner face.
+// 0.4 mm = FDM clearance only; USB/HDMI port bodies extend into this
+// gap and through the front wall for the ports-through-wall design.
+// pi_back_clearance: rear (high-y) gap — bonnet back edge to back wall.
+// 0.8 mm = clearance for GPIO header edge + FDM tolerance.
+pi_io_gap = 0.4;
+pi_back_clearance = 0.8;
+
+// Bonnet + Pi stack shift in case-frame x (negative = toward left / low-x wall).
+// Decoupled from camera anchor — gives CSI ribbon room at the Pi's right edge.
+// LCD window, joystick, buttons, USB/HDMI/LED cutouts move with the bonnet.
+bonnet_x_shift = -1.5;
+
 // Pi corner mounting holes — 58 × 23 mm pitch centred on the PCB.
 mount_inset_x = 3.5;
 mount_inset_y = 3.5;
@@ -107,7 +141,12 @@ mount_pitch_y = 23.0;
 lcd_module = [26.12, 26.12];
 lcd_active_area = [23.74, 23.74];
 lcd_active_area_offset = [19.0, 5.0];
-lcd_window_clearance = 0.4;
+// LCD window through-hole — size + shift from lit-pixel centre in bonnet frame.
+// +x = right; +y = toward top (high-y / back edge on bonnet).
+lcd_window_eff_x = 23.5;
+lcd_window_eff_y = 23.5;
+lcd_window_eff_x_offset = 1.5; // Loop 25: +1 mm right vs Loop 23
+lcd_window_eff_y_offset = 0.0; // Loop 25: +1 mm down (low-y) vs Loop 23
 
 // Joystick + button cutouts. Centres in PCB-frame, pulled from
 // Adafruit's official 4506 STEP file (Adafruit_CAD_Parts repo);
@@ -127,27 +166,56 @@ lcd_window_clearance = 0.4;
 // hole is widened with a frustum (narrow inside, wider outside) to
 // give the cap room to tilt without binding on the hole edge.
 //
-// joystick_dia — through-hole diameter at the lid INNER face
-// (stem OD + 2×tilt + FDM clearance)
-// joystick_well_dia — outer-face dish diameter (stem OD + 2×tilt
-// at outer face + FDM clearance + a touch of
-// visual breathing room)
-// joystick_well_depth— how deep the outer dish recesses into the
-// lid; the dish reads as a small "joystick
-// pocket" on the front of the case.
-joystick_dia = 9.5;
-joystick_well_dia = 11.0;
-// Reduced from 1.5 to 1.0 mm so the well's z-range and the
-// silicone pocket's z-range together don't leave a sub-mm "ceiling"
-// of plastic floating in the lid. With pocket_depth = 1.5 and
-// well_depth = 1.0, the two recesses overlap by 0.1 mm inside the
-// Ø 11 well footprint — that overlap area becomes a clean
-// through-hole, giving the joystick stem unrestricted clearance.
-joystick_well_depth = 1.0;
-button_dia = 4.0;
+// joystick_hole_dia_inner — at lid inner face (stem + tilt sweep + clearance).
+// joystick_hole_dia_outer — at outer face (~1.4 mm lateral sweep + clearance).
+// Frustum through the full slab; shallow outer dish removed (was 0.5 mm only).
+joystick_hole_dia_inner = 9.5;
+joystick_hole_dia_outer = 11.0;
 joystick_centre = [ 8.128, 13.462]; // STEP: SKQUBAE010:SW3
 button_a_centre = [53.848, 9.271]; // STEP: 6MM_SMT:SW2 (GPIO 5)
 button_b_centre = [61.087, 15.748]; // STEP: 6MMX6MM_TACTILE_SMT:SW1 (GPIO 6)
+
+// Cap alone on the switch clicks; flush lid preloads caps unless platform pocket
+// is deep enough (skirt extension + in-wall float). Stepped bore: wide flange
+// seat (lower) + narrow pad port (through wall) — flange 7.5 cannot pass 6.3 port.
+button_plunger_dia = 3.0;
+button_plunger_h = 1.2; // plunger height above switch body — tune
+button_switch_travel = 0.1;
+button_lid_squeeze_allowance = 0.25; // press-fit lid preload — tune on hardware
+button_pocket_into_skirt = 1.0; // platform pocket below inner face — tune (~1 mm lift test)
+button_cap_pocket_clearance = 0.2;
+button_cap_pocket_dia = button_plunger_dia + 2 * button_cap_pocket_clearance;
+button_cap_pocket_depth = button_plunger_h
+ - button_switch_travel
+ - button_lid_squeeze_allowance
+ - button_cap_pocket_clearance;
+// Per-button overrides — SW1 (B) may differ from SW2 (A); measure on hardware.
+button_b_plunger_h = button_plunger_h;
+button_b_pocket_into_skirt = button_pocket_into_skirt;
+button_b_cap_pocket_depth = button_b_plunger_h
+ - button_switch_travel
+ - button_lid_squeeze_allowance
+ - button_cap_pocket_clearance;
+button_cap_pad_dia = 6.0;
+button_cap_pad_h = 1.7; // +0.5 with proud — same seat / click travel
+button_cap_pad_proud = 1.0; // above lid outer face — was 0.5
+button_cap_flange_dia = 7.5; // retention flange — independent of lid hole
+button_cap_seat_h = wall + button_cap_pad_proud - button_cap_pad_h;
+button_cap_lid_float = wall - button_cap_seat_h; // in-wall gap above flange when flush
+button_lid_recess_dia = button_cap_flange_dia + 0.4;
+button_lid_recess_depth = button_cap_seat_h + button_cap_lid_float; // = wall
+button_cap_total_h = button_cap_seat_h + button_cap_pad_h;
+button_cap_print_gap = 15; // bed spacing between caps when printing ×2 alone
+button_cap_nest_gap = 3; // cap spacing when nested in lid LCD window
+// Lid cutouts — skirt platform + flange seat + pad port + outer well.
+// Sharp Ø steps bridged badly when the lid prints face-down; chamfer_h
+// tapers wide↔narrow instead. Extra port clearance absorbs blobbing.
+button_lid_port_clearance = 0.45;
+button_lid_step_chamfer_h = 0.8; // taper at flange→port transition
+button_lid_pad_port_dia = button_cap_pad_dia + button_lid_port_clearance;
+button_lid_pad_well_dia = button_cap_pad_dia + 0.6;
+button_lid_pad_well_depth = button_cap_pad_h - button_cap_pad_proud;
+button_cap_pocket_chamfer = 0.3; // wider pocket mouth on cap bed face
 
 // Pi I/O cluster cutouts in the back tub's FRONT (low-y) side
 // wall. The Pi Zero 2 W has three ports along its bottom long
@@ -164,35 +232,59 @@ button_b_centre = [61.087, 15.748]; // STEP: 6MMX6MM_TACTILE_SMT:SW1 (GPIO 6)
 // cutouts (same plug shroud). x_offsets are port centres measured
 // in bonnet-frame (same x-axis as the bonnet because the Pi sits
 // on the bonnet's GPIO header, long-axis aligned).
-usb_cutout_w = 8.0;
-usb_cutout_h = 3.5;
-usb_pwr_x_offset = 54.0; // micro-USB PWR-IN, measured 2026-05-15
-usb_data_x_offset = 41.0; // micro-USB OTG, ESTIMATE — verify
-hdmi_cutout_enabled = false;
-hdmi_cutout_w = 11.5;
-hdmi_cutout_h = 4.5;
+// Port-body-sized cutouts (Loop 3 redesign). Pi PCB I/O edge now sits
+// only pi_io_gap (0.4 mm) from the front wall inner face, so the
+// connector bodies extend INTO the front wall rather than requiring
+// large cable-entry slots. Holes are sized to the port body + 0.4 mm
+// clearance per side — cables plug directly into the exposed ports.
+//
+// Standard port body dimensions (micro-USB type B, mini-HDMI type C):
+// micro-USB: 7.2 mm wide × 2.5 mm tall → cutout 8.0 × 3.3 mm
+// mini-HDMI: 10.7 mm wide × 3.7 mm tall → cutout 11.5 × 4.5 mm
+usb_cutout_w = 9.3; // Loop 5: +0.65 mm clearance per side (was 8.0)
+usb_cutout_h = 3.3; // micro-USB body 2.5 + 2×0.4 clearance
+usb_pwr_x_offset = 53.35; // Loop 5: −0.65 mm (Pi port gap 4.67 vs case 5.97 mm)
+usb_data_x_offset = 41.65; // Loop 5: +0.65 mm (close 1.3 mm excess spacing)
+// PWR LED view hole — front wall, just right (+x) of the power USB cutout.
+pwr_led_hole_dia = 2.5;
+pwr_led_hole_x_gap = 1.2; // gap from USB cutout edge to hole centre
+pwr_led_z_offset = 0.8; // above USB jack centre — tune on hardware
+hdmi_cutout_enabled = true; // enabled for prototype; seal in production
+hdmi_cutout_w = 12.5; // Loop 5: +0.5 mm clearance per side (was 11.5)
+hdmi_cutout_h = 4.5; // mini-HDMI body 3.7 + 2×0.4 clearance
 hdmi_x_offset = 12.4; // mini-HDMI, ESTIMATE — verify
 
 // z position of the micro-USB jack opening centre, measured from
-// the back tub's interior floor. Pi PCB top sits at
-// (camera_post_height + camera_module_z + ribbon_under_pi +
-// pi_pcb_thickness ~ 1.6); the jack opening is ~2.5 mm above PCB top.
+// the Pi PCB top face. Loop 5 fit-test: lower 0.75 mm from 2.0.
 pi_pcb_thickness = 1.6;
-usb_jack_z_above_pi_top = 2.5;
+usb_jack_z_above_pi_top = 1.25;
 
 // microSD-slot cutout. Notch through the LEFT short-edge wall of
-// the back tub, centred vertically on the Pi PCB level so the
-// card's edge aligns with the Pi's SD slot. Disable in production
-// for tamper resistance; keep enabled for prototype + service.
+// the back tub so the card's edge aligns with the Pi's SD slot.
+// Disable in production for tamper resistance; keep enabled for
+// prototype + service.
+//
+// sd_z_above_pi_top: slot centre height above the Pi PCB TOP face.
+// The Pi Zero 2W push-push SD holder is on the component (top) side
+// of the PCB, with the slot opening ~1.1 mm above the PCB surface.
+// Adjusted from the old formula (which referenced PCB bottom and
+// landed 5 mm too low) after fit-test on Loop 2 print.
 sd_cutout_enabled = true;
 sd_cutout_w = 14.0; // along the y axis
 sd_cutout_h = 3.0; // along the z axis
+sd_z_above_pi_top = 1.1; // slot centre above Pi PCB top face
+// Loop 4 fit-test: +4.0 was too far toward back; move 3 mm toward front.
+sd_cutout_y_offset = 1.0; // mm, positive = toward back wall
 
 // Camera: Arducam UC-346 OV5647 (standard Pi Camera footprint).
 // Ships with a 15-pin↔22-pin Pi-Zero ribbon. OV5647 is the same
 // sensor for phone-screen QR scans at held-up distance.
 //
-// Confirmed measurements (2026-05-21, calipers):
+// Camera target — module height only. Post height stays 3.0 mm (pre–Loop 17).
+// CM3 fits the same case_z by shrinking ribbon_under_pi (derived below).
+camera_target = "cm3"; // "ov5647" | "cm3"
+
+// Confirmed measurements (2026-05-21, calipers, Arducam UC-346 OV5647):
 // PCB outline: 25.1 × 24.2 mm
 // PCB thickness: 1.55 mm
 // Lens height: 7.14 mm (PCB bottom to top of lens housing)
@@ -210,27 +302,27 @@ sd_cutout_h = 3.0; // along the z axis
 // on the same side of the case. PCB is mounted in landscape:
 // x-axis = 24.2 mm (FFC edge on left)
 // y-axis = 25.1 mm (long dimension, perpendicular to FFC)
-camera_module_x = 24.2; // confirmed: PCB dimension along x (FFC on x=0 side edge)
-camera_module_y = 25.1; // confirmed: PCB dimension along y (perpendicular to FFC)
-camera_module_z = 7.14; // confirmed: PCB bottom to top of lens housing
-camera_lens_centre = [10.0, 12.55]; // confirmed: 10 mm from FFC side edge in x; centred in y
-camera_mount_pitch = [12.0, 21.0]; // confirmed: x-pitch 12 mm (near row at 10 mm, far at 22 mm); y-pitch 21 mm (2 mm inset each end)
-camera_mount_dia = 2.2; // estimated: M2 clearance
+camera_module_x = 24.2; // PCB x — same for OV5647 + CM3
+camera_module_y = 25.1; // PCB y — same for OV5647 + CM3
+camera_module_z = camera_target == "cm3" ? 11.5 : 7.14;
+// ov5647: 7.14 mm PCB bottom → lens top (Arducam UC-346, calipered)
+// cm3: 11.5 mm total module height (Pi product brief, standard variant)
+camera_lens_centre = [10.0, 12.55]; // OV5647; re-eyeball if CM3 lens shifts
+camera_mount_pitch = [12.0, 21.0]; // same hole pattern as CM2/CM3
+camera_mount_dia = 2.2; // M2 clearance
 
-// Camera standoffs (back tub). Four cylindrical posts rise from the
-// tub floor; the camera PCB rests flat on their tops. M2 × 6 mm
-// screws go DOWN through the camera PCB clearance holes (Ø 2.2 mm)
-// and self-tap into the pilots. Pilot runs through the back wall too
-// so screws can be inserted before the PCB is placed if preferred.
-camera_post_height = 3.0; // lifts camera off floor
-camera_post_outer = 5.0; // Ø 5 mm column (1.5 mm wall around M2 pilot)
-camera_post_pilot = 1.7; // M2 self-tap in PLA
+// Camera standoffs — 3.0 mm since first revision; never tied to case_z trims.
+// M2 × 6 mm screws down through PCB holes into blind pilots.
+camera_post_height = 3.0;
+camera_post_outer = 5.0; // Ø 5 mm column (1.65 mm wall around pilot)
+camera_post_pilot = 1.7; // M2 self-tap pilot in PLA
+camera_post_pilot_depth = min(4.5, camera_post_height - 0.5);
 
-// Pi standoffs (back tub). Four taller posts; Pi PCB rests on tops.
-// M2.5 × 6 mm screws go DOWN through Pi PCB holes and self-tap into
-// the pilots. Height set by stack-up (camera + ribbon gap).
-pi_standoff_outer = 5.0; // Ø 5 mm column
-pi_standoff_pilot = 2.1; // M2.5 self-tap in PLA (2.1 mm recommended)
+// Pi standoffs (back tub). Four posts; Pi PCB rests on flat tops.
+// M2.5 × 6 mm pan-head self-tapping screws through Pi holes into pilots.
+pi_standoff_outer = 7.0; // Ø 7 mm column
+pi_standoff_pilot = 2.1; // M2.5 self-tap pilot in PETG
+pi_standoff_pilot_depth = 5.0; // blind bore from post top — tune ±0.5
 
 // Lens cone in the back tub's back wall.
 lens_cone_dia = 8.0;
@@ -245,7 +337,11 @@ lanyard_enabled = false;
 lanyard_dia = 4.0;
 lanyard_inset = 4.0;
 
-// Tamper-sticker keep-out box on the back wall.
+// Tamper-sticker keep-out box on the back wall. The recess is on the
+// OUTER face (z = 0 side) so the sticker sits flush and is visible
+// from outside. Previously this was positioned near the inner face,
+// which thinned the back wall under camera post 3 and caused that
+// post to detach — fixed by anchoring the recess at z = 0.
 tamper_box_w = 12.0;
 tamper_box_h = 6.0;
 tamper_box_depth = 0.4;
@@ -256,37 +352,26 @@ tamper_box_depth = 0.4;
 // case. ~3 mm gives a soft-brick look without eating wall thickness.
 // lid_face_chamfer: small bevel on the lid's outer top edge so the
 // lid catches light and doesn't read as a featureless plate.
-// lcd_bezel_*: a shallow recess around the LCD window so the screen
-// looks framed rather than punched through.
+// Inner flange depth — Loop 37: 1.36 mm (measured 1.86 − 0.5).
+// Ring inner edge = window through-hole; outer = window + 2×lcd_bezel_border.
+lcd_inner_collar_enabled = true;
+lcd_inner_collar_depth = 1.36;
+lcd_glass_relief_depth = 0; // off when collar enabled; bump if still tight
+lcd_bezel_border = 1.25;
 corner_radius = 3.0;
 lid_face_chamfer = 0.8;
-lcd_bezel_border = 2.0;
-// Loop 1 feedback: the LCD looked deep below the lid surface. Two
-// fixes stacked: drop front_slack from 1.0 to 0.5 (LCD nudged
-// closer to the lid inner face) and deepen this bezel recess from
-// 0.5 to 1.0 (lid is locally thinner around the screen). Wall
-// thickness inside the bezel ring is wall - lcd_bezel_depth =
-// 1.4 mm, still printable.
-lcd_bezel_depth = 1.0;
 
 // Silicone joystick base pocket. The 4506's silicone joystick
 // cover has a 12.2 × 12.2 × 3.4 mm square base that sits on the
-// bonnet PCB around the joystick. The base is ~1.1 mm taller than
-// the LCD plane, which forced the lid to sit 1.1 mm above the LCD
-// and made the screen look deep below the lid surface. Fix: cut
-// a square pocket into the lid's INNER face for the silicone base
-// to nest into, so the lid can come down to LCD-flush.
-//
-// Pocket size: silicone base + 0.5 mm clearance per side.
-// Pocket depth: enough that the silicone has ~0.9 mm headroom inside
-// the pocket (pocket_depth - silicone_overhang).
-// Combined with joystick_well_depth, the pocket and well overlap in
-// z by 0.1 mm — the well merges with the pocket inside the well's
-// circular footprint, giving the joystick stem a clean Ø 11 opening
-// without leaving a fragile 0.1 mm "ceiling" of plastic.
+// bonnet PCB around the joystick.
+joystick_silicone_base_h = 3.4; // measured square base height
+joystick_silicone_overhang = 1.1; // base top above LCD plane (calipers)
+joystick_base_overlap = 0.35; // lid over base rim — was 0.6 (Loop 34)
+joystick_pocket_into_skirt = 2.5; // Loop 34: +0.8 — seat lid over silicone/stem
 joystick_silicone_pocket_w = 13.2;
 joystick_silicone_pocket_h = 13.2;
-joystick_silicone_pocket_depth = 1.5;
+joystick_silicone_pocket_depth = wall + joystick_pocket_into_skirt
+ - joystick_base_overlap;
 
 // Cosmetic: how smooth round features are. Bump at print time, not
 // while editing.
@@ -313,18 +398,28 @@ $fn = 64;
 //
 bonnet_lcd_offset_x = bonnet_pcb_x - 2 * (lcd_active_area_offset.x + lcd_active_area.x / 2); // 3.76 mm
 cavity_x = bonnet_pcb_x + 2*(clearance + 1) + bonnet_lcd_offset_x;
-cavity_y = bonnet_pcb_y + 2*clearance + 2;
+// cavity_y uses purpose-driven gaps (Loop 3): pi_io_gap front + PCB + pi_back_clearance.
+// Was: bonnet_pcb_y + 2*clearance + 2 = 33.4 mm (symmetric, 1 mm extra per side).
+// Now: 31.8 mm — saves 1.6 mm off case_y; Pi centre lands 0.2 mm off case centre.
+cavity_y = bonnet_pcb_y + pi_io_gap + pi_back_clearance;
+
+// Ribbon slot — whatever remains after camera + Pi stack in the fixed budget.
+// ov5647 → 5.0 mm; cm3 → ~0.64 mm (verify cable fold on hardware).
+ribbon_under_pi = cavity_z_budget
+ - camera_post_height
+ - camera_module_z
+ - pi_pcb_to_lcd_top
+ - front_slack
+ - lid_seat_raise;
 
 // Cavity depth — explicit stack-up from camera floor up to LCD top.
-// Every term is a primitive above; a single component swap (taller
-// camera, thicker bonnet, different ribbon) propagates here.
 cavity_z =
- camera_post_height + // 3.0 posts lifting camera off back floor
- camera_module_z + // 7.14 camera body
- ribbon_under_pi + // 6.0 CSI U-turn slot below Pi
- pi_pcb_to_lcd_top + // 14.0 measured (Pi PCB bottom → LCD top)
- front_slack; // 0.5
- // = 30.64 mm internal
+ camera_post_height +
+ camera_module_z +
+ ribbon_under_pi +
+ pi_pcb_to_lcd_top +
+ front_slack +
+ lid_seat_raise; // = cavity_z_budget
 
 // External case dimensions. With no screw lanes the footprint is
 // cavity + 2*wall on every axis — much slimmer rim than before.
@@ -335,22 +430,19 @@ case_z = cavity_z + 2*wall;
 cavity_origin_x = wall;
 cavity_origin_y = wall + front_lane;
 
-// Bonnet's bottom-left corner in case-frame. The cavity X is
-// intentionally ASYMMETRIC: the left gap is wider so the LCD optical
-// axis (= camera lens axis) sits exactly on the case X centreline.
-// The Y gap is still symmetric.
-bonnet_origin_x = wall + (clearance + 1) + bonnet_lcd_offset_x;
-bonnet_origin_y = cavity_origin_y + (cavity_y - bonnet_pcb_y) / 2;
+// Bonnet's bottom-left corner in case-frame. Base x centres the lens on the
+// case midline; bonnet_x_shift moves the Pi/bonnet stack without moving camera.
+_bonnet_origin_x_base = wall + (clearance + 1) + bonnet_lcd_offset_x;
+bonnet_origin_x = _bonnet_origin_x_base + bonnet_x_shift;
+bonnet_origin_y = cavity_origin_y + pi_io_gap;
 
 // LCD optical centre in PCB-frame.
 lcd_active_centre = [
  lcd_active_area_offset.x + lcd_active_area.x / 2,
  lcd_active_area_offset.y + lcd_active_area.y / 2,
 ]; // = (30.87, 16.87)
-lcd_window_x = lcd_module.x + 2*lcd_window_clearance;
-lcd_window_y = lcd_module.y + 2*lcd_window_clearance;
-lcd_bezel_x = lcd_window_x + 2*lcd_bezel_border;
-lcd_bezel_y = lcd_window_y + 2*lcd_bezel_border;
+lcd_window_centre_x = bonnet_origin_x + lcd_active_centre.x + lcd_window_eff_x_offset;
+lcd_window_centre_y = bonnet_origin_y + lcd_active_centre.y + lcd_window_eff_y_offset;
 
 // Camera mount pattern offset from the PCB's (0,0) corner (FFC side = x=0).
 // x: near hole row is at the same x as the lens (10 mm from FFC edge);
@@ -374,17 +466,14 @@ usb_jack_z = wall + pi_standoff_height + pi_pcb_thickness
 
 // Seam between tub and lid. The lid's front face sits on top of the
 // tub; the lid's skirt drops into the tub's stepped lip below.
-tub_top = case_z - wall; // = 33.04 (case_z 35.44 − wall 2.4)
+tub_top = case_z - wall; // = 32.74 (case_z 35.14 − wall 2.4)
 
 // (No screw boss positions — press-fit only.)
 
-// Camera anchor in case-coords. We position the camera so its lens
-// optical axis lands directly behind the LCD's optical centre.
-//
-// lens_in_case = bonnet_origin + lcd_active_centre
+// Camera anchor — lens axis stays on case midline (ignores bonnet_x_shift).
+// lens_in_case = _bonnet_origin_x_base + lcd_active_centre
 // = camera_anchor + camera_lens_centre
-// ⇒ camera_anchor = bonnet_origin + lcd_active_centre - camera_lens_centre
-camera_anchor_x = bonnet_origin_x + lcd_active_centre.x - camera_lens_centre.x;
+camera_anchor_x = _bonnet_origin_x_base + lcd_active_centre.x - camera_lens_centre.x;
 camera_anchor_y = bonnet_origin_y + lcd_active_centre.y - camera_lens_centre.y;
 lens_x = camera_anchor_x + camera_lens_centre.x;
 lens_y = camera_anchor_y + camera_lens_centre.y;
@@ -438,6 +527,54 @@ function camera_post_positions() = [
  [camera_anchor_x + camera_mount_inset.x + camera_mount_pitch.x,
  camera_anchor_y + camera_mount_inset.y + camera_mount_pitch.y],
 ];
+
+// Pocket depth unchanged — only material above pocket grows (seat + pad).
+//
+module button_cap(pocket_depth = button_cap_pocket_depth) {
+ difference() {
+ union() {
+ cylinder(h=button_cap_seat_h, d=button_cap_flange_dia);
+ translate([0, 0, button_cap_seat_h])
+ cylinder(h=button_cap_pad_h, d=button_cap_pad_dia);
+ }
+ // Flared mouth on the bed face — elephant foot + bridging tolerance.
+ translate([0, 0, -0.01])
+ cylinder(
+ h=pocket_depth + 0.01,
+ d1=button_cap_pocket_dia + 2 * button_cap_pocket_chamfer,
+ d2=button_cap_pocket_dia
+ );
+ }
+}
+
+// Print: wide flange on build plate (not upside down). Pocket is a shallow
+// dimple on the bed side — add a brim in the slicer for small parts.
+module button_cap_for_print(pocket_depth = button_cap_pocket_depth) {
+ button_cap(pocket_depth);
+}
+
+// Lid flipped face-down — outer face on build plate (z = 0), footprint in +X/+Y.
+module front_lid_for_print(origin_x = 0, origin_y = 0) {
+ translate([origin_x, origin_y + case_y, lid_skirt_h + wall])
+ rotate([180, 0, 0])
+ front_lid();
+}
+
+// Two caps on the bed, centred in the lid LCD through-window (batch-print friendly).
+module button_caps_in_lid_window(lid_origin_x = 0, lid_origin_y = 0) {
+ _bed_cx = lid_origin_x + lcd_window_centre_x;
+ _bed_cy = lid_origin_y + case_y - lcd_window_centre_y;
+ _half_span = button_cap_flange_dia / 2 + button_cap_nest_gap / 2;
+ translate([_bed_cx - _half_span, _bed_cy, 0])
+ button_cap_for_print(button_cap_pocket_depth);
+ translate([_bed_cx + _half_span, _bed_cy, 0])
+ button_cap_for_print(button_b_cap_pocket_depth);
+}
+
+module lid_with_caps_for_print(origin_x = 0, origin_y = 0) {
+ front_lid_for_print(origin_x, origin_y);
+ button_caps_in_lid_window(origin_x, origin_y);
+}
 
 // =====================================================================
 // Back tub
@@ -517,20 +654,29 @@ module back_tub() {
  cylinder(h=pi_standoff_height, d=pi_standoff_outer);
  }
 
- // ---- Pilot holes — pierce back wall AND posts/standoffs ----
- // Pi standoffs: M2.5 self-tap pilot.
+ // ---- Post bores — blind from post TOP only ----
+ //
+ // Pi: M2.5 × 6 mm pan-head self-tap pilots (blind from post top).
  for (p = pi_standoff_positions())
- translate([p.x, p.y, -1])
+ translate([
+ p.x, p.y,
+ wall + pi_standoff_height
+ - min(pi_standoff_pilot_depth, pi_standoff_height - 1.0)
+ - 0.001
+ ])
  cylinder(
- h=wall + pi_standoff_height + 2,
+ h=min(pi_standoff_pilot_depth, pi_standoff_height - 1.0) + 0.01,
  d=pi_standoff_pilot
  );
 
- // Camera standoffs: M2 self-tap pilot.
+ // Camera: M2 self-tap pilots (no inserts).
  for (p = camera_post_positions())
- translate([p.x, p.y, -1])
+ translate([
+ p.x, p.y,
+ wall + camera_post_height - camera_post_pilot_depth - 0.001
+ ])
  cylinder(
- h=wall + camera_post_height + 2,
+ h=camera_post_pilot_depth + 0.01,
  d=camera_post_pilot
  );
 
@@ -557,20 +703,23 @@ module back_tub() {
  cylinder(h=wall + 2, d=lanyard_dia);
  }
 
- // Tamper-sticker keep-out recess.
+ // Tamper-sticker keep-out recess — 0.4 mm deep pocket on the
+ // OUTER back face (z = 0). Anchored with -0.001 overlap so
+ // the slicer sees a clean coplanar face rather than a 0-height
+ // gap. Near the high-y (sealed) edge, away from I/O and lens.
  translate([
  case_x/2 - tamper_box_w/2,
  case_y - wall - tamper_box_h - 1,
- wall - tamper_box_depth + 0.001
+ -0.001
  ])
- cube([tamper_box_w, tamper_box_h, tamper_box_depth + 0.01]);
+ cube([tamper_box_w, tamper_box_h, tamper_box_depth + 0.001]);
 
  // Pi I/O cluster cutouts — all pierce the FRONT (low-y) side
- // wall from the cavity outward. The Pi's bottom long edge
- // (HDMI + 2× micro-USB) faces this edge in our orientation:
- // bonnet's stemmaQT label and Pi's I/O cluster sit on the
- // same long edge of the assembly. x in bonnet-frame, z
- // centred at the jack opening height.
+ // wall from the cavity outward. Ports-through-wall design
+ // (Loop 3): holes are sized to port bodies, not cable shrouds.
+ // Cutout depth extends to bonnet_origin_y + 1 so the connector
+ // body inside the cavity is fully cleared (Pi I/O edge is at
+ // bonnet_origin_y; +1 mm gives a clean through-cut past it).
  for (port = [
  // [x_offset, w, h, enabled]
  [usb_pwr_x_offset, usb_cutout_w, usb_cutout_h, true],
@@ -584,21 +733,22 @@ module back_tub() {
  ])
  cube([
  port[1],
- cavity_origin_y + 1,
+ bonnet_origin_y + 1,
  port[2]
  ]);
  }
 
  // microSD-slot cutout — pierces the LEFT short-edge wall,
- // sits at Pi PCB level, spans from outer wall inward to the
- // cavity. The Pi's SD slot lip protrudes a couple mm beyond
- // the PCB so the card edge can be reached for swap/service.
+ // spans from outer wall inward to the cavity so the card
+ // edge can be reached for swap/service.
+ // z: Pi PCB top + sd_z_above_pi_top (slot centre on the
+ // component/top face of the Pi PCB).
  if (sd_cutout_enabled) {
  translate([
  -1,
- cavity_origin_y + cavity_y/2 - sd_cutout_w/2,
- wall + pi_standoff_height
- - pi_pcb_thickness/2 - sd_cutout_h/2
+ cavity_origin_y + cavity_y/2 + sd_cutout_y_offset - sd_cutout_w/2,
+ wall + pi_standoff_height + pi_pcb_thickness
+ + sd_z_above_pi_top - sd_cutout_h/2
  ])
  cube([
  cavity_origin_x + 1,
@@ -606,7 +756,92 @@ module back_tub() {
  sd_cutout_h
  ]);
  }
+
+ // Pi power LED view hole — front wall, right of PWR USB.
+ translate([
+ bonnet_origin_x + usb_pwr_x_offset + usb_cutout_w / 2
+ + pwr_led_hole_x_gap + pwr_led_hole_dia / 2,
+ -1,
+ usb_jack_z + pwr_led_z_offset - pwr_led_hole_dia / 2
+ ])
+ cube([
+ pwr_led_hole_dia,
+ bonnet_origin_y + 1,
+ pwr_led_hole_dia
+ ]);
  }
+}
+
+module lcd_inner_bezel_collar() {
+ if (lcd_inner_collar_enabled && lcd_inner_collar_depth > 0) {
+ _d = lcd_inner_collar_depth;
+ _ix = lcd_window_eff_x;
+ _iy = lcd_window_eff_y;
+ _ox = lcd_window_eff_x + 2 * lcd_bezel_border;
+ _oy = lcd_window_eff_y + 2 * lcd_bezel_border;
+ translate([0, 0, lid_skirt_h - _d])
+ difference() {
+ translate([lcd_window_centre_x, lcd_window_centre_y, _d / 2])
+ cube([_ox, _oy, _d], center=true);
+ translate([
+ lcd_window_centre_x - _ix / 2,
+ lcd_window_centre_y - _iy / 2,
+ -0.001
+ ])
+ cube([_ix, _iy, _d + 0.002]);
+ }
+ }
+}
+
+module lcd_glass_clearance_relie() {
+ if (lcd_glass_relief_depth > 0) {
+ _gx = lcd_module[0] + 2 * clearance;
+ _gy = lcd_module[1] + 2 * clearance;
+ translate([
+ lcd_window_centre_x - _gx / 2,
+ lcd_window_centre_y - _gy / 2,
+ lid_skirt_h - lcd_glass_relief_depth - 0.001
+ ])
+ cube([_gx, _gy, lcd_glass_relief_depth + 0.002]);
+ }
+}
+
+module button_lid_cutouts(centre, pocket_into_skirt) {
+ _cx = bonnet_origin_x + centre.x;
+ _cy = bonnet_origin_y + centre.y;
+ _z_skirt = lid_skirt_h - pocket_into_skirt;
+ _z_seat_top = lid_skirt_h + button_cap_seat_h;
+ _z_well_floor = lid_skirt_h + wall - button_lid_pad_well_depth;
+
+ // Skirt platform + flange seat — one continuous wide bore.
+ translate([_cx, _cy, _z_skirt - 0.001])
+ cylinder(
+ h=_z_seat_top - _z_skirt + 0.002,
+ d=button_lid_recess_dia
+ );
+
+ // Tapered transition (7.9 → 6.3) — replaces sharp step for FDM.
+ translate([_cx, _cy, _z_seat_top - button_lid_step_chamfer_h - 0.001])
+ cylinder(
+ h=button_lid_step_chamfer_h + 0.002,
+ d1=button_lid_pad_port_dia,
+ d2=button_lid_recess_dia
+ );
+
+ // Narrow pad port through the wall slab.
+ translate([_cx, _cy, _z_seat_top - 0.001])
+ cylinder(
+ h=_z_well_floor - _z_seat_top + 0.002,
+ d=button_lid_pad_port_dia
+ );
+
+ // Outer-face cosmetic well — pad sits slightly proud.
+ translate([_cx, _cy, _z_well_floor - 0.001])
+ cylinder(
+ h=button_lid_pad_well_depth + 0.02,
+ d1=button_lid_pad_port_dia,
+ d2=button_lid_pad_well_dia
+ );
 }
 
 // =====================================================================
@@ -626,6 +861,9 @@ module front_lid() {
  // the assembled case has matching vertical fillets.
  translate([0, 0, lid_skirt_h])
  outer_brick(case_x, case_y, wall);
+
+ // Inner underside flange — off Loop 36; see lcd_glass_clearance_relie().
+ lcd_inner_bezel_collar();
 
  // Skirt: thin rim hanging off the bottom of the slab,
  // sized to fit inside the back tub's stepped lip. Stays
@@ -656,69 +894,49 @@ module front_lid() {
  }
  }
 
- // LCD bezel recess — shallow rectangular dish on the OUTER
- // face, slightly larger than the LCD window. Makes the
- // screen look framed rather than punched through.
+ // LCD window — plain square through-hole (vertical walls, print-safe).
  translate([
- bonnet_origin_x + lcd_active_centre.x,
- bonnet_origin_y + lcd_active_centre.y,
- lid_skirt_h + wall - lcd_bezel_depth + 0.001
+ lcd_window_centre_x,
+ lcd_window_centre_y,
+ lid_skirt_h + wall / 2
  ])
- rrect(lcd_bezel_x, lcd_bezel_y,
- lcd_bezel_depth + 0.01, r=2);
+ cube(
+ [lcd_window_eff_x, lcd_window_eff_y, wall + 0.002],
+ center=true
+ );
 
- // LCD window — punched through the slab (and through the
- // bottom of the bezel) at the active area centre.
- translate([
- bonnet_origin_x + lcd_active_centre.x,
- bonnet_origin_y + lcd_active_centre.y,
- lid_skirt_h - 1
- ])
- rrect(lcd_window_x, lcd_window_y, wall + 2, r=1.5);
+ // Shallow inner-face relief over glass outline — no contact/teeter.
+ lcd_glass_clearance_relie();
 
- // Joystick cutout. Three-stage:
- // 1. through-hole sized for the rubber cap stem
- // 2. conical well on the OUTER face (joystick "dish")
- // 3. SQUARE pocket on the INNER face for the silicone
- // base to nest into — lets the lid drop close to the
- // LCD without crushing the silicone.
+ // Joystick cutout. Two-stage:
+ // 1. Frustum through skirt + wall — stem clears below inner face
+ // 2. SQUARE pocket on the INNER face for the silicone base
  translate([
  bonnet_origin_x + joystick_centre.x,
  bonnet_origin_y + joystick_centre.y,
- lid_skirt_h - 1
+ lid_skirt_h - joystick_pocket_into_skirt - 0.001
  ])
- cylinder(h=wall + 2, d=joystick_dia);
+ cylinder(
+ h=joystick_pocket_into_skirt + wall + 1.002,
+ d1=joystick_hole_dia_inner,
+ d2=joystick_hole_dia_outer
+ );
  translate([
  bonnet_origin_x + joystick_centre.x
  - joystick_silicone_pocket_w/2,
  bonnet_origin_y + joystick_centre.y
  - joystick_silicone_pocket_h/2,
- lid_skirt_h - 0.001
+ lid_skirt_h - joystick_pocket_into_skirt - 0.001
  ])
  cube([
  joystick_silicone_pocket_w,
  joystick_silicone_pocket_h,
  joystick_silicone_pocket_depth + 0.001
  ]);
- translate([
- bonnet_origin_x + joystick_centre.x,
- bonnet_origin_y + joystick_centre.y,
- lid_skirt_h + wall - joystick_well_depth
- ])
- cylinder(
- h=joystick_well_depth + 0.01,
- d1=joystick_dia,
- d2=joystick_well_dia
- );
 
- // Plain button through-holes.
- for (p = [button_a_centre, button_b_centre])
- translate([
- bonnet_origin_x + p.x,
- bonnet_origin_y + p.y,
- lid_skirt_h - 1
- ])
- cylinder(h=wall + 2, d=button_dia);
+ // Button cutouts — stepped bore retains flange; pad passes narrow port.
+ button_lid_cutouts(button_a_centre, button_pocket_into_skirt);
+ button_lid_cutouts(button_b_centre, button_b_pocket_into_skirt);
 
  // Outer top-face chamfer — bevel where the rounded slab
  // meets the front face. Built by subtracting the difference
@@ -755,19 +973,30 @@ module front_lid() {
 // Render mode switch
 // =====================================================================
 
-// "tub" | "lid" | "all"
-mode = "tub";
+mode = "lid";
 
 if (mode == "tub") {
  back_tub();
 } else if (mode == "lid") {
- front_lid();
+ front_lid_for_print();
+} else if (mode == "cap") {
+ button_cap_for_print();
+} else if (mode == "caps") {
+ translate([0, button_cap_flange_dia / 2, 0])
+ button_cap_for_print();
+ translate([0, button_cap_flange_dia / 2 + button_cap_flange_dia
+ + button_cap_print_gap, 0])
+ button_cap_for_print();
+} else if (mode == "lid_caps") {
+ lid_with_caps_for_print();
 } else if (mode == "all") {
+ // Tub + lid side-by-side on the bed; caps move with the lid window.
+ print_plate_gap = 5;
+ back_tub();
+ lid_with_caps_for_print(case_x + print_plate_gap, 0);
+} else if (mode == "preview") {
  // Exploded preview: lid floats above tub. Useful for visual
- // sanity in OpenSCAD's preview window; do NOT export this — it
- // isn't a printable body. The gap is purely cosmetic; in the
- // assembled state the lid skirt drops into the tub's step with
- // no air between the two parts.
+ // sanity in OpenSCAD's preview window; do NOT export this.
  preview_gap = 20;
  color("LightSteelBlue")
  back_tub();
