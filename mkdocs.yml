@@ -2,7 +2,7 @@ site_name: PiWalletSV
 site_description: >
   Air-gapped Bitcoin SV signing device built on a Raspberry Pi, a TFT
   bonnet, and a Pi Camera, with a companion PWA for the online half.
-site_url: https://piwalletsv.com/
+site_url: !ENV [MKDOCS_SITE_URL, "https://piwalletsv.com/"]
 # Source repo. mkdocs-material renders this as a "View on GitHub"
 # button in the top-right of every page (icon + repo name) and lets
 # the per-page "edit this page" pencil link to the matching markdown
@@ -123,6 +123,9 @@ plugins:
 
 extra_css:
   - assets/extra.css
+
+extra_javascript:
+  - assets/env-links.js
 
 extra:
   generator: false
