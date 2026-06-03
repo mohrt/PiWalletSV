@@ -65,9 +65,12 @@ fragment, trailing pipe).
 
 Frames SHOULD be displayed in a rotating animation; the assembler
 collects whichever it can decode, so missed frames are not fatal as
-long as the loop eventually replays them. The reference encoder
-displays roughly 8 frames per second; faster cycles get harder to
-scan on Pi-class cameras.
+long as the loop eventually replays them. The Pi bonnet defaults to
+**700 ms per frame** (~1.4 fps); the Pi camera captures and decodes
+roughly every **350 ms** (~2.9 fps). The companion uses the same
+700 ms interval so the Pi camera sees each QR long enough before it
+rotates. Faster cycles (6–8 fps) work for phone/laptop webcams but
+can slow Pi-side assembly because the camera misses intermediate frames.
 
 ## 3. Decoding (assembler side)
 
@@ -153,8 +156,9 @@ required but make scanning easier on Pi-class cameras:
 - White margin (quiet zone) of at least 2 modules.
 - Render at integer pixel scale on screen so the camera doesn't see
   shimmer.
-- Animate at ~6–8 frames per second on a static mount; slower on
-  hand-held setups.
+- Animate at **700 ms per frame** when the Pi camera is the scanner
+  (matches bonnet ``PairingMultipartQrScreen``). Up to ~6–8 fps is fine
+  for phone/laptop webcams on a static mount; slower on hand-held setups.
 
 The reference companion uses the JavaScript `qrcode-generator` library
 configured for byte mode and error-correction level M; the Pi side
