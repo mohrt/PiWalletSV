@@ -246,12 +246,14 @@ export function mountWalletDetailPage(
         </section>
 
         <nav class="tab-nav" role="tablist">
-          <button role="tab" data-tab="balance" class="${activeTab === "balance" ? "active" : ""}">Balance</button>
-          <button role="tab" data-tab="send" class="${activeTab === "send" ? "active" : ""}">Send</button>
-          <button role="tab" data-tab="receive" class="${activeTab === "receive" ? "active" : ""}">Receive</button>
-          <button role="tab" data-tab="history" class="${activeTab === "history" ? "active" : ""}">History</button>
-          <button role="tab" data-tab="advanced" class="${activeTab === "advanced" ? "active" : ""}">Advanced</button>
-          <select id="unitSelect" class="tab-unit-select">
+          <div class="tab-nav-tabs">
+            <button role="tab" data-tab="balance" class="${activeTab === "balance" ? "active" : ""}">Balance</button>
+            <button role="tab" data-tab="send" class="${activeTab === "send" ? "active" : ""}">Send</button>
+            <button role="tab" data-tab="receive" class="${activeTab === "receive" ? "active" : ""}">Receive</button>
+            <button role="tab" data-tab="history" class="${activeTab === "history" ? "active" : ""}">History</button>
+            <button role="tab" data-tab="advanced" class="${activeTab === "advanced" ? "active" : ""}">Advanced</button>
+          </div>
+          <select id="unitSelect" class="tab-unit-select" aria-label="Display unit">
             <option value="sats"${displayUnit === "sats" ? " selected" : ""}>sats</option>
             <option value="bsv"${displayUnit === "bsv" ? " selected" : ""}>BSV</option>
             <option value="fiat"${displayUnit === "fiat" ? " selected" : ""}>${getFiatCurrency()}</option>

@@ -47,7 +47,11 @@ a:hover {
 .page {
   max-width: 760px;
   margin: 0 auto;
-  padding: 1.25rem 1rem 3rem;
+  padding:
+    max(1.25rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right))
+    max(3rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
 }
 
 .page-header {
@@ -114,7 +118,11 @@ a:hover {
    informational. */
 .app-footer {
   text-align: center;
-  padding: 1.25rem 1rem 2rem;
+  padding:
+    1.25rem
+    max(1rem, env(safe-area-inset-right))
+    max(2rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
   font-size: 0.8rem;
   color: var(--muted);
   border-top: 1px solid var(--border);
@@ -978,7 +986,11 @@ body.terms-locked {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding:
+    max(1rem, env(safe-area-inset-top))
+    max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
 }
 
 .terms-modal {
@@ -1037,9 +1049,8 @@ body.terms-locked {
 
 .tab-nav {
   display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.35rem;
   margin-bottom: 0.75rem;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1047,8 +1058,20 @@ body.terms-locked {
   padding: 0.3rem;
 }
 
+.tab-nav-tabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.tab-nav-tabs::-webkit-scrollbar {
+  display: none;
+}
+
 .tab-unit-select {
-  margin-left: auto;
+  align-self: flex-end;
   font-size: 0.78rem;
   font-weight: 500;
   background: var(--surface-2);
@@ -1056,29 +1079,32 @@ body.terms-locked {
   border-radius: 6px;
   color: var(--muted);
   padding: 0.3rem 0.5rem;
+  min-height: 2.75rem;
   cursor: pointer;
 }
 
-.tab-nav button {
-  flex: 1 1 auto;
+.tab-nav-tabs button {
+  flex: 0 0 auto;
   background: transparent;
   border: none;
   color: var(--muted);
   font-size: 0.85rem;
   font-weight: 500;
   padding: 0.45rem 0.75rem;
+  min-height: 2.75rem;
   border-radius: 7px;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 120ms, color 120ms;
 }
 
-.tab-nav button:hover:not(:disabled) {
+.tab-nav-tabs button:hover:not(:disabled) {
   background: var(--surface-2);
   color: var(--text);
   filter: none;
 }
 
-.tab-nav button.active {
+.tab-nav-tabs button.active {
   background: var(--accent);
   color: #0b0f15;
   font-weight: 700;
@@ -1834,5 +1860,90 @@ button.danger-outline:hover {
 .field select:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* =========================================================================
+   Mobile layout (Group B)
+   ========================================================================= */
+
+@media (min-width: 540px) {
+  .tab-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .tab-nav-tabs {
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .tab-nav-tabs button {
+    flex: 1 1 auto;
+  }
+
+  .tab-unit-select {
+    margin-left: auto;
+    align-self: center;
+  }
+}
+
+@media (max-width: 539px) {
+  .page-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .page-header nav a {
+    margin-left: 0.65rem;
+  }
+
+  .wallets-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .wallets-toolbar-right {
+    justify-content: space-between;
+  }
+
+  .scan-card {
+    flex-direction: column;
+  }
+
+  .scan-card video {
+    width: 100%;
+  }
+
+  .scan-status {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .receive-row {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .receive-detail {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .balance-hero-value {
+    font-size: 1.65rem;
+  }
+
+  .wallet-card-actions button,
+  .scan-status .actions button,
+  .actions button {
+    min-height: 2.75rem;
+  }
+
+  .icon-btn {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
 }
 
