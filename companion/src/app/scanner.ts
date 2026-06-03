@@ -48,7 +48,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
         <p class="muted-line scan-card-desc">Scan xpub from the Pi or another companion wallet.</p>
         <video id="video" playsinline muted autoplay></video>
         <div class="scan-status">
-          <p id="status">camera idle — click Start to grant access</p>
+          <p id="status" aria-live="polite">camera idle — click Start to grant access</p>
           <p id="missing" class="muted-line"></p>
           <div class="actions">
             <button id="start" class="primary" type="button">Start camera</button>
@@ -91,19 +91,6 @@ export function mountScannerPage(root: HTMLElement): () => void {
         </details>
       </section>
 
-      <section id="pairCard" class="card pair-card" hidden>
-        <h2>Save as paired wallet</h2>
-        <p id="pairStatus" class="muted-line"></p>
-        <label class="field-label" for="pairLabel">Wallet label</label>
-        <input id="pairLabel" type="text" maxlength="64"
-          autocomplete="off" autocorrect="off" spellcheck="false" />
-        <p id="pairFp" class="muted-line"></p>
-        <div class="actions">
-          <button id="pairSave" class="primary" type="button">Save wallet</button>
-          <a id="pairOpenList" href="#/wallets" hidden>Open wallets list</a>
-        </div>
-      </section>
-
       <section id="resultCard" class="card" hidden>
         <pre id="envelopeView" class="envelope-summary" hidden></pre>
         <div class="row" style="margin-bottom: 0.6rem;">
@@ -124,6 +111,23 @@ export function mountScannerPage(root: HTMLElement): () => void {
         </div>
       </section>
     </main>
+
+    <div id="pairOverlay" class="pair-overlay" hidden role="dialog"
+      aria-modal="true" aria-labelledby="pairDialogTitle">
+      <div class="pair-modal card pair-card">
+        <h2 id="pairDialogTitle">Save as paired wallet</h2>
+        <p id="pairStatus" class="muted-line" aria-live="polite"></p>
+        <label class="field-label" for="pairLabel">Wallet label</label>
+        <input id="pairLabel" type="text" maxlength="64"
+          autocomplete="off" autocorrect="off" spellcheck="false" />
+        <p id="pairFp" class="muted-line"></p>
+        <div class="actions">
+          <button id="pairSave" class="primary" type="button">Save wallet</button>
+          <button id="pairDismiss" type="button">Cancel</button>
+          <a id="pairOpenList" href="#/wallets" hidden>Open wallets list</a>
+        </div>
+      </div>
+    </div>
   `;
 
   const $video = root.querySelector<HTMLVideoElement>("#video")!;
@@ -145,11 +149,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
   const $pasteXpubImport = root.querySelector<HTMLButtonElement>("#pasteXpubImport")!;
   const $pasteXpubClear = root.querySelector<HTMLButtonElement>("#pasteXpubClear")!;
   const $pasteXpubStatus = root.querySelector<HTMLElement>("#pasteXpubStatus")!;
-  const $pairCard = root.querySelector<HTMLElement>("#pairCard")!;
+  const $pairOverlay = root.querySelector<HTMLElement>("#pairOverlay")!;
   const $pairStatus = root.querySelector<HTMLElement>("#pairStatus")!;
   const $pairLabel = root.querySelector<HTMLInputElement>("#pairLabel")!;
   const $pairFp = root.querySelector<HTMLElement>("#pairFp")!;
   const $pairSave = root.querySelector<HTMLButtonElement>("#pairSave")!;
+  const $pairDismiss = root.querySelector<HTMLButtonElement>("#pairDismiss")!;
   const $pairOpenList = root.querySelector<HTMLAnchorElement>("#pairOpenList")!;
 
   const offscreen = document.createElement("canvas");
@@ -168,6 +173,15 @@ export function mountScannerPage(root: HTMLElement): () => void {
   let envelope: Envelope | null = null;
   let lastDownloadUrl: string | null = null;
   let pairXpub: XpubExportT | null = null;
+  let pairFocusBefore: HTMLElement | null = null;
+
+  function focusableIn(container: HTMLElement): HTMLElement[] {
+    return Array.from(
+      container.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea, select, [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((el) => !el.hidden && (el.offsetParent !== null || el === document.activeElement));
+  }
 
   $stop.disabled = true;
   $reset.disabled = true;
@@ -316,11 +330,15 @@ export function mountScannerPage(root: HTMLElement): () => void {
 
   function hidePairCard(): void {
     pairXpub = null;
-    $pairCard.hidden = true;
+    $pairOverlay.hidden = true;
+    document.body.classList.remove("pair-locked");
+    pairFocusBefore?.focus();
+    pairFocusBefore = null;
     $pairStatus.classList.remove("error");
     $pairStatus.textContent = "";
     $pairFp.textContent = "";
     $pairLabel.value = "";
+    $pairLabel.disabled = false;
     $pairSave.disabled = false;
     $pairSave.textContent = "Save wallet";
     $pairOpenList.hidden = true;
@@ -329,7 +347,6 @@ export function mountScannerPage(root: HTMLElement): () => void {
   async function showPairCard(env: XpubExportT): Promise<void> {
     pairXpub = env;
     const fpHex = bytesToHex(env.fingerprint);
-    $pairCard.hidden = false;
     $pairLabel.value = env.label;
     $pairLabel.disabled = false;
     $pairSave.textContent = "Save wallet";
@@ -345,6 +362,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
       $pairStatus.classList.add("error");
       $pairStatus.textContent = `wallet store error: ${(e as Error).message}`;
       $pairSave.disabled = true;
+      $pairOverlay.hidden = false;
+      document.body.classList.add("pair-locked");
+      pairFocusBefore = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+      $pairDismiss.focus();
       return;
     }
 
@@ -373,6 +396,18 @@ export function mountScannerPage(root: HTMLElement): () => void {
         ? "Enter a label for this wallet, then save."
         : `Pi reported label "${env.label}". You can rename it before saving.`;
       $pairSave.disabled = false;
+    }
+
+    $pairOverlay.hidden = false;
+    document.body.classList.add("pair-locked");
+    pairFocusBefore = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    if (existing && sameNetworkDup) {
+      $pairDismiss.focus();
+    } else {
+      $pairLabel.focus();
+      $pairLabel.select();
     }
   }
 
@@ -427,6 +462,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
 
     if (envelope?.kind === KIND_XPUB) {
       await showPairCard(envelope);
+      $resultCard.hidden = true;
     } else {
       hidePairCard();
     }
@@ -445,7 +481,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
       r.checked = r.value === defaultView;
     }
     renderResultView();
-    $resultCard.hidden = false;
+    $resultCard.hidden = envelope?.kind === KIND_XPUB;
     $reset.disabled = false;
     let tag: string;
     if (!envelope) {
@@ -666,6 +702,32 @@ export function mountScannerPage(root: HTMLElement): () => void {
   $pairSave.addEventListener("click", () => {
     void onPairSave();
   });
+  $pairDismiss.addEventListener("click", hidePairCard);
+  $pairOverlay.addEventListener("click", (e) => {
+    if (e.target === $pairOverlay) hidePairCard();
+  });
+  $pairOverlay.addEventListener("keydown", (e) => {
+    const ke = e as KeyboardEvent;
+    if (ke.key === "Escape") {
+      ke.preventDefault();
+      hidePairCard();
+      return;
+    }
+    if (ke.key !== "Tab") return;
+    const modal = $pairOverlay.querySelector<HTMLElement>(".pair-modal");
+    if (!modal) return;
+    const items = focusableIn(modal);
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (ke.shiftKey && document.activeElement === first) {
+      ke.preventDefault();
+      last.focus();
+    } else if (!ke.shiftKey && document.activeElement === last) {
+      ke.preventDefault();
+      first.focus();
+    }
+  });
 
   // ── xpub paste import ───────────────────────────────────────────────────
   function setXpubStatus(msg: string, isError = false): void {
@@ -701,7 +763,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
       return;
     }
 
-    setXpubStatus("xpub valid — fill in a label and save below.");
+    setXpubStatus("xpub valid — fill in a label in the dialog.");
 
     // Reuse the QR-scan pair card with a synthetic XpubExportT-like object
     await showPairCard({
@@ -734,6 +796,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
 
   return () => {
     releaseCamera();
+    hidePairCard();
     if (lastDownloadUrl) {
       URL.revokeObjectURL(lastDownloadUrl);
       lastDownloadUrl = null;
