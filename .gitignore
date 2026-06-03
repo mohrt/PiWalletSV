@@ -45,6 +45,7 @@ enclosure/
 *.step
 *.stp
 *.stl
+*.gcode
 
 local_*.cbor
 scratch/
