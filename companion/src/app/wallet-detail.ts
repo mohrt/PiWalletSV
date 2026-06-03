@@ -79,6 +79,8 @@ import {
 
 const RECENT_WINDOW = 8;
 const SATS_PER_BSV = 100_000_000;
+const RECEIVE_QR_SIZE_DEFAULT = 240;
+const RECEIVE_QR_SIZE_LARGE = 320;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -173,6 +175,8 @@ export function mountWalletDetailPage(
   let priceFetchedAt = 0;
   type DisplayUnit = "sats" | "bsv" | "fiat";
   let displayUnit: DisplayUnit = "sats";
+  let receiveQrLarge = false;
+  let receiveAdvancePending: number | null = null;
 
   // Active tab
   type Tab = "balance" | "send" | "receive" | "history" | "advanced";
@@ -509,10 +513,24 @@ export function mountWalletDetailPage(
           </p>
           <p class="muted-line" id="receivePath"></p>
           <div class="receive-row">
-            <canvas id="receiveQr" width="240" height="240"></canvas>
+            <div class="receive-qr-wrap">
+              <canvas id="receiveQr" width="240" height="240"></canvas>
+              <button id="receiveQrSizeToggle" type="button" class="receive-qr-size-btn">
+                Larger QR
+              </button>
+            </div>
             <div class="receive-detail">
               <code id="receiveAddress" class="big-address"></code>
-              <div class="actions">
+              <div id="receiveAdvanceConfirm" class="receive-advance-confirm" hidden>
+                <p class="remove-confirm-msg warning-text" id="receiveAdvanceConfirmMsg"></p>
+                <div class="actions">
+                  <button id="receiveAdvanceConfirmYes" type="button" class="primary">
+                    Continue
+                  </button>
+                  <button id="receiveAdvanceConfirmNo" type="button">Cancel</button>
+                </div>
+              </div>
+              <div class="actions receive-actions">
                 <button id="copyAddress" type="button">Copy address</button>
                 <button id="prevIdx" type="button">← Previous</button>
                 <button id="nextIdx" class="primary" type="button">Next address</button>
@@ -735,6 +753,20 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", () => void shiftIndex(-1));
     root.querySelector<HTMLButtonElement>("#nextIdx")
       ?.addEventListener("click", () => void shiftIndex(1));
+    root.querySelector<HTMLButtonElement>("#receiveQrSizeToggle")
+      ?.addEventListener("click", () => {
+        receiveQrLarge = !receiveQrLarge;
+        void renderReceive();
+      });
+    root.querySelector<HTMLButtonElement>("#receiveAdvanceConfirmYes")
+      ?.addEventListener("click", () => {
+        if (receiveAdvancePending === null) return;
+        const target = receiveAdvancePending;
+        hideReceiveAdvanceConfirm();
+        void applyReceiveIndex(target);
+      });
+    root.querySelector<HTMLButtonElement>("#receiveAdvanceConfirmNo")
+      ?.addEventListener("click", hideReceiveAdvanceConfirm);
 
     // History tab
     root.querySelector<HTMLButtonElement>("#refreshHistory")
@@ -2214,9 +2246,16 @@ export function mountWalletDetailPage(
     }
 
     try {
+      const qrSize = receiveQrLarge ? RECEIVE_QR_SIZE_LARGE : RECEIVE_QR_SIZE_DEFAULT;
+      $canvas.width = qrSize;
+      $canvas.height = qrSize;
       await QRCode.toCanvas($canvas, derived.address, {
-        margin: 1, width: 240, errorCorrectionLevel: "M",
+        margin: 1, width: qrSize, errorCorrectionLevel: "M",
       });
+      const $toggle = root.querySelector<HTMLButtonElement>("#receiveQrSizeToggle");
+      if ($toggle) {
+        $toggle.textContent = receiveQrLarge ? "Standard QR" : "Larger QR";
+      }
     } catch (e) {
       $status.textContent = `qr render error: ${(e as Error).message}`;
     }
@@ -2254,10 +2293,43 @@ export function mountWalletDetailPage(
     });
   }
 
-  async function shiftIndex(delta: number): Promise<void> {
+  function receiveAdvanceWarning(nextIndex: number): string | null {
+    if (!wallet || nextIndex <= wallet.nextReceiveIndex) return null;
+    if (!wallet.lastScan) {
+      return "Refresh Balance first so the companion knows which receive addresses are in use.";
+    }
+    const recommended = wallet.lastScan.lastReceiveUsed + 1;
+    if (nextIndex <= recommended) return null;
+    const lastUsed = wallet.lastScan.lastReceiveUsed;
+    if (lastUsed < 0) {
+      return (
+        `Address #${nextIndex} is ahead of the scanned range. ` +
+        `Refresh Balance if you are not sure this address is unused.`
+      );
+    }
+    return (
+      `Address #${nextIndex} is beyond the last used receive index (#${lastUsed}). ` +
+      `Only advance if you have already shared address #${nextIndex - 1} ` +
+      `or no longer expect payments there.`
+    );
+  }
+
+  function showReceiveAdvanceConfirm(message: string, targetIndex: number): void {
+    receiveAdvancePending = targetIndex;
+    const $strip = root.querySelector<HTMLElement>("#receiveAdvanceConfirm");
+    const $msg = root.querySelector<HTMLElement>("#receiveAdvanceConfirmMsg");
+    if ($msg) $msg.textContent = message;
+    if ($strip) $strip.hidden = false;
+  }
+
+  function hideReceiveAdvanceConfirm(): void {
+    receiveAdvancePending = null;
+    const $strip = root.querySelector<HTMLElement>("#receiveAdvanceConfirm");
+    if ($strip) $strip.hidden = true;
+  }
+
+  async function applyReceiveIndex(next: number): Promise<void> {
     if (!wallet) return;
-    const next = wallet.nextReceiveIndex + delta;
-    if (next < 0) return;
     try {
       await setNextReceiveIndex(wallet.id, next);
       wallet.nextReceiveIndex = next;
@@ -2270,6 +2342,21 @@ export function mountWalletDetailPage(
       return;
     }
     void renderReceive();
+  }
+
+  async function shiftIndex(delta: number): Promise<void> {
+    if (!wallet) return;
+    const next = wallet.nextReceiveIndex + delta;
+    if (next < 0) return;
+    hideReceiveAdvanceConfirm();
+    if (delta > 0) {
+      const warning = receiveAdvanceWarning(next);
+      if (warning) {
+        showReceiveAdvanceConfirm(warning, next);
+        return;
+      }
+    }
+    await applyReceiveIndex(next);
   }
 
   async function onCopy(): Promise<void> {
