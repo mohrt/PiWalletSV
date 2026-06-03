@@ -400,12 +400,15 @@ class Vault:
     def rename_wallet(self, pin: str, wallet_id: str, new_label: str) -> None:
         if self._state is None:
             raise VaultError("vault not initialized")
+        trimmed = new_label.strip()
+        if not trimmed:
+            raise VaultError("wallet label cannot be empty")
         _validate_pin(pin)
         if self._state.wallets:
             self._unwrap_dek(pin, self._state.wallets[0])
         for w in self._state.wallets:
             if w["id"] == wallet_id:
-                w["label"] = new_label
+                w["label"] = trimmed
                 self._save()
                 return
         raise WalletNotFoundError(wallet_id)

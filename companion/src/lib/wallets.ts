@@ -262,13 +262,17 @@ export async function removeWallet(id: string): Promise<void> {
 }
 
 export async function updateLabel(id: string, label: string): Promise<void> {
+  const trimmed = label.trim();
+  if (!trimmed) {
+    throw new WalletStoreError("wallet label cannot be empty");
+  }
   await withStore("readwrite", async (store) => {
     const cur = await txPromise<WalletRecord | undefined>(
       store.get(id) as IDBRequest<WalletRecord | undefined>,
       "get",
     );
     if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
-    cur.label = label;
+    cur.label = trimmed;
     await txPromise(store.put(cur), "put");
   });
 }

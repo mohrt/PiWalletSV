@@ -384,6 +384,15 @@ def test_rename_wallet(vault_path: Path) -> None:
     assert v.list_wallets()[0].label == "savings"
 
 
+def test_rename_wallet_rejects_empty_label(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin=GOOD_PIN)
+    rec = v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
+    with pytest.raises(vlt.VaultError, match="empty"):
+        v.rename_wallet(GOOD_PIN, rec.id, "   ")
+    assert v.list_wallets()[0].label == "daily"
+
+
 # ---- change_pin --------------------------------------------------------
 
 
