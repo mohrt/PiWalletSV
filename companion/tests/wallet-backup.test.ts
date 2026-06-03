@@ -6,8 +6,13 @@ import {
   BACKUP_FORMAT,
   BACKUP_VERSION,
   buildWalletBackupFile,
+  buildWalletBackupPw1Lines,
+  formatImportWalletResult,
   importWalletBackup,
+  importWalletBackupBytes,
   serializeWalletBackup,
+  walletBackupJsonToPw1Lines,
+  walletBackupToBytes,
 } from "../src/lib/wallet-backup.js";
 import { WalletStoreError, _clearAllWallets, addWallet, listWallets } from "../src/lib/wallets.js";
 
@@ -88,5 +93,48 @@ describe("wallet backup", () => {
     expect(result.imported).toBe(1);
     expect(result.failed).toHaveLength(1);
     expect(result.failed[0].label).toBe("bad fp");
+  });
+
+  it("round-trips through PW1 bytes", async () => {
+    await addWallet(DEMO);
+    const { json, lines } = await buildWalletBackupPw1Lines();
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines[0].startsWith("PW1|")).toBe(true);
+
+    await _clearAllWallets();
+    const bytes = walletBackupToBytes(json);
+    const result = await importWalletBackupBytes(bytes);
+    expect(result.imported).toBe(1);
+    expect(await listWallets()).toHaveLength(1);
+  });
+
+  it("encodes JSON backup as PW1 lines", async () => {
+    await addWallet(DEMO);
+    const json = serializeWalletBackup(await buildWalletBackupFile());
+    const lines = walletBackupJsonToPw1Lines(json);
+    expect(lines.every((l) => l.startsWith("PW1|"))).toBe(true);
+  });
+
+  it("replace mode clears existing wallets before import", async () => {
+    await addWallet({ ...DEMO, fingerprint: "22222222", label: "local only" });
+    const addedAt = new Date().toISOString();
+    const backup = JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: addedAt,
+      wallets: [{ ...DEMO, addedAt, label: "from backup" }],
+    });
+
+    const result = await importWalletBackup(backup, { mode: "replace" });
+    expect(result.imported).toBe(1);
+    const all = await listWallets();
+    expect(all).toHaveLength(1);
+    expect(all[0].label).toBe("from backup");
+  });
+
+  it("formats import results for display", () => {
+    expect(
+      formatImportWalletResult({ imported: 2, skippedDuplicates: 1, failed: [] }),
+    ).toBe("imported 2 wallets; skipped 1 duplicate.");
   });
 });

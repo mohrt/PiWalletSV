@@ -9,12 +9,14 @@ import { bytesToHex } from "./envelope.js";
 import { DerivationError, xpubFingerprint } from "./derive.js";
 import {
   WalletStoreError,
+  _clearAllWallets,
   addWallet,
   findByFingerprintAndPath,
   listWallets,
   setNextReceiveIndex,
   type WalletRecord,
 } from "./wallets.js";
+import { encodeMultipartLines } from "../pw1.js";
 
 export const BACKUP_FORMAT = "piwallet-companion-wallets" as const;
 export const BACKUP_VERSION = 1;
@@ -40,6 +42,13 @@ export interface ImportWalletResult {
   imported: number;
   skippedDuplicates: number;
   failed: { label: string; reason: string }[];
+}
+
+/** Merge skips duplicate pairs; replace clears the local store first. */
+export type ImportWalletMode = "merge" | "replace";
+
+export interface ImportWalletOptions {
+  mode?: ImportWalletMode;
 }
 
 function toBackupEntry(rec: WalletRecord): WalletBackupEntry {
@@ -68,6 +77,58 @@ export async function buildWalletBackupFile(): Promise<WalletBackupFile> {
 
 export function serializeWalletBackup(file: WalletBackupFile): string {
   return JSON.stringify(file, null, 2);
+}
+
+export function walletBackupToBytes(json: string): Uint8Array {
+  return new TextEncoder().encode(json);
+}
+
+export function walletBackupBytesToJson(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (e) {
+    throw new WalletStoreError(
+      `backup bytes are not valid UTF-8: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
+export function walletBackupJsonToPw1Lines(json: string): string[] {
+  return encodeMultipartLines(walletBackupToBytes(json));
+}
+
+export async function buildWalletBackupPw1Lines(): Promise<{
+  json: string;
+  lines: string[];
+  walletCount: number;
+}> {
+  const file = await buildWalletBackupFile();
+  const json = serializeWalletBackup(file);
+  return {
+    json,
+    lines: walletBackupJsonToPw1Lines(json),
+    walletCount: file.wallets.length,
+  };
+}
+
+export function formatImportWalletResult(result: ImportWalletResult): string {
+  const parts: string[] = [];
+  if (result.imported > 0) {
+    parts.push(
+      `imported ${result.imported} wallet${result.imported === 1 ? "" : "s"}`,
+    );
+  }
+  if (result.skippedDuplicates > 0) {
+    parts.push(
+      `skipped ${result.skippedDuplicates} duplicate${result.skippedDuplicates === 1 ? "" : "s"}`,
+    );
+  }
+  if (result.failed.length > 0) {
+    parts.push(
+      `${result.failed.length} failed (${result.failed.map((f) => f.label).join(", ")})`,
+    );
+  }
+  return parts.length > 0 ? parts.join("; ") + "." : "Nothing to import.";
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -207,7 +268,14 @@ async function importOneEntry(entry: WalletBackupEntry): Promise<
   return "imported";
 }
 
-export async function importWalletBackup(raw: string): Promise<ImportWalletResult> {
+export async function importWalletBackup(
+  raw: string,
+  opts: ImportWalletOptions = {},
+): Promise<ImportWalletResult> {
+  const mode = opts.mode ?? "merge";
+  if (mode === "replace") {
+    await _clearAllWallets();
+  }
   const file = parseBackupFile(raw);
   const result: ImportWalletResult = {
     imported: 0,
@@ -236,4 +304,12 @@ export async function importWalletBackup(raw: string): Promise<ImportWalletResul
   }
 
   return result;
+}
+
+export async function importWalletBackupBytes(
+  bytes: Uint8Array,
+  opts: ImportWalletOptions = {},
+): Promise<ImportWalletResult> {
+  const json = walletBackupBytesToJson(bytes);
+  return importWalletBackup(json, opts);
 }
