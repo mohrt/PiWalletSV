@@ -740,6 +740,40 @@ button:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+.send-scan-actions {
+  margin-top: 0.75rem;
+}
+
+.send-broadcast-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.send-broadcast-message {
+  margin: 0;
+  font-family: inherit;
+}
+
+.send-broadcast-message:empty {
+  display: none;
+}
+
+.send-broadcast-message.success {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #58c47a;
+}
+
+.send-broadcast-message.success a {
+  color: #6cd09a;
+}
+
+.send-broadcast-actions {
+  margin-top: 0.15rem;
+}
+
 .send-card .field {
   display: flex;
   flex-direction: column;
@@ -1615,6 +1649,35 @@ button.danger-outline:hover {
 .sign-step.error {
   border-color: var(--danger);
   color: var(--danger);
+}
+
+.spv-complete-banner {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #58c47a;
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 6px;
+  background: rgba(88, 196, 122, 0.1);
+  border: 1px solid rgba(88, 196, 122, 0.35);
+}
+
+.spv-steps {
+  margin-top: 0.75rem;
+}
+
+#spvDetail.error {
+  color: var(--danger);
+}
+
+.send-spv-tip,
+.balance-spv-note {
+  font-size: 0.82rem;
+  margin-top: 0.25rem;
+}
+
+.balance-spv-note {
+  color: #e3b86c;
 }
 
 .broadcast-success {

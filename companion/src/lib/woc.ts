@@ -12,7 +12,7 @@
  *
  * Plus one write path:
  *
- * - `broadcastRaw(hex)`     — POST raw signed tx hex; returns the txid.
+ * - `broadcastRaw(hex, knownTxid?)` — POST raw signed tx hex; returns the txid.
  *
  * Network endpoint is configurable. Built-in bases:
  *   - mainnet (default): `https://api.whatsonchain.com/v1/bsv/main`
@@ -90,6 +90,17 @@ export function effectiveWocBase(
       : WOC_DEV_PROXY_MAINNET_PATH;
   }
   return wocBaseForNetwork(network);
+}
+
+/** Public block explorer origins (Next.js app — tx pages are ``/tx/<txid>``). */
+export const WOC_EXPLORER_MAIN = "https://whatsonchain.com";
+export const WOC_EXPLORER_TEST = "https://test.whatsonchain.com";
+
+/** Human-facing WhatsOnChain transaction page for a txid. */
+export function wocExplorerTxUrl(txid: string, network: NetworkT = "main"): string {
+  const id = txid.trim().toLowerCase().replace(/^0x/, "");
+  const origin = network === "test" ? WOC_EXPLORER_TEST : WOC_EXPLORER_MAIN;
+  return `${origin}/tx/${id}`;
 }
 
 export interface WocUnspentEntry {
@@ -480,6 +491,20 @@ export class WocClient {
     // address, in input order).
     const byAddress = new Map<string, WocUnspentEntry[]>();
     for (const a of addresses) byAddress.set(a, []);
+    const upsert = (list: WocUnspentEntry[], entry: WocUnspentEntry): void => {
+      const idx = list.findIndex(
+        (u) => u.txid === entry.txid && u.vout === entry.vout,
+      );
+      if (idx === -1) {
+        list.push(entry);
+        return;
+      }
+      // WoC can surface the same outpoint on both confirmed and
+      // unconfirmed lists during propagation; keep the higher height.
+      if (entry.height > list[idx]!.height) {
+        list[idx] = entry;
+      }
+    };
     const merge = (rows: RawAddressRow[]): void => {
       for (const row of rows) {
         if (!row.address) continue;
@@ -490,7 +515,7 @@ export class WocClient {
           // would be inflated and any selector that picks them would
           // produce a double-spend the moment it's broadcast.
           if (u.isSpentInMempoolTx) continue;
-          list.push({
+          upsert(list, {
             txid: u.tx_hash,
             vout: u.tx_pos,
             sats: u.value,
@@ -700,17 +725,40 @@ export class WocClient {
   }
 
   /** `POST /tx/raw` — broadcast a raw signed tx. Returns the txid. */
-  async broadcastRaw(rawHex: string): Promise<string> {
+  async broadcastRaw(rawHex: string, knownTxid?: string): Promise<string> {
     if (!/^[0-9a-fA-F]+$/.test(rawHex) || rawHex.length % 2 !== 0) {
       throw new WocError("/tx/raw", 0, "rawHex must be even-length hex");
     }
     // WoC returns the txid as a quoted JSON string.
-    const res = await this.request<string>("POST", "/tx/raw", { txhex: rawHex });
-    if (typeof res !== "string") {
-      throw new WocError("/tx/raw", 200, `unexpected broadcast response`);
+    try {
+      const res = await this.request<string>("POST", "/tx/raw", { txhex: rawHex });
+      if (typeof res !== "string") {
+        throw new WocError("/tx/raw", 200, `unexpected broadcast response`);
+      }
+      return res.replace(/^"|"$/g, "").trim();
+    } catch (e) {
+      // Re-broadcasting the same signed tx is idempotent — the tx is
+      // already propagating. Treat as success when we know the txid.
+      if (
+        knownTxid &&
+        e instanceof WocError &&
+        isAlreadyInMempoolError(e)
+      ) {
+        return knownTxid;
+      }
+      throw e;
     }
-    return res.replace(/^"|"$/g, "").trim();
   }
+}
+
+/** True when WoC rejected a broadcast because this exact tx is already known. */
+export function isAlreadyInMempoolError(e: WocError): boolean {
+  const text = `${e.message} ${e.bodySnippet}`.toLowerCase();
+  return (
+    text.includes("already in the mempool") ||
+    text.includes("txn-already-in-mempool") ||
+    text.includes("transaction already in the mempool")
+  );
 }
 
 function defaultFetch(

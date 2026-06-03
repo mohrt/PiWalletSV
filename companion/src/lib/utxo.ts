@@ -52,6 +52,25 @@ export interface WalletUtxo {
   derivation: [number, number];
 }
 
+/**
+ * Proposal inputs must be confirmed — SPV proofs are unavailable for
+ * mempool UTXOs (`height === 0`). Balance views still show pending
+ * coins; send/coin-select should call this before spending.
+ */
+export function confirmedUtxos(utxos: WalletUtxo[]): WalletUtxo[] {
+  const byOutpoint = new Map<string, WalletUtxo>();
+  for (const u of utxos) {
+    const height = typeof u.height === "number" ? u.height : Number(u.height);
+    if (!Number.isFinite(height) || height <= 0) continue;
+    const key = `${u.txid}:${u.vout}`;
+    const prev = byOutpoint.get(key);
+    if (!prev || height > prev.height) {
+      byOutpoint.set(key, { ...u, height });
+    }
+  }
+  return [...byOutpoint.values()];
+}
+
 export interface ScanResult {
   utxos: WalletUtxo[];
   totalSats: number;

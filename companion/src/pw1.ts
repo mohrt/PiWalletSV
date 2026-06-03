@@ -21,6 +21,13 @@ export const DEFAULT_ENCODED_CHUNK_CHARS = 200;
 
 const PREFIX_RE = /^PW1\|(?<t>\d+)\|(?<i>\d+)\|(?<rest>.*)$/;
 
+/** Return ``[total, index]`` for a PW1 line, or ``null`` if not PW1. */
+export function pw1LineMeta(line: string): [number, number] | null {
+  const m = PREFIX_RE.exec(line.trim());
+  if (!m?.groups) return null;
+  return [Number(m.groups.t), Number(m.groups.i)];
+}
+
 export class MultipartQrError extends Error {
   constructor(message: string) {
     super(message);
