@@ -64,7 +64,7 @@ export function noSpendableUtxosMessage(
     return `${formatSats(split.confirmedSats)} confirmed but not spendable — refresh Balance and try again`;
   }
   if (split.hasPending) {
-    return `only confirmed coins can be sent; ${formatSats(split.pendingSats)} is still in the mempool — wait for confirmation, then refresh Balance`;
+    return `only confirmed coins can be sent; ${formatSats(split.pendingSats)} is still pending — wait for confirmation, then refresh Balance`;
   }
   return "no confirmed UTXOs in the last scan — refresh Balance on the Balance tab";
 }

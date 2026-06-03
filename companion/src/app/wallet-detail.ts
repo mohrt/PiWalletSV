@@ -27,7 +27,7 @@ import {
   hexToBytes,
   decodeEnvelope,
 } from "../lib/envelope.js";
-import { CoinSelectError, selectUtxosGreedy } from "../lib/coin-select.js";
+import { CoinSelectError, computeMaxSendSats, selectUtxosGreedy } from "../lib/coin-select.js";
 import { decodeHexPasteToBytes } from "../lib/hex-paste.js";
 import { encodeMultipartLines } from "../pw1.js";
 import { Transaction } from "@bsv/sdk";
@@ -134,7 +134,6 @@ function wrapHex(hex: string, width: number): string {
 
 type SendStep =
   | { step: "form" }
-  | { step: "fee"; recipient: string; sats: number }
   | { step: "review"; recipient: string; sats: number; feeRate: number; feeSats: number; changeSats: number }
   | { step: "qr" };
 
@@ -169,7 +168,9 @@ export function mountWalletDetailPage(
   let addrScanHandle: CameraScanHandle | null = null;
   let pw1ScanHandle: Pw1ScanHandle | null = null;
   let sendQrTab: "proposal" | "scan" = "proposal";
-  let selectedFeeRate = DEFAULT_FEE_RATE_SATSKB;
+  /** True when amount was set via Max — re-applied when fee tier changes. */
+  let sendAmountIsMax = false;
+  let suppressSendAmountInput = false;
 
   let proposalFrames: string[] | null = null;
   let proposalFrameIdx = 0;
@@ -297,13 +298,20 @@ export function mountWalletDetailPage(
 
         <!-- Send tab -->
         <section id="tab-send" class="card tab-panel${activeTab === "send" ? " active" : ""}" role="tabpanel">
+          <div id="sendProgress" class="send-progress" aria-live="polite">
+            <p id="sendProgressLabel" class="send-progress-label muted-line">Step 1 of 3 — Amount & fee</p>
+            <div class="send-progress-track" aria-hidden="true">
+              <div id="sendProgressFill" class="send-progress-fill" style="width:33%"></div>
+            </div>
+          </div>
+          <div id="sendPendingBanner" class="send-pending-banner" hidden></div>
           <p class="send-balance-line muted-line">
             Spendable: <span id="sendBalanceHero">—</span>
             <span id="sendBalancePending" hidden></span>
           </p>
           <p class="muted-line send-spv-tip">
             Sending uses SPV verification — only confirmed on-chain coins are
-            spendable. Mempool (pending) UTXOs must confirm first.
+            spendable. Pending UTXOs must confirm first.
           </p>
           <div id="sendStep-form">
             <h2>Send</h2>
@@ -330,6 +338,29 @@ export function mountWalletDetailPage(
               </div>
             </div>
             <label class="field">
+              <span>Network fee</span>
+              <select id="feeTierSelect" class="fee-tier-select" disabled>
+                ${((): string => {
+                  const defTier = getDefaultFeeTier();
+                  const sel = (v: string) => v === defTier ? " selected" : "";
+                  return `
+                <option value="economy"${sel("economy")}>Economy</option>
+                <option value="standard"${sel("standard")}>Standard</option>
+                <option value="priority"${sel("priority")}>Priority</option>
+                <option value="custom"${sel("custom")}>Custom…</option>`;
+                })()}
+              </select>
+              <p class="muted-line send-fee-loading" id="feeLoading">Loading fee rates…</p>
+            </label>
+            <div id="feeCustomRow" class="fee-custom-row"${getDefaultFeeTier() === "custom" ? "" : " hidden"}>
+              <label class="field">
+                <span>Custom rate (sat/kB)</span>
+                <input id="feeCustom" type="number" min="0" step="1"
+                  value="${getDefaultCustomFeeRate()}"
+                  placeholder="${DEFAULT_FEE_RATE_SATSKB}" />
+              </label>
+            </div>
+            <label class="field">
               <span>Amount</span>
               <div class="amount-row">
                 <input id="sendAmount" type="number" min="0" step="any"
@@ -344,53 +375,7 @@ export function mountWalletDetailPage(
             </label>
             <p class="muted-line" id="sendFormStatus"></p>
             <div class="actions">
-              <button id="sendNext" type="button" class="primary">Next →</button>
-            </div>
-          </div>
-
-          <div id="sendStep-fee" hidden>
-            <h2>Select fee</h2>
-            <p class="muted-line" id="feeLoading">Loading fee rates…</p>
-            <div id="feeTiers" class="fee-tiers" hidden>
-              ${((): string => {
-                const defTier = getDefaultFeeTier();
-                const defCustom = getDefaultCustomFeeRate();
-                const chk = (v: string) => v === defTier ? " checked" : "";
-                const sel = (v: string) => v === defTier ? " selected" : "";
-                return `
-              <label class="fee-tier${sel("economy")}">
-                <input type="radio" name="feeTier" value="economy"${chk("economy")} />
-                <span class="fee-tier-label">Economy</span>
-                <span class="fee-tier-rate" id="feeEconomy">—</span>
-                <span class="fee-tier-desc muted-line">slower, cheapest</span>
-              </label>
-              <label class="fee-tier${sel("standard")}">
-                <input type="radio" name="feeTier" value="standard"${chk("standard")} />
-                <span class="fee-tier-label">Standard</span>
-                <span class="fee-tier-rate" id="feeStandard">—</span>
-                <span class="fee-tier-desc muted-line">recommended</span>
-              </label>
-              <label class="fee-tier${sel("priority")}">
-                <input type="radio" name="feeTier" value="priority"${chk("priority")} />
-                <span class="fee-tier-label">Priority</span>
-                <span class="fee-tier-rate" id="feePriority">—</span>
-                <span class="fee-tier-desc muted-line">fastest confirmation</span>
-              </label>
-              <label class="fee-tier fee-tier-custom${sel("custom")}">
-                <input type="radio" name="feeTier" value="custom"${chk("custom")} />
-                <span class="fee-tier-label">Custom</span>
-                <input id="feeCustom" type="number" min="1" step="1"
-                  value="${defCustom}"
-                  placeholder="${DEFAULT_FEE_RATE_SATSKB}"
-                  class="fee-custom-input" />
-                <span class="fee-tier-desc muted-line">sat/kB</span>
-                <span class="fee-tier-rate" id="feeCustomEst" style="margin-left:auto">—</span>
-              </label>`;
-              })()}
-            </div>
-            <div class="actions">
-              <button id="feeBack" type="button">← Back</button>
-              <button id="feeNext" type="button" class="primary">Review →</button>
+              <button id="sendNext" type="button" class="primary">Review →</button>
             </div>
           </div>
 
@@ -444,18 +429,17 @@ export function mountWalletDetailPage(
                 <button id="proposalDone" type="button">New send</button>
               </div>
 
-              <details class="advanced proposal-hex-details">
-                <summary>Sign over SSH instead of QR</summary>
+              <details class="advanced send-advanced-details">
+                <summary>Advanced</summary>
                 <p class="muted-line">
-                  Copy the hex below, then on the Pi run:<br>
+                  Copy the unsigned proposal hex to sign on the Pi terminal:<br>
                   <code>piwallet sign --hex &lt;paste&gt; --wallet-id &lt;id&gt;</code><br>
-                  When the Pi prints the signed output, open
-                  <strong>Step 2 — Scan</strong> and paste it there.
+                  Then paste the signed output under Advanced on Step 2.
                 </p>
                 <textarea id="proposalHex" class="hex-blob" rows="6"
                   readonly spellcheck="false" autocorrect="off"></textarea>
                 <div class="actions">
-                  <button id="copyProposalHex" type="button" class="primary">Copy hex</button>
+                  <button id="copyProposalHex" type="button" class="primary">Copy proposal hex</button>
                 </div>
                 <p class="muted-line" id="proposalHexStatus"></p>
               </details>
@@ -477,12 +461,11 @@ export function mountWalletDetailPage(
                 <button id="pw1ScanStart" type="button" class="primary">Scan Pi's response</button>
               </div>
 
-              <details class="advanced signed-tx-paste-details">
-                <summary>Sign over SSH (paste signed hex)</summary>
+              <details class="advanced send-advanced-details">
+                <summary>Advanced</summary>
                 <p class="muted-line">
-                  Paste the Pi's terminal output below — the full
-                  <code>verified:</code> / <code>txid:</code> / <code>signed_tx:</code>
-                  summary is fine.
+                  Paste a signed transaction from the Pi or another source.
+                  Full terminal output (<code>signed_tx:</code>, etc.) is fine.
                 </p>
                 <textarea id="pasteSignedTx" class="hex-blob" rows="6"
                   placeholder="signed_tx: …"
@@ -501,10 +484,12 @@ export function mountWalletDetailPage(
                 <p id="broadcastStatus" class="send-broadcast-message muted-line"></p>
                 <div class="actions send-broadcast-actions">
                   <button id="broadcastBtn" type="button" class="primary">Broadcast</button>
+                  <a id="broadcastExplorer" target="_blank" rel="noopener noreferrer"
+                    class="primary-link" hidden>View on explorer ↗</a>
                   <button id="broadcastDone" type="button" class="primary" hidden>
-                    Done
+                    View balance
                   </button>
-                  <button id="proposalDone2" type="button">New send</button>
+                  <button id="proposalDone2" type="button">Send again</button>
                 </div>
               </div>
             </div>
@@ -632,6 +617,7 @@ export function mountWalletDetailPage(
     bindEvents();
     renderBalance();
     renderHistory();
+    if (activeTab === "send") void loadFeeRates();
   }
 
   // ---------------------------------------------------------------------------
@@ -667,14 +653,22 @@ export function mountWalletDetailPage(
       ?.addEventListener("click", onSendMax);
     root.querySelector<HTMLSelectElement>("#sendUnit")
       ?.addEventListener("change", (e) => {
-        if ((e.target as HTMLSelectElement).value === "fiat") void fetchBsvPrice();
+        const unit = (e.target as HTMLSelectElement).value;
+        if (unit === "fiat") void fetchBsvPrice();
+        if (sendAmountIsMax) onSendMax();
       });
-    root.querySelector<HTMLButtonElement>("#feeBack")
-      ?.addEventListener("click", () => showSendStep("form"));
-    root.querySelector<HTMLButtonElement>("#feeNext")
-      ?.addEventListener("click", () => void onFeeNext());
+    root.querySelector<HTMLInputElement>("#sendAmount")
+      ?.addEventListener("input", () => {
+        if (suppressSendAmountInput) return;
+        sendAmountIsMax = false;
+        refreshFeeTierEstimates();
+      });
     root.querySelector<HTMLButtonElement>("#reviewBack")
-      ?.addEventListener("click", () => showSendStep("fee"));
+      ?.addEventListener("click", () => {
+        syncSendFormFromStep();
+        sendStep = { step: "form" };
+        showSendStep("form");
+      });
     root.querySelector<HTMLButtonElement>("#reviewConfirm")
       ?.addEventListener("click", () => void onBuildProposal());
     root.querySelector<HTMLButtonElement>("#proposalToggle")
@@ -706,29 +700,11 @@ export function mountWalletDetailPage(
       });
     });
 
-    // Fee tier radio — highlight selected
-    root.querySelectorAll<HTMLInputElement>('input[name="feeTier"]').forEach((r) => {
-      r.addEventListener("change", () => highlightSelectedTier());
-    });
-
-    // Custom fee input — update estimated sats live
+    // Fee tier dropdown + custom rate
+    root.querySelector<HTMLSelectElement>("#feeTierSelect")
+      ?.addEventListener("change", () => onFeeTierChanged());
     root.querySelector<HTMLInputElement>("#feeCustom")
-      ?.addEventListener("input", () => {
-        const $customInput = root.querySelector<HTMLInputElement>("#feeCustom");
-        const $est = root.querySelector<HTMLElement>("#feeCustomEst");
-        if (!$customInput || !$est || sendStep.step !== "fee" || !wallet?.lastScan) return;
-        const rate = parseInt($customInput.value, 10);
-        if (!Number.isInteger(rate) || rate <= 0) { $est.textContent = "—"; return; }
-        const utxos = spendableUtxos();
-        if (utxos.length === 0) { $est.textContent = "—"; return; }
-        try {
-          const fee = selectUtxosGreedy(utxos, sendStep.sats, rate).feeSats;
-          $est.textContent = `~${fee.toLocaleString("en-US")} sats`;
-        } catch {
-          const bytes = utxos.length * 148 + 2 * 34 + 10;
-          $est.textContent = `~${Math.ceil(bytes * rate / 1000).toLocaleString("en-US")} sats`;
-        }
-      });
+      ?.addEventListener("input", () => onFeeTierChanged());
 
     // Receive tab
     root.querySelector<HTMLButtonElement>("#copyAddress")
@@ -848,6 +824,9 @@ export function mountWalletDetailPage(
     if (tab === "receive") {
       void refreshReceiveIndex();
     }
+    if (tab === "send" && sendStep.step === "form") {
+      void loadFeeRates();
+    }
   }
 
   async function refreshReceiveIndex(): Promise<void> {
@@ -958,6 +937,7 @@ export function mountWalletDetailPage(
       if ($spvNote) $spvNote.hidden = true;
       if ($sendBal) $sendBal.textContent = "—";
       if ($sendPending) $sendPending.hidden = true;
+      renderSendPendingBanner();
       return;
     }
 
@@ -975,6 +955,7 @@ export function mountWalletDetailPage(
         $sendPending.textContent = "";
       }
     }
+    renderSendPendingBanner();
     $hero.textContent = formatBalance(scan.totalSats);
     $bsv.textContent =
       displayUnit === "sats" ? formatBsv(scan.totalSats) :
@@ -987,11 +968,11 @@ export function mountWalletDetailPage(
     if (split.hasPending) {
       $pending.hidden = false;
       $pending.textContent = split.allPending
-        ? "unconfirmed"
-        : `+${formatSats(split.pendingSats)} unconfirmed`;
+        ? "pending"
+        : `+${formatSats(split.pendingSats)} pending`;
       $spvNote.hidden = false;
       $spvNote.textContent =
-        "Pending (mempool) coins are included in your total but cannot be spent until " +
+        "Pending coins are included in your total but cannot be spent until " +
         "they confirm — SPV requires an on-chain Merkle proof for each input.";
     } else {
       $pending.hidden = true;
@@ -1015,7 +996,7 @@ export function mountWalletDetailPage(
         <div class="muted-line">
           ${branchLabel} m/${u.derivation[0]}/${u.derivation[1]} ·
           ${escapeHtml(u.address)} ·
-          ${isPending ? '<span class="utxo-pending-tag">mempool</span>' : `block ${u.height}`}
+          ${isPending ? '<span class="utxo-pending-tag">pending</span>' : `block ${u.height}`}
         </div>
       `;
       $list.appendChild(li);
@@ -1174,7 +1155,7 @@ export function mountWalletDetailPage(
           <a href="${escapeHtml(wocExplorerTxUrl(tx.txid, network))}" target="_blank"
              rel="noopener noreferrer">${escapeHtml(shortTxid(tx.txid))}</a>
           ${isPending
-            ? '<span class="utxo-pending-tag">unconfirmed</span>'
+            ? '<span class="utxo-pending-tag">pending</span>'
             : `· block ${tx.blockHeight}`}
         </div>
       `;
@@ -1281,11 +1262,107 @@ export function mountWalletDetailPage(
     );
   }
 
-  function showSendStep(step: "form" | "fee" | "review" | "qr"): void {
-    const steps = ["form", "fee", "review", "qr"];
+  const SEND_PROGRESS: Record<"form" | "review" | "qr", { label: string; pct: number }> = {
+    form: { label: "Step 1 of 3 — Amount & fee", pct: 33 },
+    review: { label: "Step 2 of 3 — Review", pct: 66 },
+    qr: { label: "Step 3 of 3 — Sign on Pi & broadcast", pct: 100 },
+  };
+
+  function updateSendProgress(step: "form" | "review" | "qr"): void {
+    const meta = SEND_PROGRESS[step];
+    const $label = root.querySelector<HTMLElement>("#sendProgressLabel");
+    const $fill = root.querySelector<HTMLElement>("#sendProgressFill");
+    if ($label) $label.textContent = meta.label;
+    if ($fill) $fill.style.width = `${meta.pct}%`;
+  }
+
+  function renderSendPendingBanner(): void {
+    const $banner = root.querySelector<HTMLElement>("#sendPendingBanner");
+    if (!$banner) return;
+    if (!wallet?.lastScan) {
+      $banner.hidden = true;
+      return;
+    }
+    const split = splitConfirmedPending(wallet.lastScan.utxos);
+    if (!split.allPending) {
+      $banner.hidden = true;
+      return;
+    }
+    $banner.hidden = false;
+    $banner.innerHTML =
+      `<strong>Nothing spendable yet.</strong> ` +
+      `${formatBalance(split.pendingSats)} is pending and cannot be sent until it confirms. ` +
+      `Refresh Balance after confirmation.`;
+  }
+
+  function getSelectedFeeRate(): number {
+    const selected = root.querySelector<HTMLSelectElement>("#feeTierSelect")?.value;
+    if (selected === "economy") return feeRec?.economy ?? DEFAULT_FEE_RATE_SATSKB;
+    if (selected === "standard") return feeRec?.standard ?? DEFAULT_FEE_RATE_SATSKB;
+    if (selected === "priority") return feeRec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
+    const $custom = root.querySelector<HTMLInputElement>("#feeCustom");
+    const rate = parseInt($custom?.value ?? "", 10);
+    return Number.isInteger(rate) && rate >= 0 ? rate : getDefaultCustomFeeRate();
+  }
+
+  function getSelectedFeeTier(): string {
+    return root.querySelector<HTMLSelectElement>("#feeTierSelect")?.value ?? "standard";
+  }
+
+  function readFormAmountSats(): number | null {
+    const $amountInput = root.querySelector<HTMLInputElement>("#sendAmount");
+    const $unitSelect = root.querySelector<HTMLSelectElement>("#sendUnit");
+    if (!$amountInput || !$unitSelect) return null;
+    const amountRaw = $amountInput.value.trim();
+    if (amountRaw === "") return null;
+    const amountNum = parseFloat(amountRaw);
+    if (isNaN(amountNum) || amountNum <= 0) return null;
+    const unit = $unitSelect.value as "sats" | "bsv" | "fiat";
+    let sats: number;
+    if (unit === "sats") {
+      sats = Math.round(amountNum);
+    } else if (unit === "bsv") {
+      sats = Math.round(amountNum * SATS_PER_BSV);
+    } else {
+      if (bsvUsdPrice === null || bsvUsdPrice === 0) return null;
+      sats = Math.round((amountNum / bsvUsdPrice) * SATS_PER_BSV);
+    }
+    return Number.isInteger(sats) && sats > 0 ? sats : null;
+  }
+
+  function amountSatsForFeeEstimate(): number | null {
+    if (sendStep.step === "review") return sendStep.sats;
+    return readFormAmountSats();
+  }
+
+  function syncSendFormFromStep(): void {
+    if (sendStep.step !== "review") return;
+    const $amount = root.querySelector<HTMLInputElement>("#sendAmount");
+    const $unit = root.querySelector<HTMLSelectElement>("#sendUnit");
+    if (!$amount || !$unit) return;
+    const sats = sendStep.sats;
+    const unit = $unit.value as "sats" | "bsv" | "fiat";
+    if (unit === "sats") {
+      $amount.value = String(sats);
+    } else if (unit === "bsv") {
+      $amount.value = (sats / SATS_PER_BSV).toFixed(8);
+    } else if (bsvUsdPrice !== null && bsvUsdPrice > 0) {
+      $amount.value = ((sats / SATS_PER_BSV) * bsvUsdPrice).toFixed(2);
+    } else {
+      $amount.value = String(sats);
+    }
+  }
+
+  function showSendStep(step: "form" | "review" | "qr"): void {
+    const steps = ["form", "review", "qr"];
     for (const s of steps) {
       const el = root.querySelector<HTMLElement>(`#sendStep-${s}`);
       if (el) el.hidden = s !== step;
+    }
+    updateSendProgress(step);
+    if (step === "form") {
+      syncSendFormFromStep();
+      void loadFeeRates();
     }
     if (step === "qr") switchSendQrTab("proposal");
   }
@@ -1404,27 +1481,42 @@ export function mountWalletDetailPage(
     return confirmedUtxos(wallet.lastScan.utxos);
   }
 
+  function applySendAmountSats(sats: number): void {
+    const $amount = root.querySelector<HTMLInputElement>("#sendAmount");
+    const $unit = root.querySelector<HTMLSelectElement>("#sendUnit");
+    if (!$amount || !$unit) return;
+    const unit = $unit.value as "sats" | "bsv" | "fiat";
+    suppressSendAmountInput = true;
+    if (unit === "sats") {
+      $amount.value = String(sats);
+    } else if (unit === "bsv") {
+      $amount.value = (sats / SATS_PER_BSV).toFixed(8);
+    } else if (bsvUsdPrice !== null && bsvUsdPrice > 0) {
+      $amount.value = ((sats / SATS_PER_BSV) * bsvUsdPrice).toFixed(2);
+    } else {
+      $amount.value = String(sats);
+    }
+    suppressSendAmountInput = false;
+    refreshFeeTierEstimates();
+  }
+
+  function onFeeTierChanged(): void {
+    const tier = getSelectedFeeTier();
+    const $customRow = root.querySelector<HTMLElement>("#feeCustomRow");
+    if ($customRow) $customRow.hidden = tier !== "custom";
+    if (sendAmountIsMax) onSendMax();
+    else refreshFeeTierEstimates();
+  }
+
   function onSendMax(): void {
     if (!wallet?.lastScan) return;
     const utxos = spendableUtxos();
     if (utxos.length === 0) return;
-    const $amount = root.querySelector<HTMLInputElement>("#sendAmount");
-    const $unit = root.querySelector<HTMLSelectElement>("#sendUnit");
-    if (!$amount || !$unit) return;
-    const feeRate = selectedFeeRate;
-    const totalIn = utxos.reduce((a, u) => a + u.sats, 0);
-    const estimatedFee = Math.ceil((utxos.length * 148 + 2 * 34 + 10) * feeRate / 1000);
-    const maxSats = Math.max(0, totalIn - estimatedFee);
-    const unit = $unit.value as "sats" | "bsv" | "fiat";
-    if (unit === "sats") {
-      $amount.value = String(maxSats);
-    } else if (unit === "bsv") {
-      $amount.value = (maxSats / SATS_PER_BSV).toFixed(8);
-    } else {
-      $amount.value = bsvUsdPrice !== null
-        ? ((maxSats / SATS_PER_BSV) * bsvUsdPrice).toFixed(2)
-        : String(maxSats / SATS_PER_BSV);
-    }
+    const rate = getSelectedFeeRate();
+    const maxSats = computeMaxSendSats(utxos, rate);
+    if (maxSats <= 0) return;
+    sendAmountIsMax = true;
+    applySendAmountSats(maxSats);
   }
 
   async function onSendNext(): Promise<void> {
@@ -1487,16 +1579,40 @@ export function mountWalletDetailPage(
       return;
     }
 
-    sendStep = { step: "fee", recipient, sats };
-    showSendStep("fee");
-    void loadFeeRates();
+    const rate = getSelectedFeeRate();
+    let feeSats = 0;
+    let changeSats = 0;
+    try {
+      const sel = selectUtxosGreedy(utxos, sats, rate);
+      feeSats = sel.feeSats;
+      changeSats = sel.changeSats;
+    } catch (e) {
+      if (e instanceof CoinSelectError) {
+        $status.classList.add("error");
+        $status.textContent = e.message;
+        return;
+      }
+      const estimatedBytes = utxos.length * 148 + 2 * 34 + 10;
+      feeSats = Math.ceil(estimatedBytes * rate / 1000);
+      changeSats = 0;
+    }
+
+    sendStep = { step: "review", recipient, sats, feeRate: rate, feeSats, changeSats };
+    showSendStep("review");
+    renderReview();
   }
 
   async function loadFeeRates(): Promise<void> {
     if (!wallet) return;
     const $loading = root.querySelector<HTMLElement>("#feeLoading");
-    const $tiers = root.querySelector<HTMLElement>("#feeTiers");
+    const $select = root.querySelector<HTMLSelectElement>("#feeTierSelect");
     if (!woc) woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
+
+    if ($loading) {
+      $loading.hidden = false;
+      $loading.textContent = "Loading fee rates…";
+    }
+    if ($select) $select.disabled = true;
 
     try {
       feeRec = await fetchFeeRecommendation(woc);
@@ -1504,17 +1620,25 @@ export function mountWalletDetailPage(
       feeRec = null;
     }
 
+    refreshFeeTierEstimates();
+    onFeeTierChanged();
+    if ($loading) $loading.hidden = true;
+    if ($select) $select.disabled = false;
+  }
+
+  function refreshFeeTierEstimates(): void {
+    if (!wallet) return;
     const economy = feeRec?.economy ?? DEFAULT_FEE_RATE_SATSKB;
     const standard = feeRec?.standard ?? DEFAULT_FEE_RATE_SATSKB;
     const priority = feeRec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
 
-    const feeStep = sendStep.step === "fee" ? sendStep : null;
-    const estSats = feeStep && wallet?.lastScan
+    const targetSats = amountSatsForFeeEstimate();
+    const estSats = targetSats !== null && wallet.lastScan
       ? (rate: number) => {
           const utxos = spendableUtxos();
           if (utxos.length === 0) return null;
           try {
-            return selectUtxosGreedy(utxos, feeStep.sats, rate).feeSats;
+            return selectUtxosGreedy(utxos, targetSats, rate).feeSats;
           } catch {
             const bytes = utxos.length * 148 + 2 * 34 + 10;
             return Math.ceil(bytes * rate / 1000);
@@ -1522,80 +1646,37 @@ export function mountWalletDetailPage(
         }
       : (_rate: number) => null;
 
-    function fmtTierRate(rate: number): string {
+    function fmtOptionLabel(name: string, rate: number): string {
       const fee = estSats(rate);
-      return fee !== null
-        ? `~${fee.toLocaleString("en-US")} sats  (${formatFeeRate(rate)})`
-        : formatFeeRate(rate);
-    }
-
-    const $eco = root.querySelector<HTMLElement>("#feeEconomy");
-    const $std = root.querySelector<HTMLElement>("#feeStandard");
-    const $pri = root.querySelector<HTMLElement>("#feePriority");
-    if ($eco) $eco.textContent = fmtTierRate(economy);
-    if ($std) $std.textContent = fmtTierRate(standard);
-    if ($pri) $pri.textContent = fmtTierRate(priority);
-
-    selectedFeeRate = standard;
-    if ($loading) $loading.hidden = true;
-    if ($tiers) $tiers.hidden = false;
-  }
-
-  function highlightSelectedTier(): void {
-    root.querySelectorAll<HTMLElement>(".fee-tier").forEach((el) => {
-      const radio = el.querySelector<HTMLInputElement>("input[type=radio]");
-      el.classList.toggle("selected", !!radio?.checked);
-    });
-  }
-
-  async function onFeeNext(): Promise<void> {
-    if (sendStep.step !== "fee") return;
-    if (!wallet?.lastScan) return;
-
-    const selected = root.querySelector<HTMLInputElement>('input[name="feeTier"]:checked')?.value;
-    let rate: number;
-    if (selected === "economy") rate = feeRec?.economy ?? DEFAULT_FEE_RATE_SATSKB;
-    else if (selected === "standard") rate = feeRec?.standard ?? DEFAULT_FEE_RATE_SATSKB;
-    else if (selected === "priority") rate = feeRec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
-    else {
-      // custom
-      const $custom = root.querySelector<HTMLInputElement>("#feeCustom");
-      rate = parseInt($custom?.value ?? "", 10);
-      if (!Number.isInteger(rate) || rate <= 0) rate = getDefaultCustomFeeRate();
-    }
-    selectedFeeRate = rate;
-
-    const utxos = spendableUtxos();
-    if (utxos.length === 0) {
-      const $status = root.querySelector<HTMLElement>("#feeLoading");
-      if ($status) {
-        $status.hidden = false;
-        $status.classList.add("error");
-        $status.textContent = noSpendableUtxosMessage(
-          wallet.lastScan.utxos,
-          formatSats,
-        );
+      const rateText = formatFeeRate(rate);
+      if (fee !== null) {
+        return `${name} — ~${fee.toLocaleString("en-US")} sats (${rateText})`;
       }
-      return;
+      return `${name} — ${rateText}`;
     }
 
-    // Estimate fee and change for the review screen
-    let feeSats = 0;
-    let changeSats = 0;
-    try {
-      const sel = selectUtxosGreedy(utxos, sendStep.sats, rate);
-      feeSats = sel.feeSats;
-      changeSats = sel.changeSats;
-    } catch {
-      // Use rough estimate if coin select fails (will re-run on confirm)
-      const estimatedBytes = utxos.length * 148 + 2 * 34 + 10;
-      feeSats = Math.ceil(estimatedBytes * rate / 1000);
-      changeSats = 0;
+    const $select = root.querySelector<HTMLSelectElement>("#feeTierSelect");
+    if ($select) {
+      const tier = $select.value;
+      for (const [value, name, rate] of [
+        ["economy", "Economy", economy],
+        ["standard", "Standard", standard],
+        ["priority", "Priority", priority],
+      ] as const) {
+        const opt = $select.querySelector<HTMLOptionElement>(`option[value="${value}"]`);
+        if (opt) opt.textContent = fmtOptionLabel(name, rate);
+      }
+      const customOpt = $select.querySelector<HTMLOptionElement>('option[value="custom"]');
+      if (customOpt) {
+        const customRate = getSelectedFeeTier() === "custom"
+          ? getSelectedFeeRate()
+          : getDefaultCustomFeeRate();
+        customOpt.textContent = tier === "custom"
+          ? fmtOptionLabel("Custom", customRate)
+          : "Custom…";
+      }
+      $select.value = tier;
     }
-
-    sendStep = { step: "review", recipient: sendStep.recipient, sats: sendStep.sats, feeRate: rate, feeSats, changeSats };
-    showSendStep("review");
-    renderReview();
   }
 
   function renderReview(): void {
@@ -1937,15 +2018,22 @@ export function mountWalletDetailPage(
   function hideBroadcastDone(): void {
     const $done = root.querySelector<HTMLButtonElement>("#broadcastDone");
     if ($done) $done.hidden = true;
-    const $newSend = root.querySelector<HTMLButtonElement>("#proposalDone2");
-    if ($newSend) $newSend.hidden = false;
+    const $explorer = root.querySelector<HTMLAnchorElement>("#broadcastExplorer");
+    if ($explorer) $explorer.hidden = true;
   }
 
-  function showBroadcastDone(): void {
+  function showBroadcastDone(explorerUrl?: string): void {
     const $done = root.querySelector<HTMLButtonElement>("#broadcastDone");
     if ($done) $done.hidden = false;
-    const $newSend = root.querySelector<HTMLButtonElement>("#proposalDone2");
-    if ($newSend) $newSend.hidden = true;
+    const $explorer = root.querySelector<HTMLAnchorElement>("#broadcastExplorer");
+    if ($explorer) {
+      if (explorerUrl) {
+        $explorer.href = explorerUrl;
+        $explorer.hidden = false;
+      } else {
+        $explorer.hidden = true;
+      }
+    }
   }
 
   async function onBroadcast(): Promise<void> {
@@ -1968,13 +2056,24 @@ export function mountWalletDetailPage(
       const txid = $btn.dataset.txid ?? "";
       await woc.broadcastRaw(rawHex, txid || undefined);
       const explorer = wocExplorerTxUrl(txid, wallet.network);
+      const $panel = root.querySelector<HTMLElement>("#broadcastWidget");
+      const $info = root.querySelector<HTMLElement>("#broadcastInfo");
+      if ($panel) $panel.classList.add("success");
+      if ($info) {
+        $info.innerHTML =
+          `<strong class="broadcast-success-head">Transaction sent</strong><br>` +
+          `<code class="mono" style="font-size:0.75rem;word-break:break-all">${escapeHtml(txid)}</code>`;
+      }
       $status.classList.remove("error");
       $status.classList.add("success");
-      $status.innerHTML = `✓ Sent! <a href="${explorer}" target="_blank" rel="noopener noreferrer">View on explorer ↗</a>`;
+      $status.textContent =
+        "Accepted by the network. It may take a few minutes to confirm on-chain.";
       delete $btn.dataset.signedHex;
       $btn.hidden = true;
-      showBroadcastDone();
+      showBroadcastDone(explorer);
     } catch (e) {
+      const $panel = root.querySelector<HTMLElement>("#broadcastWidget");
+      if ($panel) $panel.classList.remove("success");
       $status.classList.add("error");
       $status.classList.remove("success");
       let msg: string;
@@ -2001,7 +2100,10 @@ export function mountWalletDetailPage(
   function resetBroadcastWidget(): void {
     const $broadcast = root.querySelector<HTMLElement>("#broadcastWidget");
     const $pw1Actions = root.querySelector<HTMLElement>("#pw1ScanActions");
-    if ($broadcast) $broadcast.hidden = true;
+    if ($broadcast) {
+      $broadcast.hidden = true;
+      $broadcast.classList.remove("success");
+    }
     if ($pw1Actions) $pw1Actions.hidden = false;
     const $broadcastBtn = root.querySelector<HTMLButtonElement>("#broadcastBtn");
     if ($broadcastBtn) {
@@ -2019,6 +2121,8 @@ export function mountWalletDetailPage(
     }
     const $broadcastInfo = root.querySelector<HTMLElement>("#broadcastInfo");
     if ($broadcastInfo) $broadcastInfo.textContent = "";
+    const $explorer = root.querySelector<HTMLAnchorElement>("#broadcastExplorer");
+    if ($explorer) $explorer.hidden = true;
   }
 
   function resetSendCard(): void {
@@ -2027,6 +2131,7 @@ export function mountWalletDetailPage(
     proposalFrames = null;
     proposalFrameIdx = 0;
     sendStep = { step: "form" };
+    sendAmountIsMax = false;
     showSendStep("form");
     resetBroadcastWidget();
     resetSpvUi();

@@ -838,6 +838,20 @@ button:hover:not(:disabled) {
   padding: 0.5rem;
 }
 
+.send-advanced-details {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+#tab-send details.advanced summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+  user-select: none;
+}
+
 .proposal-hex-details {
   margin-top: 0.6rem;
 }
@@ -1213,6 +1227,79 @@ body.terms-locked {
   margin: 0 0 0.75rem;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.5rem;
+}
+
+.send-progress {
+  margin-bottom: 0.85rem;
+}
+
+.send-progress-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+}
+
+.send-progress-track {
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.send-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 180ms ease;
+}
+
+.send-pending-banner {
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius);
+  border: 1px solid #b8860b;
+  background: rgba(184, 134, 11, 0.12);
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.send-fee-loading {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+}
+
+.fee-tier-select {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.fee-custom-row {
+  margin: -0.25rem 0 0.5rem;
+}
+
+.fee-custom-row input {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.send-broadcast-panel.success {
+  border-color: #3d7a4a;
+  background: rgba(61, 122, 74, 0.1);
+}
+
+.broadcast-success-head {
+  color: #7dcea0;
+  font-size: 0.95rem;
 }
 
 .wallet-more-link {

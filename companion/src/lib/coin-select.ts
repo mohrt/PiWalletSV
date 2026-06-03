@@ -138,3 +138,28 @@ export function selectUtxosGreedy<T extends SelectableUtxo>(
       `(target ${targetSats} + fee ${finalFee} + dust ${dustSats})`,
   );
 }
+
+/**
+ * Largest recipient amount that still leaves above-dust change at `feeRateSatskb`.
+ * Uses binary search over `selectUtxosGreedy` so the result matches real selection.
+ */
+export function computeMaxSendSats(
+  utxos: readonly SelectableUtxo[],
+  feeRateSatskb: number,
+  dustSats: number = DUST_THRESHOLD_SATS,
+): number {
+  if (utxos.length === 0) return 0;
+  const totalIn = utxos.reduce((a, u) => a + u.sats, 0);
+  let lo = 0;
+  let hi = totalIn;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    try {
+      selectUtxosGreedy([...utxos], mid, feeRateSatskb, dustSats);
+      lo = mid;
+    } catch {
+      hi = mid - 1;
+    }
+  }
+  return lo;
+}

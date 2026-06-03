@@ -81,12 +81,12 @@ describe("splitConfirmedPending", () => {
     expect(JSON.stringify(utxos)).toBe(before);
   });
 
-  it("noSpendableUtxosMessage explains mempool-only balance", () => {
+  it("noSpendableUtxosMessage explains pending-only balance", () => {
     const msg = noSpendableUtxosMessage(
       [{ sats: 5000, height: 0 }],
       (n) => `${n} sats`,
     );
     expect(msg).toContain("5000 sats");
-    expect(msg).toContain("mempool");
+    expect(msg).toContain("pending");
   });
 });

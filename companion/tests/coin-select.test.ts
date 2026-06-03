@@ -5,6 +5,7 @@ import {
   DUST_THRESHOLD_SATS,
   estimateFee,
   estimateTxBytes,
+  computeMaxSendSats,
   selectUtxosGreedy,
 } from "../src/lib/coin-select.js";
 
@@ -104,5 +105,25 @@ describe("selectUtxosGreedy", () => {
     const res = selectUtxosGreedy([u("a".repeat(64), 10_000)], 5_000, 0);
     expect(res.feeSats).toBe(0);
     expect(res.changeSats).toBe(5_000);
+  });
+});
+
+describe("computeMaxSendSats", () => {
+  it("returns 0 for empty UTXO list", () => {
+    expect(computeMaxSendSats([], 500)).toBe(0);
+  });
+
+  it("leaves above-dust change at the selected fee rate", () => {
+    const utxos = [u("a".repeat(64), 100_000)];
+    const max = computeMaxSendSats(utxos, 500);
+    expect(max).toBeGreaterThan(0);
+    const sel = selectUtxosGreedy(utxos, max, 500);
+    expect(sel.changeSats).toBeGreaterThanOrEqual(DUST_THRESHOLD_SATS);
+  });
+
+  it("max + 1 sat fails greedy selection", () => {
+    const utxos = [u("a".repeat(64), 50_000)];
+    const max = computeMaxSendSats(utxos, 500);
+    expect(() => selectUtxosGreedy(utxos, max + 1, 500)).toThrow(CoinSelectError);
   });
 });

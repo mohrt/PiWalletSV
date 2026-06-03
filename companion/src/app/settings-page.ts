@@ -36,7 +36,7 @@ export function getDefaultFeeTier(): FeeTier {
 
 export function getDefaultCustomFeeRate(): number {
   const stored = parseInt(localStorage.getItem(KEY_CUSTOM_FEE_RATE) ?? "", 10);
-  return Number.isInteger(stored) && stored > 0 ? stored : DEFAULT_FEE_RATE_SATSKB;
+  return Number.isInteger(stored) && stored >= 0 ? stored : DEFAULT_FEE_RATE_SATSKB;
 }
 
 export function getFiatCurrency(): FiatCurrency {
@@ -90,7 +90,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
             <label class="fee-tier fee-tier-custom${feeTier === "custom" ? " selected" : ""}">
               <input type="radio" name="settingsFeeTier" value="custom"${chk("custom", feeTier)} />
               <span class="fee-tier-label">Custom</span>
-              <input id="sCustomRate" type="number" min="1" step="1"
+              <input id="sCustomRate" type="number" min="0" step="1"
                 value="${customFeeRate}"
                 class="fee-custom-input" />
               <span class="fee-tier-desc muted-line">sat/kB</span>
@@ -185,7 +185,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
 
   $customRateInput.addEventListener("blur", () => {
     const rate = parseInt($customRateInput.value, 10);
-    if (Number.isInteger(rate) && rate > 0) {
+    if (Number.isInteger(rate) && rate >= 0) {
       localStorage.setItem(KEY_CUSTOM_FEE_RATE, String(rate));
       flashSaved();
     }
