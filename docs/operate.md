@@ -9,7 +9,7 @@ For the user-facing journey (pairing, sending, receiving) see the
 [User manual](user-manual.md). To interpret the bonnet's airgap
 indicators see [User manual § Airgap status](user-manual.md#airgap-status).
 For wire-format troubleshooting see the user manual's
-[Troubleshooting](user-manual.md#12-troubleshooting)
+[Troubleshooting](user-manual.md#troubleshooting)
 section, which is intentionally not duplicated here.
 
 ## Logs
@@ -121,10 +121,41 @@ piwallet vault --vault-path ~/.piwallet/vault.bin list
 This is safe to run from a script (a backup-monitoring job, for
 example) and emits one line per wallet: `<id> <label>`.
 
-### Backing up the vault file
+### USB vault backup { #usb-vault-backup }
+
+The recommended backup path for sealed devices is the bonnet:
+**long-press B** → Settings → **USB backup**. Full operator steps,
+stick layout, and hot-plug notes are in
+[User manual § USB backup and restore](user-manual.md#usb-backup).
+
+On images built with `deploy/provision-pi.sh`, the mount stack is
+installed automatically:
+
+--8<-- "docs/includes/usb-backup-provisioning.md"
+
+#### CLI (dev Pi or automation)
+
+When the stick is already mounted (or you're writing to a directory
+tree for testing):
+
+```bash
+piwallet backup list-devices
+piwallet backup export --stick-root /mnt/piwallet-usb
+piwallet backup list-backups --stick-root /mnt/piwallet-usb
+piwallet backup import \
+  --backup-dir /mnt/piwallet-usb/PiWalletSV/backups/20260527-120000Z/ \
+  --import-settings
+```
+
+Import **replaces** the entire vault. The CLI prompts for the backup
+vault PIN unless you pass `--pin`. See [CLI § `piwallet backup`](cli.md#piwallet-backup).
+
+### Backing up the vault file (manual copy)
 
 Copying `vault.bin` is fine; the file is encrypted at rest. A copy
-on a USB stick is acceptable. Keep in mind:
+on a USB stick is acceptable — the bonnet **USB backup** flow writes
+a timestamped bundle under `PiWalletSV/backups/` with a manifest for
+easier restore. Keep in mind:
 
 - Restoring from a backup is **not the same** as restoring from the
   mnemonic. The backup includes the same scrypt parameters and PIN
@@ -275,7 +306,7 @@ documented in
 ## Troubleshooting
 
 For wire-format failures (verify mismatch, broadcast txid mismatch,
-etc.) see the [User manual § Troubleshooting](user-manual.md#12-troubleshooting).
+etc.) see the [User manual § Troubleshooting](user-manual.md#troubleshooting).
 This section covers operational issues with the deployment itself.
 
 ### The bonnet doesn't come up after reboot

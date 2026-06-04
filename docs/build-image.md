@@ -8,7 +8,10 @@ PiWalletSV image distributed from the [Download](download.md) page.
 If you'd rather build the image yourself from source, see
 [Build &amp; deploy](build.md). Both paths produce a sealed appliance
 that boots straight into the bonnet UI; this page is shorter because
-the prebuilt image has already done the provisioning step for you.
+the prebuilt image has already done the provisioning step for you —
+including the USB backup mount daemon, FAT/exFAT tools, and bonnet
+`ReadWritePaths` for `/mnt/piwallet-usb`
+([Operate § USB vault backup](operate.md#usb-vault-backup)).
 
 !!! warning "Alpha software"
 
@@ -203,26 +206,30 @@ the joystick to scroll, and press **A** to accept.
 The acceptance is recorded in `~/.piwallet/terms.json` and you won't
 see this screen again unless the disclaimer version changes.
 
-## Step 5 &mdash; Set a PIN
+## Step 5 &mdash; First setup (vault)
 
-Next you'll be asked to choose a PIN. The PIN protects the encrypted
-vault on disk; it's not strong on its own (the vault file would be
-extracted off the SD card by anyone with physical access), but it
-does prevent casual misuse and gates every signing operation.
+You'll see **First setup** with two choices:
 
-- Use the joystick to scroll digits, **A** to confirm a digit, **B**
-  to delete the previous digit.
-- The bonnet asks you to enter the PIN twice to catch typos.
+- **New vault (set PIN)** &mdash; choose and confirm a vault PIN. Use
+  the joystick to scroll digits, **A** to confirm each digit, **B**
+  to delete. The PIN protects the encrypted vault on disk; use a
+  long PIN (12+ digits) for cold storage.
+- **Restore from USB** &mdash; import a backup stick if you're
+  replacing the SD card or upgrading firmware
+  ([User manual § USB backup](user-manual.md#usb-backup)).
 
-## Step 6 &mdash; Create or restore your wallet
+If you chose **New vault**, the bonnet drops you on an empty **wallet
+list** after PIN setup.
 
-You'll see a choice between:
+## Step 6 &mdash; Create or restore your first wallet
 
-- **New wallet** &mdash; the bonnet generates a fresh BIP39 mnemonic on
+From the **wallet list**, choose:
+
+- **+ New wallet** &mdash; the bonnet generates a fresh BIP39 mnemonic on
   device. The mnemonic is shown to you a few words at a time so you
   can write it down on paper. **Write it down**: this is the only
   way to recover the wallet if the SD card is damaged or wiped.
-- **Restore wallet** &mdash; you enter an existing 12- or 24-word BIP39
+- **+ Restore wallet** &mdash; you enter an existing 12- or 24-word BIP39
   mnemonic via the on-screen word-entry keyboard. The bonnet
   validates the checksum word so a typo is caught before the wallet
   is created.
@@ -333,7 +340,8 @@ post-upgrade verification — is documented in
 
 Brief summary:
 
-1. Back up your mnemonic and/or copy `vault.bin` off the SD card
+1. Back up your mnemonic and/or run **Settings → USB backup → Backup to USB**
+   (or copy `vault.bin` off the SD card)
    **before** flashing.
 2. Download and verify a new image from [Download](download.md)
    (Step&nbsp;1 above).

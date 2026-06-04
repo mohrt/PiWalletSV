@@ -467,21 +467,63 @@ Options worth knowing:
 
 Exit codes are documented under [Operate § Exit codes](operate.md#exit-codes).
 
-## `piwallet backup`
+## `piwallet backup` { #piwallet-backup }
 
 Export or import encrypted vault backups to a USB stick (FAT32/exFAT)
 under `PiWalletSV/backups/<timestamp>/`. **`terms.json` is never
 included** — disclaimer is re-accepted after a firmware upgrade.
 
+Operator-facing bonnet steps and stick layout:
+[User manual § USB backup](user-manual.md#usb-backup).
+
+On sealed images, the bonnet mounts sticks via `piwallet-usb-mount.service`
+(see [Operate § USB vault backup](operate.md#usb-vault-backup)). On a
+dev Pi, mount the stick yourself and pass `--stick-root` to the
+commands below.
+
+### `backup list-devices`
+
+List removable vfat/exfat partitions (excludes the SD card):
+
 ```bash
 piwallet backup list-devices
-piwallet backup export --stick-root /media/usb
-piwallet backup list-backups --stick-root /media/usb
-piwallet backup import --backup-dir /media/usb/PiWalletSV/backups/20260527-120000Z/
 ```
 
-Import **replaces** the entire vault. Use `--import-settings` to also
-replace `settings.json`. See
+### `backup list-backups`
+
+List backup bundles already on a mounted stick:
+
+```bash
+piwallet backup list-backups --stick-root /mnt/piwallet-usb
+```
+
+### `backup export`
+
+Write the vault (and `settings.json` by default) to a new timestamped
+directory on the stick. Prompts for the vault PIN.
+
+```bash
+piwallet backup export --stick-root /mnt/piwallet-usb
+piwallet backup export --stick-root /mnt/piwallet-usb --no-settings
+piwallet backup export --stick-root /mnt/piwallet-usb \
+  --vault-path /home/pwsv/.piwallet/vault.bin
+```
+
+### `backup import`
+
+Replace the local vault from a backup directory. Prompts for the
+**backup vault PIN** (unless `--pin` is passed).
+
+```bash
+piwallet backup import \
+  --backup-dir /mnt/piwallet-usb/PiWalletSV/backups/20260527-120000Z/
+piwallet backup import \
+  --backup-dir /mnt/piwallet-usb/PiWalletSV/backups/20260527-120000Z/ \
+  --import-settings \
+  --vault-path /home/pwsv/.piwallet/vault.bin
+```
+
+Import **replaces** the entire vault. See
 [User manual § Upgrade your device](user-manual.md#upgrade-your-device).
 
 ## `piwallet diag airgap`

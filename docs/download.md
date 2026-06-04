@@ -68,11 +68,12 @@ tampered with in transit, or someone has replaced the website.
 Once the image is verified and flashed:
 
 - Follow [Flash and first run](build-image.md) for first-boot
-  setup: disclaimer, PIN, wallet creation, airgap check, and a
+  setup: disclaimer, vault PIN, wallet creation, airgap check, and a
   TESTNET smoke test.
 - See the [User manual](user-manual.md) for routine use after the
   device is set up, including
-  [Upgrade your device](user-manual.md#upgrade-your-device) and
+  [USB backup and restore](user-manual.md#usb-backup),
+  [Upgrade your device](user-manual.md#upgrade-your-device), and
   [Airgap status](user-manual.md#airgap-status).
 
 ## Building from source

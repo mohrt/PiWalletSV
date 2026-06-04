@@ -218,8 +218,10 @@ device is the recovery channel.
 │   │   ├── atomic_beef.py        # BRC-95 Atomic BEEF wrap / split
 │   │   ├── verify.py             # BEEF + BUMP-root ↔ anchor check + derivation
 │   │   └── sign.py               # change re-derive + sign + Atomic BEEF
+│   ├── backup/                   # USB vault export/import (bundle, mount socket)
+│   ├── bonnet/                   # on-device UI flows (wallet list, USB backup, sign)
 │   ├── qr/multipart.py           # PW1 framing + assembler
-│   ├── ui/                       # bonnet display + joystick (phase 2)
+│   ├── ui/                       # bonnet display + joystick widgets
 │   └── cli.py                    # piwallet entry point
 │
 ├── companion/                    # online half (TypeScript + Vite + PWA)
@@ -251,7 +253,8 @@ device is the recovery channel.
 │   ├── camera_qr_test.py
 │   ├── dump_decoded_envelope.py
 │   ├── rgb_display_pillow_bonnet_buttons.py
-│   └── st7789_solid_fill_test.py
+│   ├── st7789_solid_fill_test.py
+│   └── usb-backup-smoke.sh       # host-side backup bundle smoke test
 │
 └── docs/
     ├── index.md getting-started.md architecture.md

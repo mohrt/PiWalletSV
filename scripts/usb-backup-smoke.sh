@@ -80,7 +80,7 @@ source .venv/bin/activate 2>/dev/null || true
 piwallet backup list-devices
 piwallet backup export --stick-root "$MOUNT"
 piwallet backup list-backups --stick-root "$MOUNT"
-echo "remote export OK — verify on bonnet: Settings → Backup to USB / Restore from USB"
+echo "remote export OK — verify on bonnet: Settings → USB backup"
 EOF
   exit 0
 fi

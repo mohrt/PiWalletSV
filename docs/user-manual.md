@@ -439,7 +439,7 @@ re-install from the site); only the Pi device follows the steps below.
 ### What you need
 
 - Your **mnemonic** on paper (or steel), **or** a **USB backup** from
-  Settings → **Backup to USB** (recommended before any re-flash).
+  Settings → **USB backup** → **Backup to USB** (recommended before any re-flash).
 - Your **PIN** (required for USB or vault-file restore).
 - A **FAT32 or exFAT USB flash drive** (factory formatting is fine) for
   Path A below, **or** a microSD card reader for Path C.
@@ -465,9 +465,10 @@ On the **current** firmware, before you re-flash:
 
 1. Insert a **FAT32 or exFAT** USB stick into the Pi's **data** micro-USB
    port (the one closer to the SD slot; power stays on **PWR IN**).
-2. **Long-press B** → Settings → **Backup to USB**.
+2. **Long-press B** → Settings → **USB backup** → **Backup to USB**.
 3. Pick the drive from the list, confirm your **PIN**, and wait for
-   *Backup saved*.
+   *Backup saved*. Press **A** or **B** to dismiss, then **B** to
+   return to Settings.
 
 Backups are stored under `PiWalletSV/backups/<timestamp>/` on the stick
 (`vault.bin`, optional `settings.json`, and a manifest). **`terms.json`
@@ -541,8 +542,9 @@ Pick **one** path below. Import **replaces all wallets** on the device
 
 1. Power on the flashed Pi, accept the **disclaimer** (always shown
    after a firmware upgrade).
-2. On **First setup**, choose **Restore from USB** (or after creating
-   a temporary vault, use Settings → **Restore from USB**).
+2. On **First setup**, choose **Restore from USB** (or, if you already
+   have a vault, **long-press B** → Settings → **USB backup** →
+   **Restore from USB**).
 3. Insert the backup stick, pick the drive, then pick the backup
    timestamp.
 4. Review the wallet list — existing wallets on the device (if any)
@@ -601,7 +603,7 @@ it is still sealed:
 
 1. **Long-press B** → Settings → **Airgap status** → **A**. Every row
    should read `OK` and the header should say **Air-gapped**. See
-   [§13 Airgap status](#airgap-status) if anything shows `!!`.
+   [§14 Airgap status](#airgap-status) if anything shows `!!`.
 2. Run a **TESTNET** send round-trip ([Flash and first run § Step 9](build-image.md#step-9-sign-your-first-transaction))
    before returning to mainnet amounts.
 
@@ -632,7 +634,21 @@ has no network and no editable app tree under `/opt/piwallet`.
 | Skip airgap check after re-flash | You may sign on a mis-provisioned image |
 | Assume the companion auto-updates with the Pi | Update both independently when release notes say so |
 
-## 12. Troubleshooting { #12-troubleshooting }
+## 12. USB backup and restore { #usb-backup }
+
+PiWalletSV can export and import the encrypted vault (and optional
+display settings) to a **FAT32 or exFAT USB stick**. This is the
+recommended path before re-flashing the SD card
+([§11 Upgrade your device](#upgrade-your-device)) and works any time
+from Settings.
+
+--8<-- "docs/includes/usb-backup-reference.md"
+
+For shell access on a development Pi (or scripted backups), see
+[CLI § `piwallet backup`](cli.md#piwallet-backup) and
+[Operate § USB vault backup](operate.md#usb-vault-backup).
+
+## 13. Troubleshooting { #troubleshooting }
 
 **Send says "no spendable UTXOs" or "only confirmed coins can be sent"
 but Balance shows a non-zero total.**
@@ -698,10 +714,10 @@ signed.**
 
 **&ldquo;Airgap status&rdquo; shows BREACH or a row with `!!`.**
 
-- See [§13 Airgap status](#airgap-status) for what each indicator
+- See [§14 Airgap status](#airgap-status) for what each indicator
   means and what to do. Do not sign until the report is all-green.
 
-## 13. Airgap status { #airgap-status }
+## 14. Airgap status { #airgap-status }
 
 PiWalletSV's security model depends on the signing device having no
 network path. The **Airgap status** screen in Settings runs six

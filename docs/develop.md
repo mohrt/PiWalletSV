@@ -11,7 +11,9 @@ the full tree. The short version:
 
 - **`piwallet/`** — Python offline core that runs on the Pi.
   Imports cleanly on Linux + macOS for development; the Pi-only
-  bits (display, camera) live behind optional extras.
+  bits (display, camera) live behind optional extras. USB vault
+  backup/restore lives in `piwallet/backup/` (bundle format, mount
+  socket daemon, bonnet flows in `piwallet/bonnet/usb_backup.py`).
 - **`companion/`** — TypeScript + Vite PWA. Imports cleanly on
   Node 20+; runs in any modern browser. Uses
   [`vitest`](https://vitest.dev/) for tests.
