@@ -71,7 +71,9 @@ Once the image is verified and flashed:
   setup: disclaimer, PIN, wallet creation, airgap check, and a
   TESTNET smoke test.
 - See the [User manual](user-manual.md) for routine use after the
-  device is set up.
+  device is set up, including
+  [Airgap status](user-manual.md#airgap-status) (what each Settings
+  indicator means).
 
 ## Building from source
 

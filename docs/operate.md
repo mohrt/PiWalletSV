@@ -6,8 +6,10 @@ to recover when something doesn't behave.
 
 This chapter assumes the device is installed per [Build & deploy](build.md).
 For the user-facing journey (pairing, sending, receiving) see the
-[User manual](user-manual.md). For wire-format troubleshooting see the
-user manual's [Troubleshooting](user-manual.md#11-troubleshooting)
+[User manual](user-manual.md). To interpret the bonnet's airgap
+indicators see [User manual § Airgap status](user-manual.md#airgap-status).
+For wire-format troubleshooting see the user manual's
+[Troubleshooting](user-manual.md#11-troubleshooting)
 section, which is intentionally not duplicated here.
 
 ## Logs
@@ -245,6 +247,27 @@ If you want correct timestamps in the journal, point the OS at an
 NTP server *during install* (the imager's network connectivity is the
 only window you'd want this) and let `systemd-timesyncd` set the time
 once. Then disable it before unplugging from Wi-Fi.
+
+## Airgap diagnostic { #airgap-diagnostic }
+
+The bonnet Settings screen runs the same checks as
+`piwallet diag airgap`, with one caveat: inside the bonnet app the
+`interfaces` row only sees the app's network sandbox. From a shell on
+the Pi you get the full host report — use this periodically and
+whenever the on-screen check looks wrong.
+
+```bash
+# Human-readable table; exits non-zero on conclusive failure:
+piwallet diag airgap
+
+# JSON for scripts / support tickets:
+piwallet diag airgap --json
+```
+
+What each row means (`modules`, `rfkill`, `interfaces`, `services`,
+`boot_config`, `blacklist`) and how to read `OK` / `!!` / `--` is
+documented in
+[User manual § Airgap status](user-manual.md#airgap-status).
 
 ## Troubleshooting
 
