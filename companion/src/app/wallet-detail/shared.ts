@@ -50,6 +50,11 @@ export function shortXpub(xpub: string): string {
   return `${xpub.slice(0, 12)}…${xpub.slice(-8)}`;
 }
 
+export function shortAddress(addr: string): string {
+  if (addr.length <= 20) return addr;
+  return `${addr.slice(0, 10)}…${addr.slice(-6)}`;
+}
+
 export function wrapHex(hex: string, width: number): string {
   if (width <= 0) return hex;
   const lines: string[] = [];

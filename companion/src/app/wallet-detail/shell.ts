@@ -87,10 +87,17 @@ export function renderWalletDetailShell(
         <!-- Send tab -->
         <section id="tab-send" class="card tab-panel${activeTab === "send" ? " active" : ""}" role="tabpanel" aria-labelledby="tab-btn-send" tabindex="${activeTab === "send" ? "0" : "-1"}">
           <div id="sendProgress" class="send-progress" aria-live="polite">
-            <p id="sendProgressLabel" class="send-progress-label muted-line">Step 1 of 3 — Amount & fee</p>
+            <p id="sendProgressLabel" class="send-progress-label muted-line">Step 1 of 5 — Amount &amp; fee</p>
             <div class="send-progress-track" aria-hidden="true">
-              <div id="sendProgressFill" class="send-progress-fill" style="width:33%"></div>
+              <div id="sendProgressFill" class="send-progress-fill" style="width:20%"></div>
             </div>
+            <ol id="sendFlowChecklist" class="send-flow-checklist" aria-label="Send steps">
+              <li id="sendFlowStep-form" class="active">Amount &amp; fee</li>
+              <li id="sendFlowStep-review">Review &amp; build</li>
+              <li id="sendFlowStep-showQr">Show Pi QR</li>
+              <li id="sendFlowStep-scan">Scan &amp; sign</li>
+              <li id="sendFlowStep-done">Broadcast</li>
+            </ol>
           </div>
           <div id="sendPendingBanner" class="send-pending-banner" hidden></div>
           <p class="send-balance-line muted-line">
@@ -275,6 +282,7 @@ export function renderWalletDetailShell(
               </details>
 
               <div id="broadcastWidget" class="send-broadcast-panel" hidden>
+                <div id="broadcastSuccessSummary" class="broadcast-success-summary" hidden></div>
                 <p id="broadcastInfo" class="send-broadcast-message muted-line"></p>
                 <p id="broadcastStatus" class="send-broadcast-message muted-line" aria-live="polite"></p>
                 <div class="actions send-broadcast-actions">

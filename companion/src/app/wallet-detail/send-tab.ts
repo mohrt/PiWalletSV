@@ -35,6 +35,8 @@ import {
   SATS_PER_BSV,
   escapeHtml,
   formatSats,
+  shortAddress,
+  shortTxid,
   wrapHex,
 } from "./shared.js";
 import type {
@@ -57,11 +59,43 @@ export function createSendTab(
   rt: WalletDetailRuntime,
   actions: WalletDetailActions,
 ): SendTab {
-  const SEND_PROGRESS: Record<"form" | "review" | "qr", { label: string; pct: number }> = {
-    form: { label: "Step 1 of 3 — Amount & fee", pct: 33 },
-    review: { label: "Step 2 of 3 — Review", pct: 66 },
-    qr: { label: "Step 3 of 3 — Sign on Pi & broadcast", pct: 100 },
+  type SendFlowPhase =
+    | "form"
+    | "review"
+    | "build"
+    | "showQr"
+    | "scan"
+    | "broadcast"
+    | "done";
+
+  const SEND_FLOW: Record<
+    SendFlowPhase,
+    { step: number; label: string; pct: number; checklist: string }
+  > = {
+    form: { step: 1, label: "Amount & fee", pct: 20, checklist: "form" },
+    review: { step: 2, label: "Review", pct: 40, checklist: "review" },
+    build: { step: 2, label: "Building proposal (SPV)…", pct: 45, checklist: "review" },
+    showQr: { step: 3, label: "Show QR to Pi", pct: 60, checklist: "showQr" },
+    scan: { step: 4, label: "Scan signed TX", pct: 80, checklist: "scan" },
+    broadcast: { step: 5, label: "Broadcast", pct: 90, checklist: "scan" },
+    done: { step: 5, label: "Complete", pct: 100, checklist: "done" },
   };
+
+  const CHECKLIST_IDS = [
+    "form",
+    "review",
+    "showQr",
+    "scan",
+    "done",
+  ] as const;
+
+  let lastSendSummary: {
+    recipient: string;
+    sats: number;
+    feeSats: number;
+  } | null = null;
+
+  let feeRatesLoading = false;
 
   function stopAddrScan(): void {
     rt.addrScanHandle?.stop();
@@ -94,12 +128,40 @@ export function createSendTab(
     );
   }
 
-  function updateSendProgress(step: "form" | "review" | "qr"): void {
-    const meta = SEND_PROGRESS[step];
+  function updateSendFlowProgress(phase: SendFlowPhase): void {
+    const meta = SEND_FLOW[phase];
     const $label = rt.root.querySelector<HTMLElement>("#sendProgressLabel");
     const $fill = rt.root.querySelector<HTMLElement>("#sendProgressFill");
-    if ($label) $label.textContent = meta.label;
+    if ($label) {
+      $label.textContent = `Step ${meta.step} of 5 — ${meta.label}`;
+    }
     if ($fill) $fill.style.width = `${meta.pct}%`;
+
+    const activeIdx = CHECKLIST_IDS.indexOf(
+      meta.checklist as (typeof CHECKLIST_IDS)[number],
+    );
+    for (let i = 0; i < CHECKLIST_IDS.length; i++) {
+      const id = CHECKLIST_IDS[i];
+      const el = rt.root.querySelector<HTMLElement>(`#sendFlowStep-${id}`);
+      if (!el) continue;
+      el.classList.remove("active", "done");
+      if (phase === "done") {
+        el.classList.add("done");
+      } else if (i < activeIdx) {
+        el.classList.add("done");
+      } else if (i === activeIdx) {
+        el.classList.add("active");
+      }
+    }
+  }
+
+  function syncSendMaxButton(): void {
+    const $max = rt.root.querySelector<HTMLButtonElement>("#sendMax");
+    const $select = rt.root.querySelector<HTMLSelectElement>("#feeTierSelect");
+    if (!$max) return;
+    const disabled = feeRatesLoading || ($select?.disabled ?? false);
+    $max.disabled = disabled;
+    $max.title = disabled ? "Wait for fee rates to load" : "Send maximum confirmed balance minus fee";
   }
 
   function renderSendPendingBanner(): void {
@@ -110,15 +172,23 @@ export function createSendTab(
       return;
     }
     const split = splitConfirmedPending(rt.wallet.lastScan.utxos);
-    if (!split.allPending) {
-      $banner.hidden = true;
+    if (split.allPending) {
+      $banner.hidden = false;
+      $banner.innerHTML =
+        `<strong>Nothing spendable yet.</strong> ` +
+        `${actions.formatBalance(split.pendingSats)} is pending and cannot be sent until it confirms. ` +
+        `Refresh Balance after confirmation.`;
       return;
     }
-    $banner.hidden = false;
-    $banner.innerHTML =
-      `<strong>Nothing spendable yet.</strong> ` +
-      `${actions.formatBalance(split.pendingSats)} is pending and cannot be sent until it confirms. ` +
-      `Refresh Balance after confirmation.`;
+    if (split.hasPending && split.confirmedSats > 0) {
+      $banner.hidden = false;
+      $banner.innerHTML =
+        `<strong>Only confirmed coins are spendable.</strong> ` +
+        `${actions.formatBalance(split.confirmedSats)} available now; ` +
+        `${actions.formatBalance(split.pendingSats)} still pending. Max uses confirmed balance only.`;
+      return;
+    }
+    $banner.hidden = true;
   }
 
   function getSelectedFeeRate(): number {
@@ -185,7 +255,7 @@ export function createSendTab(
       const el = rt.root.querySelector<HTMLElement>(`#sendStep-${s}`);
       if (el) el.hidden = s !== step;
     }
-    updateSendProgress(step);
+    updateSendFlowProgress(step === "form" ? "form" : step === "review" ? "review" : "showQr");
     if (step === "form") {
       syncSendFormFromStep();
       void loadFeeRates();
@@ -297,6 +367,9 @@ export function createSendTab(
     rt.root.querySelectorAll<HTMLButtonElement>("[data-send-qr-tab]").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.sendQrTab === tab);
     });
+    if (rt.sendStep.step === "qr") {
+      updateSendFlowProgress(tab === "proposal" ? "showQr" : "scan");
+    }
   }
 
   /** Confirmed UTXOs only — mempool coins can't carry SPV proofs yet. */
@@ -437,6 +510,8 @@ export function createSendTab(
       $loading.textContent = "Loading fee rates…";
     }
     if ($select) $select.disabled = true;
+    feeRatesLoading = true;
+    syncSendMaxButton();
 
     try {
       rt.feeRec = await fetchFeeRecommendation(rt.woc);
@@ -448,6 +523,8 @@ export function createSendTab(
     onFeeTierChanged();
     if ($loading) $loading.hidden = true;
     if ($select) $select.disabled = false;
+    feeRatesLoading = false;
+    syncSendMaxButton();
   }
 
   function refreshFeeTierEstimates(): void {
@@ -531,6 +608,7 @@ export function createSendTab(
     rt.sendBusy = true;
     $confirm.disabled = true;
     $confirm.textContent = "Building…";
+    updateSendFlowProgress("build");
     setSpvBuildStep("select", "Selecting confirmed UTXOs for SPV…");
     $status.textContent = "";
 
@@ -612,6 +690,11 @@ export function createSendTab(
       showSpvCompleteBanner(selection.inputs.length, proofHeights);
       $status.textContent = "";
 
+      lastSendSummary = {
+        recipient: rt.sendStep.recipient,
+        sats: rt.sendStep.sats,
+        feeSats: rt.sendStep.feeSats,
+      };
       showSendStep("qr");
       rt.sendStep = { step: "qr" };
       resetBroadcastWidget();
@@ -765,6 +848,7 @@ export function createSendTab(
   }
 
   function showBroadcastWidget(): void {
+    updateSendFlowProgress("broadcast");
     const $broadcast = rt.root.querySelector<HTMLElement>("#broadcastWidget");
     const $pw1Actions = rt.root.querySelector<HTMLElement>("#pw1ScanActions");
     if ($broadcast) $broadcast.hidden = false;
@@ -874,10 +958,23 @@ export function createSendTab(
       const $panel = rt.root.querySelector<HTMLElement>("#broadcastWidget");
       const $info = rt.root.querySelector<HTMLElement>("#broadcastInfo");
       if ($panel) $panel.classList.add("success");
+      const $summary = rt.root.querySelector<HTMLElement>("#broadcastSuccessSummary");
+      if ($summary && lastSendSummary) {
+        $summary.hidden = false;
+        $summary.innerHTML =
+          `<strong class="broadcast-success-head">Transaction sent</strong>` +
+          `<dl class="broadcast-success-details">` +
+          `<dt>To</dt><dd>${escapeHtml(shortAddress(lastSendSummary.recipient))}</dd>` +
+          `<dt>Amount</dt><dd>${escapeHtml(formatSats(lastSendSummary.sats))}</dd>` +
+          `<dt>Fee</dt><dd>${escapeHtml(formatSats(lastSendSummary.feeSats))}</dd>` +
+          `</dl>`;
+      } else if ($summary) {
+        $summary.hidden = true;
+      }
       if ($info) {
         $info.innerHTML =
-          `<strong class="broadcast-success-head">Transaction sent</strong><br>` +
-          `<code class="mono" style="font-size:0.75rem;word-break:break-all">${escapeHtml(txid)}</code>`;
+          `<span class="muted-line">Txid</span><br>` +
+          `<code class="mono broadcast-txid">${escapeHtml(shortTxid(txid))}</code>`;
       }
       $status.classList.remove("error");
       $status.classList.add("success");
@@ -885,6 +982,12 @@ export function createSendTab(
         "Accepted by the network. It may take a few minutes to confirm on-chain.";
       delete $btn.dataset.signedHex;
       $btn.hidden = true;
+      const $pw1Actions = rt.root.querySelector<HTMLElement>("#pw1ScanActions");
+      const $pw1Widget = rt.root.querySelector<HTMLElement>("#pw1ScanWidget");
+      if ($pw1Actions) $pw1Actions.hidden = true;
+      if ($pw1Widget) $pw1Widget.hidden = true;
+      stopPw1Scan();
+      updateSendFlowProgress("done");
       showBroadcastDone(explorer);
     } catch (e) {
       const $panel = rt.root.querySelector<HTMLElement>("#broadcastWidget");
@@ -936,6 +1039,11 @@ export function createSendTab(
     }
     const $broadcastInfo = rt.root.querySelector<HTMLElement>("#broadcastInfo");
     if ($broadcastInfo) $broadcastInfo.textContent = "";
+    const $summary = rt.root.querySelector<HTMLElement>("#broadcastSuccessSummary");
+    if ($summary) {
+      $summary.hidden = true;
+      $summary.innerHTML = "";
+    }
     const $explorer = rt.root.querySelector<HTMLAnchorElement>("#broadcastExplorer");
     if ($explorer) $explorer.hidden = true;
   }
@@ -946,6 +1054,7 @@ export function createSendTab(
     rt.sendStep = { step: "form" };
     rt.sendAmountIsMax = false;
     showSendStep("form");
+    updateSendFlowProgress("form");
     resetBroadcastWidget();
     resetSpvUi();
     const $status = rt.root.querySelector<HTMLElement>("#sendFormStatus");
@@ -1021,10 +1130,16 @@ export function createSendTab(
       ?.addEventListener("change", () => onFeeTierChanged());
     rt.root.querySelector<HTMLInputElement>("#feeCustom")
       ?.addEventListener("input", () => onFeeTierChanged());
+    syncSendMaxButton();
   }
 
   function onActivate(): void {
+    syncSendMaxButton();
     if (rt.sendStep.step === "form") void loadFeeRates();
+    else if (rt.sendStep.step === "review") updateSendFlowProgress("review");
+    else if (rt.sendStep.step === "qr") {
+      updateSendFlowProgress(rt.sendQrTab === "proposal" ? "showQr" : "scan");
+    }
   }
 
   function dispose(): void {
