@@ -37,7 +37,15 @@ MIN_DICE_ROLLS: dict[int, int] = {12: 48, 24: 96}
 
 def _load_english_wordlist() -> tuple[str, ...]:
     WordList.load()
-    return tuple(WordList.wordlist["en"])
+    # bsv-sdk 2.x stores loaded lists in ``wordlists``; 1.x exposes ``wordlist``.
+    if hasattr(WordList, "wordlists"):
+        words = WordList.wordlists.get("en")
+        if words:
+            return tuple(words)
+    wl = WordList.wordlist
+    if isinstance(wl, dict) and wl.get("en"):
+        return tuple(wl["en"])
+    raise RuntimeError("English BIP39 wordlist unavailable from bsv-sdk")
 
 
 BIP39_WORDLIST: tuple[str, ...] = _load_english_wordlist()

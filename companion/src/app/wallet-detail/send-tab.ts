@@ -1,4 +1,4 @@
-import { Transaction } from "@bsv/sdk";
+import { Transaction } from "@bsv/sdk/transaction";
 
 import { CHANGE_BRANCH, deriveAddress } from "../../lib/derive.js";
 import {

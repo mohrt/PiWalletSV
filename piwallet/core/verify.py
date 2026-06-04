@@ -73,6 +73,12 @@ class OfflineChainTracker(ChainTracker):
     def heights(self) -> set[int]:
         return set(self._anchors.keys())
 
+    async def current_height(self) -> int:
+        """Highest anchored height (offline tracker has no live chain tip)."""
+        if not self._anchors:
+            return 0
+        return max(self._anchors)
+
     async def is_valid_root_for_height(self, root: str, height: int) -> bool:
         return self._anchors.get(int(height)) == root.lower()
 

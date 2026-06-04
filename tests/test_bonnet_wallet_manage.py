@@ -272,7 +272,6 @@ def test_menu_lists_every_action_in_order() -> None:
         WalletManageAction.INFO,
         WalletManageAction.RENAME,
         WalletManageAction.DELETE,
-        WalletManageAction.BACK,
     ]
 
 

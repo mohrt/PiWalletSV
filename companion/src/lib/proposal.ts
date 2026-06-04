@@ -21,7 +21,7 @@
  * earlier (coin selection raises `CoinSelectError`), not by emitting
  * an envelope the Pi will refuse.
  */
-import { P2PKH } from "@bsv/sdk";
+import { P2PKH } from "@bsv/sdk/script/templates";
 
 import {
   KIND_PROPOSAL,

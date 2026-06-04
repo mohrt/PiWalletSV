@@ -13,6 +13,14 @@ from piwallet.ui.display import HeadlessDisplay
 from piwallet.ui.input import Button, FakeInputBackend, InputManager
 
 
+@pytest.fixture(autouse=True)
+def _mock_display_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid /tmp/piwallet-display.lock collisions across tests and CI."""
+    from piwallet.bonnet import app as bonnet_app
+
+    monkeypatch.setattr(bonnet_app, "_acquire_display_lock", lambda: True)
+
+
 @pytest.fixture()
 def fresh_vault(tmp_path: Path) -> tuple[Path, str]:
     """A vault containing one wallet under PIN 123456."""
