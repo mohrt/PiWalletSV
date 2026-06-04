@@ -105,7 +105,7 @@ export function renderWalletDetailShell(
             <span id="sendBalancePending" hidden></span>
             <span class="info-tip-wrap">
               <button id="sendSpvInfoTip" class="info-tip" type="button"
-                aria-label="Why only confirmed coins are spendable">ⓘ</button>
+                aria-label="Why only confirmed coins are spendable" aria-expanded="false">ⓘ</button>
               <span id="sendSpvInfoText" class="info-tip-text" hidden>
                 Sending uses SPV verification — only confirmed on-chain coins are
                 spendable. Pending UTXOs must confirm first.
@@ -205,18 +205,21 @@ export function renderWalletDetailShell(
           </div>
 
           <div id="sendStep-qr" hidden>
-            <div class="scanner-tabs send-qr-tabs" role="tablist">
-              <button role="tab" data-send-qr-tab="proposal"
-                class="scanner-tab active" type="button">
+            <div class="scanner-tabs send-qr-tabs" role="tablist" aria-label="Send QR steps">
+              <button role="tab" id="sendQrTabBtn-proposal" data-send-qr-tab="proposal"
+                class="scanner-tab active" type="button"
+                aria-selected="true" aria-controls="sendQrTab-proposal" tabindex="0">
                 Step 1 — Show QR
               </button>
-              <button role="tab" data-send-qr-tab="scan"
-                class="scanner-tab" type="button">
+              <button role="tab" id="sendQrTabBtn-scan" data-send-qr-tab="scan"
+                class="scanner-tab" type="button"
+                aria-selected="false" aria-controls="sendQrTab-scan" tabindex="-1">
                 Step 2 — Scan
               </button>
             </div>
 
-            <div id="sendQrTab-proposal" role="tabpanel">
+            <div id="sendQrTab-proposal" role="tabpanel"
+              aria-labelledby="sendQrTabBtn-proposal" tabindex="0">
               <p id="spvCompleteBanner" class="spv-complete-banner" hidden></p>
               <p id="proposalQrHint" class="muted-line">Point the Pi camera at this animated QR.</p>
               <canvas id="proposalQr" width="320" height="320"></canvas>
@@ -249,7 +252,7 @@ export function renderWalletDetailShell(
               </details>
             </div>
 
-            <div id="sendQrTab-scan" role="tabpanel" hidden>
+            <div id="sendQrTab-scan" role="tabpanel" aria-labelledby="sendQrTabBtn-scan" tabindex="-1" hidden>
               <p class="muted-line">
                 After the Pi signs, point this camera at the Pi's response QR.
               </p>
@@ -303,7 +306,7 @@ export function renderWalletDetailShell(
             Confirm this address on the Pi before sharing it.
             <span class="info-tip-wrap">
               <button id="receiveVerifyTip" class="info-tip" type="button"
-                aria-label="Why verify on the Pi">ⓘ</button>
+                aria-label="Why verify on the Pi" aria-expanded="false">ⓘ</button>
               <span id="receiveVerifyText" class="info-tip-text" hidden>
                 The companion derives addresses from your public key only — if the
                 browser were tampered with, it could show someone else's address.

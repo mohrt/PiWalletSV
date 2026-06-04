@@ -398,8 +398,13 @@ export function createSendTab(
     if ($proposal) $proposal.hidden = tab !== "proposal";
     if ($scan) $scan.hidden = tab !== "scan";
     rt.root.querySelectorAll<HTMLButtonElement>("[data-send-qr-tab]").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.sendQrTab === tab);
+      const selected = btn.dataset.sendQrTab === tab;
+      btn.classList.toggle("active", selected);
+      btn.setAttribute("aria-selected", selected ? "true" : "false");
+      btn.tabIndex = selected ? 0 : -1;
     });
+    if ($proposal) $proposal.tabIndex = tab === "proposal" ? 0 : -1;
+    if ($scan) $scan.tabIndex = tab === "scan" ? 0 : -1;
     if (rt.sendStep.step === "qr") {
       updateSendFlowProgress(tab === "proposal" ? "showQr" : "scan");
     }
@@ -1132,8 +1137,11 @@ export function createSendTab(
     rt.root.querySelector<HTMLButtonElement>("#sendSpvInfoTip")
       ?.addEventListener("click", (e) => {
         e.preventDefault();
+        const btn = e.currentTarget as HTMLButtonElement;
         const tip = rt.root.querySelector<HTMLElement>("#sendSpvInfoText");
-        if (tip) tip.hidden = !tip.hidden;
+        if (!tip) return;
+        tip.hidden = !tip.hidden;
+        btn.setAttribute("aria-expanded", tip.hidden ? "false" : "true");
       });
     rt.root.querySelector<HTMLButtonElement>("#scanAddress")
       ?.addEventListener("click", () => onStartAddrScan());
@@ -1184,6 +1192,20 @@ export function createSendTab(
         const tab = btn.dataset.sendQrTab as "proposal" | "scan";
         switchSendQrTab(tab);
       });
+    });
+    rt.root.querySelector<HTMLElement>(".send-qr-tabs")?.addEventListener("keydown", (e) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key !== "ArrowLeft" && ke.key !== "ArrowRight") return;
+      ke.preventDefault();
+      const tabs = ["proposal", "scan"] as const;
+      const idx = tabs.indexOf(rt.sendQrTab);
+      if (idx < 0) return;
+      const next =
+        ke.key === "ArrowRight"
+          ? tabs[(idx + 1) % tabs.length]
+          : tabs[(idx - 1 + tabs.length) % tabs.length];
+      switchSendQrTab(next);
+      rt.root.querySelector<HTMLButtonElement>(`#sendQrTabBtn-${next}`)?.focus();
     });
     rt.root.querySelector<HTMLSelectElement>("#feeTierSelect")
       ?.addEventListener("change", () => onFeeTierChanged());

@@ -32,18 +32,24 @@ export function renderHeader(
   active: ActivePage,
   titleSuffix = "",
 ): string {
-  const cls = (page: ActivePage): string => (page === active ? ' class="active"' : "");
+  const navLink = (page: ActivePage, href: string, label: string): string => {
+    const isActive = page === active;
+    const cls = isActive ? ' class="active"' : "";
+    const current = isActive ? ' aria-current="page"' : "";
+    return `<a href="${href}"${cls}${current}>${label}</a>`;
+  };
   return `
     <header class="page-header">
       <div class="page-header-brand">
         <img src="/logo.png" alt="" class="header-logo" aria-hidden="true" />
         <h1>${title}${titleSuffix}<span class="brand"> · PiWalletSV</span></h1>
       </div>
-      <nav>
-        <a href="#/wallets"${cls("wallets")}>Wallets</a>
-        <a href="#/settings"${cls("settings")}>Settings</a>
+      <nav aria-label="Main">
+        ${navLink("wallets", "#/wallets", "Wallets")}
+        ${navLink("settings", "#/settings", "Settings")}
         <a href="${DOCS_BASE_URL}/" class="ext"
-           target="_blank" rel="noopener noreferrer">Docs ↗</a>
+           target="_blank" rel="noopener noreferrer"
+           aria-label="Documentation (opens in new tab)">Docs ↗</a>
       </nav>
     </header>
   `;

@@ -114,8 +114,9 @@ export function mountSettingsPage(root: HTMLElement): () => void {
             <span>Custom rate (sat/kB)</span>
             <input id="sCustomRate" type="number" min="0" step="1"
               value="${customFeeRate}"
-              placeholder="${DEFAULT_FEE_RATE_SATSKB}" />
-            <p id="customRateStatus" class="muted-line"></p>
+              placeholder="${DEFAULT_FEE_RATE_SATSKB}"
+              aria-describedby="customRateStatus" />
+            <p id="customRateStatus" class="muted-line" aria-live="polite"></p>
           </label>
         </div>
 
@@ -177,7 +178,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
         <div class="actions">
           <button id="addressBookAddBtn" type="button" class="primary">Save address</button>
         </div>
-        <p id="addressBookAddStatus" class="muted-line"></p>
+        <p id="addressBookAddStatus" class="muted-line" aria-live="polite"></p>
         <ul id="addressBookList" class="address-book-list"></ul>
         <p id="addressBookEmpty" class="muted-line">No saved addresses yet.</p>
       </section>
@@ -205,16 +206,17 @@ export function mountSettingsPage(root: HTMLElement): () => void {
               fee tier, fiat currency, list sort, and cached balances/history.
             </p>
             <div class="backup-tabs backup-sub-tabs" role="tablist" aria-label="Export method">
-              <button type="button" class="backup-tab active" role="tab"
-                data-export-tab="qr" aria-selected="true" aria-controls="exportTab-qr">
+              <button type="button" class="backup-tab active" role="tab" id="exportTabBtn-qr"
+                data-export-tab="qr" aria-selected="true" aria-controls="exportTab-qr" tabindex="0">
                 Transfer QR
               </button>
-              <button type="button" class="backup-tab" role="tab"
-                data-export-tab="json" aria-selected="false" aria-controls="exportTab-json">
+              <button type="button" class="backup-tab" role="tab" id="exportTabBtn-json"
+                data-export-tab="json" aria-selected="false" aria-controls="exportTab-json" tabindex="-1">
                 View / copy JSON
               </button>
             </div>
-            <div id="exportTab-qr" class="backup-tab-panel" role="tabpanel">
+            <div id="exportTab-qr" class="backup-tab-panel" role="tabpanel"
+              aria-labelledby="exportTabBtn-qr" tabindex="0">
               <div class="actions">
                 <button id="exportQrToggle" class="primary" type="button">
                   Show transfer QR
@@ -233,7 +235,8 @@ export function mountSettingsPage(root: HTMLElement): () => void {
                 </div>
               </div>
             </div>
-            <div id="exportTab-json" class="backup-tab-panel" role="tabpanel" hidden>
+            <div id="exportTab-json" class="backup-tab-panel" role="tabpanel"
+              aria-labelledby="exportTabBtn-json" tabindex="-1" hidden>
               <div class="backup-json-row">
                 <textarea id="exportJsonView" class="hex-blob" rows="8" readonly
                   spellcheck="false" autocorrect="off"
@@ -290,16 +293,17 @@ export function mountSettingsPage(root: HTMLElement): () => void {
               </div>
             </div>
             <div class="backup-tabs backup-sub-tabs" role="tablist" aria-label="Import method">
-              <button type="button" class="backup-tab active" role="tab"
-                data-import-tab="qr" aria-selected="true" aria-controls="importTab-qr">
+              <button type="button" class="backup-tab active" role="tab" id="importTabBtn-qr"
+                data-import-tab="qr" aria-selected="true" aria-controls="importTab-qr" tabindex="0">
                 Scan transfer QR
               </button>
-              <button type="button" class="backup-tab" role="tab"
-                data-import-tab="json" aria-selected="false" aria-controls="importTab-json">
+              <button type="button" class="backup-tab" role="tab" id="importTabBtn-json"
+                data-import-tab="json" aria-selected="false" aria-controls="importTab-json" tabindex="-1">
                 JSON file / paste
               </button>
             </div>
-            <div id="importTab-qr" class="backup-tab-panel" role="tabpanel">
+            <div id="importTab-qr" class="backup-tab-panel" role="tabpanel"
+              aria-labelledby="importTabBtn-qr" tabindex="0">
               <div class="actions">
                 <button id="importQrToggle" class="primary" type="button">
                   Scan transfer QR
@@ -309,7 +313,8 @@ export function mountSettingsPage(root: HTMLElement): () => void {
                 <div id="importQrHost"></div>
               </div>
             </div>
-            <div id="importTab-json" class="backup-tab-panel" role="tabpanel" hidden>
+            <div id="importTab-json" class="backup-tab-panel" role="tabpanel"
+              aria-labelledby="importTabBtn-json" tabindex="-1" hidden>
               <label class="button-like">
                 Choose JSON file…
                 <input id="importWalletsFile" type="file"
@@ -498,6 +503,11 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   function setCustomRateStatus(msg: string, isError = false): void {
     $customRateStatus.textContent = msg;
     $customRateStatus.classList.toggle("error", isError);
+    if (isError) {
+      $customRateInput.setAttribute("aria-invalid", "true");
+    } else {
+      $customRateInput.removeAttribute("aria-invalid");
+    }
   }
 
   function parseCustomRateInput(): number | null {
@@ -583,7 +593,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
           `aria-label="Label for ${addr}" />` +
           `<code>${addr}</code>` +
           `<span class="muted-line">${net}</span>` +
-          `<button type="button" class="address-book-remove">Remove</button>` +
+          `<button type="button" class="address-book-remove" aria-label="Remove saved address">Remove</button>` +
           `</li>`
         );
       })
@@ -730,6 +740,48 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   type ExportBackupTab = "qr" | "json";
   type ImportBackupTab = "qr" | "json";
 
+  let activeExportTab: ExportBackupTab = "qr";
+  let activeImportTab: ImportBackupTab = "qr";
+
+  function syncBackupSubTabFocus(
+    attr: "data-export-tab" | "data-import-tab",
+    active: string,
+    panelPrefix: string,
+  ): void {
+    root.querySelectorAll<HTMLButtonElement>(`[${attr}]`).forEach((btn) => {
+      const selected = btn.getAttribute(attr) === active;
+      btn.setAttribute("aria-selected", selected ? "true" : "false");
+      btn.tabIndex = selected ? 0 : -1;
+    });
+    root.querySelectorAll<HTMLElement>(`.backup-tab-panel[id^="${panelPrefix}"]`).forEach((panel) => {
+      panel.tabIndex = panel.id === `${panelPrefix}${active}` ? 0 : -1;
+    });
+  }
+
+  function bindBackupSubTabNav(
+    tablistSelector: string,
+    attr: "data-export-tab" | "data-import-tab",
+    tabs: readonly string[],
+    getActive: () => string,
+    switchTab: (tab: string) => void,
+  ): void {
+    root.querySelector<HTMLElement>(tablistSelector)?.addEventListener("keydown", (e) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key !== "ArrowLeft" && ke.key !== "ArrowRight") return;
+      ke.preventDefault();
+      const active = getActive();
+      const idx = tabs.indexOf(active);
+      if (idx < 0) return;
+      const next =
+        ke.key === "ArrowRight"
+          ? tabs[(idx + 1) % tabs.length]
+          : tabs[(idx - 1 + tabs.length) % tabs.length];
+      switchTab(next);
+      root.querySelector<HTMLButtonElement>(`[${attr}="${next}"]`)?.focus();
+    });
+  }
+
+
   function isExportJsonTabActive(): boolean {
     return root.querySelector<HTMLButtonElement>('[data-export-tab="json"]')
       ?.classList.contains("active") ?? false;
@@ -762,14 +814,14 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   });
 
   function switchExportTab(tab: ExportBackupTab): void {
+    activeExportTab = tab;
     if (tab !== "qr" && isExportQrVisible()) stopExportQr();
     root.querySelector<HTMLElement>("#exportTab-qr")!.hidden = tab !== "qr";
     root.querySelector<HTMLElement>("#exportTab-json")!.hidden = tab !== "json";
     root.querySelectorAll<HTMLButtonElement>("[data-export-tab]").forEach((btn) => {
-      const active = btn.dataset.exportTab === tab;
-      btn.classList.toggle("active", active);
-      btn.setAttribute("aria-selected", active ? "true" : "false");
+      btn.classList.toggle("active", btn.dataset.exportTab === tab);
     });
+    syncBackupSubTabFocus("data-export-tab", tab, "exportTab-");
     if (tab === "json") void refreshExportJsonView();
   }
 
@@ -784,14 +836,14 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   }
 
   function switchImportTab(tab: ImportBackupTab): void {
+    activeImportTab = tab;
     if (tab !== "qr" && isImportQrActive()) stopImportQrScan();
     root.querySelector<HTMLElement>("#importTab-qr")!.hidden = tab !== "qr";
     root.querySelector<HTMLElement>("#importTab-json")!.hidden = tab !== "json";
     root.querySelectorAll<HTMLButtonElement>("[data-import-tab]").forEach((btn) => {
-      const active = btn.dataset.importTab === tab;
-      btn.classList.toggle("active", active);
-      btn.setAttribute("aria-selected", active ? "true" : "false");
+      btn.classList.toggle("active", btn.dataset.importTab === tab);
     });
+    syncBackupSubTabFocus("data-import-tab", tab, "importTab-");
   }
 
   root.querySelectorAll<HTMLButtonElement>("[data-export-tab]").forEach((btn) => {
@@ -805,6 +857,21 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       switchImportTab(btn.dataset.importTab as ImportBackupTab);
     });
   });
+
+  bindBackupSubTabNav(
+    '[aria-label="Export method"]',
+    "data-export-tab",
+    ["qr", "json"],
+    () => activeExportTab,
+    (tab) => switchExportTab(tab as ExportBackupTab),
+  );
+  bindBackupSubTabNav(
+    '[aria-label="Import method"]',
+    "data-import-tab",
+    ["qr", "json"],
+    () => activeImportTab,
+    (tab) => switchImportTab(tab as ImportBackupTab),
+  );
 
   function stopExportQr(): void {
     exportQrUnwire?.();

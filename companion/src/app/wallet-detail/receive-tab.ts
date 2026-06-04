@@ -212,7 +212,7 @@ export function createReceiveTab(
       li.innerHTML = `
         <span class="addr-index">m/0/${a.index}</span>
         <code class="addr-addr">${escapeHtml(a.address)}</code>
-        <button class="copy" data-address="${escapeHtml(a.address)}" type="button">Copy</button>
+        <button class="copy" type="button" aria-label="Copy address" data-address="${escapeHtml(a.address)}" type="button">Copy</button>
       `;
       $list.appendChild(li);
     }
@@ -267,8 +267,11 @@ export function createReceiveTab(
       ?.addEventListener("change", onReceiveVerifiedChange);
     rt.root.querySelector<HTMLButtonElement>("#receiveVerifyTip")?.addEventListener("click", (e) => {
       e.preventDefault();
+      const btn = e.currentTarget as HTMLButtonElement;
       const tip = rt.root.querySelector<HTMLElement>("#receiveVerifyText");
-      if (tip) tip.hidden = !tip.hidden;
+      if (!tip) return;
+      tip.hidden = !tip.hidden;
+      btn.setAttribute("aria-expanded", tip.hidden ? "false" : "true");
     });
     rt.root.querySelector<HTMLButtonElement>("#copyAddress")?.addEventListener("click", () => void onCopy());
     rt.root.querySelector<HTMLButtonElement>("#prevIdx")?.addEventListener("click", () => void shiftIndex(-1));
