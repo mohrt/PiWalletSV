@@ -56,8 +56,8 @@ class EntropySourceChooser:
         self._list = ListView(
             items=[
                 ListItem(label="Random (recommended)", value="csr"),
-                ListItem(label="Photo entropy", value="camera"),
-                ListItem(label="Dice rolls", value="dice"),
+                ListItem(label="Photo + random", value="camera"),
+                ListItem(label="Dice + random", value="dice"),
             ],
             title="New wallet entropy",
         )

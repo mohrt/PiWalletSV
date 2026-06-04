@@ -31,6 +31,9 @@ SUPPORTED_WORD_COUNTS: tuple[int, ...] = (12, 24)
 WORDS_TO_ENTROPY_BYTES: dict[int, int] = {12: 16, 24: 32}
 """Mapping from BIP39 word count to entropy size in bytes."""
 
+MIN_DICE_ROLLS: dict[int, int] = {12: 48, 24: 96}
+"""Minimum die faces required before ``mnemonic_from_dice_rolls`` (≈2.58 bits each)."""
+
 
 def _load_english_wordlist() -> tuple[str, ...]:
     WordList.load()
@@ -64,22 +67,24 @@ def generate(word_count: int = 12) -> str:
 
 
 def mnemonic_from_material(material: bytes, word_count: int, *, domain: bytes) -> str:
-    """Build a BIP39 phrase from arbitrary material (camera JPEG, dice rolls, …).
+    """Build a BIP39 phrase from OS random mixed with user-supplied material.
 
-    The material is domain-separated and SHA-256 compressed to the exact
-    entropy length BIP39 expects (16 bytes for 12 words, 32 for 24). This is
-    not a substitute for a CSPRNG when ``material`` is low-entropy; callers
-    must collect enough physical entropy (long dice sequences, rich photos).
+    Draws ``nbytes`` from ``secrets.token_bytes`` and hashes
+    ``SHA-256(domain ‖ os_bytes ‖ material)``, truncated to the BIP39 entropy
+    length (16 bytes for 12 words, 32 for 24). Physical input (photo, dice)
+    augments OS random — it never replaces it — so collision resistance stays
+    at least as strong as the CSPRNG-only path even when ``material`` is weak.
 
     :param material: raw bytes to mix (e.g. JPEG file bytes, packed dice rolls).
-    :param domain: short stable tag, e.g. ``b"pwsv-cam-v1"`` or ``b"pwsv-dice-v1"``.
+    :param domain: short stable tag separating dice vs camera inputs.
     """
     if word_count not in WORDS_TO_ENTROPY_BYTES:
         raise MnemonicError(
             f"unsupported word_count {word_count}; must be one of {SUPPORTED_WORD_COUNTS}"
         )
     nbytes = WORDS_TO_ENTROPY_BYTES[word_count]
-    digest = hashlib.sha256(domain + material).digest()
+    os_part = secrets.token_bytes(nbytes)
+    digest = hashlib.sha256(domain + os_part + material).digest()
     entropy = digest[:nbytes]
     return mnemonic_from_entropy(entropy)
 
@@ -89,9 +94,18 @@ _CAMERA_DOMAIN = b"piwalletsv-camera-v1\x00"
 
 
 def mnemonic_from_dice_rolls(rolls: list[int], word_count: int) -> str:
-    """Derive a mnemonic from base-6 die faces (1..6)."""
+    """Derive a mnemonic from base-6 die faces (1..6) mixed with OS random."""
+    if word_count not in MIN_DICE_ROLLS:
+        raise MnemonicError(
+            f"unsupported word_count {word_count}; must be one of {SUPPORTED_WORD_COUNTS}"
+        )
+    minimum = MIN_DICE_ROLLS[word_count]
     if not rolls:
         raise MnemonicError("no dice rolls recorded")
+    if len(rolls) < minimum:
+        raise MnemonicError(
+            f"need at least {minimum} dice rolls for {word_count}-word phrase; got {len(rolls)}"
+        )
     for r in rolls:
         if not isinstance(r, int) or not (1 <= r <= 6):
             raise MnemonicError(f"invalid die face: {r!r} (expect 1..6)")

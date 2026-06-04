@@ -11,6 +11,7 @@ from PIL import Image
 
 from piwallet.bonnet.camera_still import capture_still_jpeg_bytes
 from piwallet.bonnet.entropy_camera import EntropyDualStreamCamera
+from piwallet.core.mnemonic import MIN_DICE_ROLLS
 from piwallet.camera_lcd import paste_cover, rgb888_thumbnail
 from piwallet.ui.display import (
     COLOR_ACCENT,
@@ -26,11 +27,6 @@ from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.widgets import draw_text
 
 log = logging.getLogger(__name__)
-
-# Minimum rolls (~2.58 bits each) hashed through SHA-256 and truncated —
-# comfortable headroom vs 128 / 256 bit raw BIP39 entropy.
-MIN_DICE_ROLLS_FOR_12: int = 48
-MIN_DICE_ROLLS_FOR_24: int = 96
 
 _TITLE_H: int = 26
 _FOOTER_RESERVE: int = 40
@@ -223,10 +219,7 @@ class DiceEntropyScreen:
     current_face: int = 3
 
     def __post_init__(self) -> None:
-        if self.word_count == 24:
-            self._req = MIN_DICE_ROLLS_FOR_24
-        else:
-            self._req = MIN_DICE_ROLLS_FOR_12
+        self._req = MIN_DICE_ROLLS[self.word_count]
 
     def on_event(self, event: Event) -> None:
         if self.done:

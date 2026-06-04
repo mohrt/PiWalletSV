@@ -6,6 +6,8 @@ Cross-checks against canonical BIP39 vectors:
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from piwallet.core import mnemonic as m
@@ -153,3 +155,77 @@ def test_words_starting_with_ma_includes_all_and_maze_last() -> None:
     assert stem[-1] == "maze"
     assert len(stem) == 33
     assert m.autocomplete("ma", limit=5) == stem[:5]
+
+
+_FIXED_OS_16 = bytes([0x11] * 16)
+_DICE_ROLLS_48 = [((i % 6) + 1) for i in range(48)]
+
+
+def test_material_domain_separation() -> None:
+    """Same material + OS bytes but different domains must not collide."""
+    with patch("piwallet.core.mnemonic.secrets.token_bytes", return_value=_FIXED_OS_16):
+        a = m.mnemonic_from_material(b"shared-fixture", 12, domain=b"domain-a")
+        b = m.mnemonic_from_material(b"shared-fixture", 12, domain=b"domain-b")
+    assert a != b
+    m.validate(a)
+    m.validate(b)
+
+
+def test_material_sensitivity_with_fixed_os() -> None:
+    """Different user material perturbs output when OS bytes are held constant."""
+    with patch("piwallet.core.mnemonic.secrets.token_bytes", return_value=_FIXED_OS_16):
+        a = m.mnemonic_from_camera_jpeg(b"jpeg-fixture-a", 12)
+        b = m.mnemonic_from_camera_jpeg(b"jpeg-fixture-b", 12)
+    assert a != b
+
+
+def test_dice_deterministic_when_os_bytes_fixed() -> None:
+    with patch("piwallet.core.mnemonic.secrets.token_bytes", return_value=_FIXED_OS_16):
+        first = m.mnemonic_from_dice_rolls(_DICE_ROLLS_48, 12)
+        second = m.mnemonic_from_dice_rolls(_DICE_ROLLS_48, 12)
+    assert first == second
+    m.validate(first)
+
+
+def test_dice_os_mixing_differs_across_calls() -> None:
+    """Same dice sequence must yield different phrases when OS random differs."""
+    a = m.mnemonic_from_dice_rolls(_DICE_ROLLS_48, 12)
+    b = m.mnemonic_from_dice_rolls(_DICE_ROLLS_48, 12)
+    assert a != b
+    m.validate(a)
+    m.validate(b)
+
+
+def test_camera_os_mixing_differs_across_calls() -> None:
+    jpeg = b"piwallet-test-jpeg-bytes"
+    a = m.mnemonic_from_camera_jpeg(jpeg, 12)
+    b = m.mnemonic_from_camera_jpeg(jpeg, 12)
+    assert a != b
+
+
+def test_dice_rejects_below_minimum_rolls() -> None:
+    with pytest.raises(m.MnemonicError, match="at least 48"):
+        m.mnemonic_from_dice_rolls([1] * 47, 12)
+
+
+def test_dice_accepts_minimum_rolls() -> None:
+    phrase = m.mnemonic_from_dice_rolls([1] * 48, 12)
+    assert len(phrase.split()) == 12
+    m.validate(phrase)
+
+
+@pytest.mark.parametrize("bad_face", [0, 7, -1])
+def test_dice_rejects_invalid_face(bad_face: int) -> None:
+    rolls = [1] * 47 + [bad_face]
+    with pytest.raises(m.MnemonicError, match="invalid die face"):
+        m.mnemonic_from_dice_rolls(rolls, 12)
+
+
+def test_camera_rejects_empty_jpeg() -> None:
+    with pytest.raises(m.MnemonicError, match="empty camera capture"):
+        m.mnemonic_from_camera_jpeg(b"", 12)
+
+
+def test_dice_rejects_empty_rolls() -> None:
+    with pytest.raises(m.MnemonicError, match="no dice rolls"):
+        m.mnemonic_from_dice_rolls([], 12)

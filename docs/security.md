@@ -71,6 +71,41 @@ The complete disclosure / reporting policy lives in the project's
   cameras or screen-recorders see the disclaimer-revealed phrase
   during initial setup or recovery.
 
+## Seed generation { #seed-generation }
+
+Seed phrases are created **only on the Pi** (bonnet UI or
+`piwallet mnemonic new`). The companion app never generates mnemonics.
+
+When you create a wallet on the bonnet you pick one of three entropy
+sources:
+
+| Source | What happens |
+|--------|----------------|
+| **Random (recommended)** | `secrets.token_bytes` draws 128 bits (12 words) or 256 bits (24 words) from the OS CSPRNG (`getrandom(2)` on Linux, mixing hardware RNG when available). |
+| **Photo + random** | A full-resolution camera JPEG is hashed together with fresh OS random bytes. The preview stream on the TFT is **not** used for entropy. |
+| **Dice + random** | At least 48 die faces (12 words) or 96 (24 words) are recorded, then hashed together with fresh OS random bytes. |
+
+Photo and dice paths **augment** OS random — they never replace it.
+Even a static photo or predictable dice sequence still yields a phrase
+whose collision resistance is lower-bounded by the CSPRNG-only path.
+
+**Collision math:** a 12-word BIP39 phrase encodes 128 bits of
+entropy. Two independently generated phrases collide with probability
+about **2⁻¹²⁸ ≈ 3×10⁻³⁹**. You would need on the order of 2⁶⁴ wallets
+before birthday-paradox collisions become plausible. 24-word phrases
+use 256 bits — astronomically safer still.
+
+**Operator guidance:** use **Random** unless you have a reason to mix
+in physical entropy. If you choose photo or dice, still capture a varied
+scene or a long, honestly random roll sequence — that adds defense in
+depth and per-user uniqueness on top of the OS random that always
+participates.
+
+The seed is shown once on the bonnet, confirmed via a shuffled word
+picker (which uses `secrets.SystemRandom` only for UI decoys, not for
+phrase generation), encrypted into the vault, and zeroed from memory.
+It is never written to disk in cleartext.
+
 ## Address verification { #address-verification }
 
 The companion app is a browser-based watch-only wallet. That means it
