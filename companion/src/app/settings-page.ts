@@ -414,7 +414,9 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   }
 
   function onSettingsFeeTierChanged(): void {
-    $feeCustomRow.hidden = $feeTierSelect.value !== "custom";
+    const isCustom = $feeTierSelect.value === "custom";
+    $feeCustomRow.hidden = !isCustom;
+    if (!isCustom) setCustomRateStatus("");
     localStorage.setItem(KEY_DEFAULT_FEE_TIER, $feeTierSelect.value);
     refreshFeeTierLabels();
     flashSaved();
@@ -436,7 +438,10 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   function trySaveCustomRate(): boolean {
     const rate = parseCustomRateInput();
     if (rate === null) {
-      if ($customRateInput.value.trim() !== "") {
+      const trimmed = $customRateInput.value.trim();
+      if ($feeTierSelect.value === "custom" && trimmed === "") {
+        setCustomRateStatus("Enter a custom fee rate (sat/kB)", true);
+      } else if (trimmed !== "") {
         setCustomRateStatus("Enter a whole number ≥ 0", true);
       }
       return false;
