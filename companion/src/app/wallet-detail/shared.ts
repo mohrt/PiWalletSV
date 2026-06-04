@@ -45,6 +45,11 @@ export function shortTxid(txid: string): string {
   return `${txid.slice(0, 8)}…${txid.slice(-8)}`;
 }
 
+export function shortXpub(xpub: string): string {
+  if (xpub.length <= 24) return xpub;
+  return `${xpub.slice(0, 12)}…${xpub.slice(-8)}`;
+}
+
 export function wrapHex(hex: string, width: number): string {
   if (width <= 0) return hex;
   const lines: string[] = [];

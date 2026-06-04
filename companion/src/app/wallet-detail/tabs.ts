@@ -1,6 +1,10 @@
 import { TAB_ORDER } from "./shared.js";
 import type { Tab, WalletDetailActions, WalletDetailRuntime } from "./types.js";
 
+export interface TabNavHooks {
+  onTabSwitch?: (prev: Tab, next: Tab) => void;
+}
+
 export interface TabNav {
   switchTab(tab: Tab): void;
   syncTabAria(tab: Tab): void;
@@ -10,6 +14,7 @@ export interface TabNav {
 export function createTabNav(
   rt: WalletDetailRuntime,
   actions: WalletDetailActions,
+  hooks: TabNavHooks = {},
 ): TabNav {
   function syncTabAria(tab: Tab): void {
     rt.root.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach((btn) => {
@@ -23,6 +28,7 @@ export function createTabNav(
   }
 
   function switchTab(tab: Tab): void {
+    const prev = rt.activeTab;
     rt.activeTab = tab;
     rt.root.querySelectorAll<HTMLElement>(".tab-panel").forEach((p) => {
       p.classList.toggle("active", p.id === `tab-${tab}`);
@@ -31,6 +37,7 @@ export function createTabNav(
       btn.classList.toggle("active", btn.dataset.tab === tab);
     });
     syncTabAria(tab);
+    hooks.onTabSwitch?.(prev, tab);
 
     if (
       tab === "history" &&

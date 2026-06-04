@@ -6,7 +6,7 @@ import {
   getDefaultFeeTier,
   getFiatCurrency,
 } from "../settings-page.js";
-import { escapeHtml } from "./shared.js";
+import { escapeHtml, shortXpub } from "./shared.js";
 import type { DisplayUnit, Tab, WalletDetailWallet } from "./types.js";
 
 export function renderWalletDetailShell(
@@ -369,86 +369,94 @@ export function renderWalletDetailShell(
 
         <!-- Advanced tab -->
         <section id="tab-advanced" class="card tab-panel${activeTab === "advanced" ? " active" : ""}" role="tabpanel" aria-labelledby="tab-btn-advanced" tabindex="${activeTab === "advanced" ? "0" : "-1"}">
-          <h2>Export to another companion</h2>
-          <p class="muted-line">
-            Show an animated QR so another companion can pair with this
-            wallet. Only the public key (xpub) is shared — the spending
-            key never leaves the Pi.
+          <h2>Advanced</h2>
+          <p class="muted-line advanced-intro">
+            Share this wallet with another companion or manage its label and pairing.
           </p>
-          <div class="actions">
-            <button id="exportShow" class="primary" type="button">Show export QR</button>
-          </div>
-          <div id="exportResult" hidden>
-            <canvas id="exportQr" width="320" height="320"></canvas>
-            <p id="exportQrHint" class="muted-line">
-              Point another companion at this animated QR.
-            </p>
-            <p class="muted-line">
-              Scan from <a href="#/scan">+ Add wallet</a> on the other device.
-            </p>
-            <p class="muted-line">
-              Frame <span id="exportFrameIdx">0</span> /
-              <span id="exportFrameCount">0</span>
-            </p>
-            <div class="actions pw1-qr-controls">
-              <button id="exportPrev" type="button" hidden>Previous</button>
-              <button id="exportNext" type="button" hidden>Next</button>
-              <button id="exportToggle" type="button" class="primary">Pause</button>
-              <button id="exportHide" type="button">Hide</button>
+
+          <details class="backup-fold advanced-fold" id="advancedFoldShare" open>
+            <summary>Share this wallet</summary>
+            <div class="backup-fold-body">
+              <p class="muted-line">
+                Show an animated QR so another companion can pair with this
+                wallet, or copy the account xpub. Only public keys are shared —
+                the spending key never leaves the Pi.
+              </p>
+              <div class="actions">
+                <button id="exportShow" class="primary" type="button">Show export QR</button>
+              </div>
+              <div id="exportResult" class="backup-qr-panel" hidden>
+                <p id="exportQrHint" class="muted-line">
+                  Point another companion at this animated QR.
+                </p>
+                <canvas id="exportQr" width="320" height="320"></canvas>
+                <p class="muted-line">
+                  Scan from <a href="#/scan">+ Add wallet</a> on the other device.
+                </p>
+                <p class="muted-line">
+                  Frame <span id="exportFrameIdx">0</span> /
+                  <span id="exportFrameCount">0</span>
+                </p>
+                <div class="actions pw1-qr-controls">
+                  <button id="exportPrev" type="button" hidden>Previous</button>
+                  <button id="exportNext" type="button" hidden>Next</button>
+                  <button id="exportToggle" type="button" class="primary">Pause</button>
+                  <button id="exportHide" type="button">Hide</button>
+                </div>
+              </div>
+              <div class="xpub-row">
+                <code class="xpub-preview" title="${escapeHtml(wallet.xpub)}">${escapeHtml(shortXpub(wallet.xpub))}</code>
+                <button id="copyXpub" type="button">Copy xpub</button>
+              </div>
+              <p id="copyXpubStatus" class="muted-line"></p>
+              <p class="muted-line backup-format-note">
+                To move all wallets and companion settings to another device, use
+                <a href="#/settings">Backup &amp; migration</a> in Settings.
+              </p>
             </div>
-          </div>
-          <p class="muted-line">
-            To move all wallets and companion settings to another device, use
-            <a href="#/settings">Backup &amp; migration</a> in Settings.
-          </p>
+          </details>
 
-          <h2 style="margin-top:1.5rem">Account xpub</h2>
-          <p class="muted-line">
-            The account-level extended public key. Safe to share — it
-            cannot spend funds, only derive addresses.
-          </p>
-          <div class="actions">
-            <button id="copyXpub" type="button">Copy xpub</button>
-          </div>
-          <p id="copyXpubStatus" class="muted-line"></p>
-
-          <hr class="section-divider" />
-
-          <h2>Rename wallet</h2>
-          <p class="muted-line">Change the display label for this wallet.</p>
-          <label class="field">
-            <span>New label</span>
-            <input id="renameInput" type="text" maxlength="64" required
-              autocorrect="off" spellcheck="false"
-              value="${escapeHtml(wallet.label)}" />
-          </label>
-          <div class="actions">
-            <button id="renameSaveBtn" type="button" class="primary" disabled>Save label</button>
-          </div>
-          <p id="renameStatus" class="muted-line"></p>
-
-          <hr class="section-divider" />
-
-          <h2>Remove wallet</h2>
-          <p class="muted-line">
-            Removes this watch-only wallet from the companion. The Pi device
-            and your funds are completely unaffected — you can re-pair at any
-            time.
-          </p>
-          <div id="removeWalletConfirm" hidden>
-            <p class="remove-confirm-msg warning-text">
-              Are you sure? This will remove
-              <strong>${wallet.label}</strong> from the companion.
-            </p>
-            <div class="actions">
-              <button id="removeWalletConfirmYes" type="button" class="danger">Remove wallet</button>
-              <button id="removeWalletConfirmNo" type="button">Cancel</button>
+          <details class="backup-fold advanced-fold" id="advancedFoldRename">
+            <summary>Rename</summary>
+            <div class="backup-fold-body">
+              <p class="muted-line">Change the display label for this wallet.</p>
+              <label class="field">
+                <span>New label</span>
+                <input id="renameInput" type="text" maxlength="64" required
+                  autocorrect="off" spellcheck="false"
+                  value="${escapeHtml(wallet.label)}" />
+              </label>
+              <div class="actions">
+                <button id="renameSaveBtn" type="button" class="primary" disabled>Save label</button>
+              </div>
+              <p id="renameStatus" class="muted-line"></p>
             </div>
-          </div>
-          <div id="removeWalletActions" class="actions">
-            <button id="removeWalletBtn" type="button" class="danger-outline">Remove wallet…</button>
-          </div>
-          <p id="removeWalletStatus" class="muted-line"></p>
+          </details>
+
+          <details class="backup-fold advanced-fold danger-fold" id="advancedFoldRemove">
+            <summary>Remove wallet</summary>
+            <div class="backup-fold-body">
+              <p class="muted-line">
+                Removes this watch-only wallet from the companion. The Pi device
+                and your funds are completely unaffected — you can re-pair at any
+                time.
+              </p>
+              <div id="removeWalletConfirm" hidden>
+                <p class="remove-confirm-msg warning-text">
+                  Are you sure? This will remove
+                  <strong>${escapeHtml(wallet.label)}</strong> from the companion.
+                </p>
+                <div class="actions">
+                  <button id="removeWalletConfirmYes" type="button" class="danger">Remove wallet</button>
+                  <button id="removeWalletConfirmNo" type="button">Cancel</button>
+                </div>
+              </div>
+              <div id="removeWalletActions" class="actions">
+                <button id="removeWalletBtn" type="button" class="danger-outline">Remove wallet…</button>
+              </div>
+              <p id="removeWalletStatus" class="muted-line"></p>
+            </div>
+          </details>
         </section>
       </main>
     `;
