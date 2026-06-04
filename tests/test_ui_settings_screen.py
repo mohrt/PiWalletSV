@@ -219,17 +219,35 @@ def test_settings_rows_include_brightness_then_sleep_timer_then_camera_then_acti
     has to update too.
     """
     keys = [row.key for row in SETTINGS_ROWS]
-    assert keys == ["brightness", "sleep_timer", "camera_type", "change_pin", "airgap"]
+    assert keys == [
+        "brightness",
+        "sleep_timer",
+        "camera_type",
+        "change_pin",
+        "airgap",
+        "usb_backup",
+    ]
 
 
-def test_change_pin_and_airgap_are_action_rows() -> None:
+def test_change_pin_airgap_and_usb_backup_are_action_rows() -> None:
     rows_by_key = {row.key: row for row in SETTINGS_ROWS}
     assert rows_by_key["change_pin"].is_action is True
     assert rows_by_key["airgap"].is_action is True
+    assert rows_by_key["usb_backup"].is_action is True
     # Value rows must explicitly stay non-action so a future
     # refactor that flips defaults can't accidentally promote them.
     assert rows_by_key["brightness"].is_action is False
     assert rows_by_key["sleep_timer"].is_action is False
+
+
+def test_a_on_usb_backup_row_returns_usb_backup_result() -> None:
+    s = _make_screen(brightness=0.5)
+    target = next(i for i, r in enumerate(SETTINGS_ROWS) if r.key == "usb_backup")
+    while s.cursor != target:
+        s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.A))
+    assert s.done is True
+    assert s.result == "usb_backup"
 
 
 def test_a_on_airgap_row_returns_airgap_result() -> None:

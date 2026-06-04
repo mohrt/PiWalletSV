@@ -9,7 +9,7 @@ For the user-facing journey (pairing, sending, receiving) see the
 [User manual](user-manual.md). To interpret the bonnet's airgap
 indicators see [User manual § Airgap status](user-manual.md#airgap-status).
 For wire-format troubleshooting see the user manual's
-[Troubleshooting](user-manual.md#11-troubleshooting)
+[Troubleshooting](user-manual.md#12-troubleshooting)
 section, which is intentionally not duplicated here.
 
 ## Logs
@@ -132,6 +132,9 @@ on a USB stick is acceptable. Keep in mind:
 - The mnemonic is always the canonical recovery path. If you have
   the mnemonic, you don't need the vault file. If you have only the
   vault file, you also need the PIN.
+
+For the full re-flash upgrade workflow (sealed SD-card image), see
+[User manual § Upgrade your device](user-manual.md#upgrade-your-device).
 
 ### Wiping the vault
 
@@ -272,7 +275,7 @@ documented in
 ## Troubleshooting
 
 For wire-format failures (verify mismatch, broadcast txid mismatch,
-etc.) see the [User manual § Troubleshooting](user-manual.md#11-troubleshooting).
+etc.) see the [User manual § Troubleshooting](user-manual.md#12-troubleshooting).
 This section covers operational issues with the deployment itself.
 
 ### The bonnet doesn't come up after reboot

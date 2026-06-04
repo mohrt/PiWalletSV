@@ -68,13 +68,15 @@ class DoubleConfirmScreen:
     def on_event(self, event: Event) -> None:
         if self.done:
             return
-        if event.kind != EventKind.PRESS:
-            return
-        if event.button == Button.B:
+        b = event.button
+        k = event.kind
+        if b == Button.B and k in (EventKind.PRESS, EventKind.LONG):
             self.done = True
             self.result = False
             return
-        if event.button in (Button.A, Button.SELECT):
+        if k != EventKind.PRESS:
+            return
+        if b in (Button.A, Button.SELECT):
             if self.step == 0:
                 self.step = 1
             else:

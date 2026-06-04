@@ -417,7 +417,222 @@ attempts (see [`piwallet/core/vault.py`](https://github.com/example/piwallet/blo
 and wipe after a configurable threshold of consecutive failures.
 You'll need to restore from the mnemonic.
 
-## 11. Troubleshooting
+## 11. Upgrade your device { #upgrade-your-device }
+
+PiWalletSV ships as a **sealed SD-card image**. There is no
+over-the-air or in-app update path — by design, a signer that can
+pull software updates over the network is not air-gapped. When a newer
+firmware release is published, you **re-flash the microSD** and
+restore your wallet from backup.
+
+This section is the full end-user workflow. The companion PWA on your
+phone or laptop is updated separately (refresh the browser or
+re-install from the site); only the Pi device follows the steps below.
+
+!!! warning "Re-flashing wipes the SD card"
+    Flashing a new image erases **everything** on the card — vault,
+    PIN verifier, disclaimer acceptance, and display settings. Back up
+    **before** you flash. Your written-down mnemonic is always the
+    canonical recovery path; the encrypted vault file is a convenience
+    backup that still requires your PIN.
+
+### What you need
+
+- Your **mnemonic** on paper (or steel), **or** a **USB backup** from
+  Settings → **Backup to USB** (recommended before any re-flash).
+- Your **PIN** (required for USB or vault-file restore).
+- A **FAT32 or exFAT USB flash drive** (factory formatting is fine) for
+  Path A below, **or** a microSD card reader for Path C.
+- The new **`.img.xz`** and **`.asc`** signature from
+  [Download](download.md), verified the same way as first setup
+  ([Flash and first run § Step 1](build-image.md#step-1-verify-the-download)).
+
+### Overview
+
+| Step | What happens |
+|------|----------------|
+| 1 | Back up to USB (or confirm you have your mnemonic) |
+| 2 | Download and verify the new image |
+| 3 | Re-flash the microSD (full wipe) |
+| 4 | Restore from USB, mnemonic, or vault file |
+| 5 | Accept disclaimer, re-verify airgap, TESTNET smoke test |
+
+### Step 1 — Back up before you flash
+
+#### Path A — USB backup (recommended)
+
+On the **current** firmware, before you re-flash:
+
+1. Insert a **FAT32 or exFAT** USB stick into the Pi's **data** micro-USB
+   port (the one closer to the SD slot; power stays on **PWR IN**).
+2. **Long-press B** → Settings → **Backup to USB**.
+3. Pick the drive from the list, confirm your **PIN**, and wait for
+   *Backup saved*.
+
+Backups are stored under `PiWalletSV/backups/<timestamp>/` on the stick
+(`vault.bin`, optional `settings.json`, and a manifest). **`terms.json`
+is never exported** — you will re-accept the disclaimer after upgrading.
+
+Keep the stick offline with the device. Anyone with the stick **and**
+your PIN can sign.
+
+#### Path B — Mnemonic (always works)
+
+If you have the 12- or 24-word seed written down, you do **not** need
+a USB or SD backup. After re-flash, restore via the bonnet ([§9](#9-restore-from-mnemonic)).
+
+#### Path C — Copy `vault.bin` off the SD card (fallback)
+
+Copying `vault.bin` lets you skip re-typing every word, but you must
+still know the **same PIN** as before. The file is encrypted at rest;
+treat the backup like a second copy of the vault — store it securely.
+
+On the **sealed production image**, PiWalletSV state lives in a single
+directory (nothing else on the card is user-writable):
+
+```text
+/home/pwsv/.piwallet/
+├── vault.bin       ← required for vault restore
+└── settings.json   ← optional (brightness, sleep timeout)
+```
+
+**Disclaimer (`terms.json`) is not backed up** — a firmware upgrade always
+re-prompts the disclaimer on first boot after re-flash.
+
+**Physical backup (no SSH on the sealed device):**
+
+1. **Power off** the Pi and remove the microSD.
+2. Insert the card into a **USB card reader** on another computer.
+3. Mount the **Linux root** partition (ext4). On Linux this is usually
+   automatic; on macOS or Windows you may need an ext4 driver or a
+   Linux live USB — plan ahead if you do not have Linux handy.
+4. Copy the entire `.piwallet/` folder (or at minimum `vault.bin`) to
+   encrypted storage — a password-protected archive on a USB stick you
+   control, not cloud sync.
+
+Do **not** skip this step and assume you will copy files after
+flashing; the new image overwrites the card completely.
+
+### Step 2 — Download and verify the new image
+
+Follow [Download](download.md) and
+[Flash and first run § Step 1](build-image.md#step-1-verify-the-download):
+
+1. Fetch `piwalletsv-<VERSION>.img.xz` and its `.asc` signature.
+2. Verify the signature with the project release key.
+3. Decompress if your flashing tool requires a raw `.img`.
+
+**Do not flash an unverified image.**
+
+### Step 3 — Re-flash the microSD
+
+Flash the verified image with Raspberry Pi Imager or your platform's
+equivalent ([Flash and first run § Step 2](build-image.md#step-2-flash-the-image)).
+
+This step **destroys** the old card contents. Confirm your backup from
+Step 1 is safe before you proceed.
+
+### Step 4 — Restore your wallet
+
+Pick **one** path below. Import **replaces all wallets** on the device
+(and optionally display settings). There is no merge.
+
+#### Path A — Restore from USB (recommended after Step 1 Path A)
+
+1. Power on the flashed Pi, accept the **disclaimer** (always shown
+   after a firmware upgrade).
+2. On **First setup**, choose **Restore from USB** (or after creating
+   a temporary vault, use Settings → **Restore from USB**).
+3. Insert the backup stick, pick the drive, then pick the backup
+   timestamp.
+4. Review the wallet list — existing wallets on the device (if any)
+   are shown as **will be erased**. Confirm twice if replacing a vault.
+5. Toggle **Import settings** with **RIGHT** if you want brightness /
+   sleep timer restored (optional).
+6. Enter the **backup vault PIN** and unlock.
+
+#### Path B — Restore from mnemonic
+
+1. Accept the disclaimer and choose **New vault (set PIN)** on first
+   setup, **or** use an empty vault from first-boot PIN setup.
+2. On the wallet list, choose **Restore wallet** and enter your seed
+   ([§9](#9-restore-from-mnemonic)).
+
+Your xpub and fingerprint match the old device, so the companion
+wallet you already paired should continue to work without re-pairing.
+
+#### Path C — Restore from `vault.bin` on the SD card (fallback)
+
+Use this only if you copied `vault.bin` in Step 1 and remember the
+**original PIN**.
+
+1. **Before first boot** on the new image (recommended): mount the
+   freshly flashed card's root partition on your computer and copy
+   your backup files into place:
+   ```text
+   /home/pwsv/.piwallet/vault.bin
+   /home/pwsv/.piwallet/settings.json   (optional)
+   ```
+2. Ensure the directory is owned by the runtime user. On the sealed
+   image that user is `pwsv`. After mounting the root partition on a
+   Linux machine, look up its numeric id and fix ownership before
+   booting the Pi:
+   ```bash
+   PWSV=$(grep '^pwsv:' /path/to/mounted/root/etc/passwd | cut -d: -f3-4)
+   sudo chown -R "$PWSV" /path/to/mounted/root/home/pwsv/.piwallet
+   sudo chmod 700 /path/to/mounted/root/home/pwsv/.piwallet
+   sudo chmod 600 /path/to/mounted/root/home/pwsv/.piwallet/vault.bin
+   ```
+   If you cannot set ownership correctly from your host OS, use
+   **Path B** (mnemonic restore) instead.
+3. **Power on** the Pi. If `vault.bin` is present and valid, the
+   bonnet skips "choose a PIN" and goes straight to **PIN unlock**.
+4. Enter your **original PIN** — not a new one from a aborted setup.
+
+If you already completed first-boot PIN setup on an empty vault, you
+have created a new vault that does not contain your wallets. Either
+restore via **Path B** (mnemonic), or stop the Pi, mount the card
+again, replace `vault.bin` with your backup, and boot once more.
+
+### Step 5 — Verify after upgrade
+
+Treat the upgraded device like a new install until you have evidence
+it is still sealed:
+
+1. **Long-press B** → Settings → **Airgap status** → **A**. Every row
+   should read `OK` and the header should say **Air-gapped**. See
+   [§13 Airgap status](#airgap-status) if anything shows `!!`.
+2. Run a **TESTNET** send round-trip ([Flash and first run § Step 9](build-image.md#step-9-sign-your-first-transaction))
+   before returning to mainnet amounts.
+
+### Companion app after a Pi upgrade
+
+- **Mnemonic or vault restore** with the same seed → same xpub → your
+  existing companion wallet record should work; hit **Refresh balance**
+  to resync UTXOs.
+- **Companion version**: if the release notes mention a wire-format
+  change, update the PWA on your phone/laptop to match the new Pi
+  firmware before signing.
+
+### Developer installs (SSH, not the sealed image)
+
+If you built the signer yourself from source and still have SSH access,
+day-to-day software updates are a `git pull` and service restart — see
+[Operate § Updating the software](operate.md#updating-the-software).
+That path does **not** apply to the downloadable sealed image, which
+has no network and no editable app tree under `/opt/piwallet`.
+
+### Common mistakes
+
+| Mistake | Consequence |
+|---------|-------------|
+| Flash before backing up | Vault gone unless you have the mnemonic |
+| Complete first-boot PIN setup, then copy old `vault.bin` | Confusing state — replace `vault.bin` on SD while powered off, or use mnemonic |
+| Restore vault file but forget original PIN | Vault file is useless without PIN; restore from mnemonic |
+| Skip airgap check after re-flash | You may sign on a mis-provisioned image |
+| Assume the companion auto-updates with the Pi | Update both independently when release notes say so |
+
+## 12. Troubleshooting { #12-troubleshooting }
 
 **Send says "no spendable UTXOs" or "only confirmed coins can be sent"
 but Balance shows a non-zero total.**
@@ -483,10 +698,10 @@ signed.**
 
 **&ldquo;Airgap status&rdquo; shows BREACH or a row with `!!`.**
 
-- See [§12 Airgap status](#airgap-status) for what each indicator
+- See [§13 Airgap status](#airgap-status) for what each indicator
   means and what to do. Do not sign until the report is all-green.
 
-## 12. Airgap status { #airgap-status }
+## 13. Airgap status { #airgap-status }
 
 PiWalletSV's security model depends on the signing device having no
 network path. The **Airgap status** screen in Settings runs six

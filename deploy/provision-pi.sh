@@ -84,6 +84,8 @@ readonly APT_INSTALL=(
     python3-pil
     rng-tools-debian
     fonts-dejavu-core
+    dosfstools
+    exfatprogs
     git
     # Build toolchain for C extensions pulled in by adafruit-blinka:
     # RPi.GPIO and rpi-ws281x ship sdists only (no Python 3.13 wheels
@@ -478,6 +480,25 @@ step_install_app() {
     run "$APP_VENV/bin/pip" install --quiet --editable "${APP_DIR}[display,camera]"
 }
 
+step_usb_backup() {
+    log "install USB backup mount helper + root mount daemon"
+    local helper_src="$APP_DIR/piwallet/backup/usb_mount.sh"
+    local helper_dst="/opt/piwallet/bin/usb-mount"
+    local mount_svc_src="$APP_DIR/piwallet/backup/piwallet-usb-mount.service"
+    if [[ ! -f "$mount_svc_src" ]]; then
+        mount_svc_src="$APP_DIR/deploy/systemd/piwallet-usb-mount.service"
+    fi
+    [[ -f "$helper_src" ]] || fail "missing $helper_src"
+    [[ -f "$mount_svc_src" ]] || fail "missing $mount_svc_src"
+    run install -d -m 0755 /opt/piwallet/bin
+    run install -m 0755 "$helper_src" "$helper_dst"
+    run install -d -m 0755 /mnt/piwallet-usb
+    run install -m 0644 "$mount_svc_src" "$UNIT_DST_DIR/piwallet-usb-mount.service"
+    run systemctl daemon-reload
+    run systemctl enable piwallet-usb-mount.service
+    run systemctl restart piwallet-usb-mount.service
+}
+
 step_install_unit() {
     log "install systemd unit + journald drop-in"
 
@@ -584,6 +605,7 @@ main() {
     step_ssh
     step_create_user
     step_install_app
+    step_usb_backup
     step_install_unit
     step_hostname
     step_swap_off
@@ -606,6 +628,7 @@ TEST MODE — radios kept enabled. Verify after reboot:
 
   * SSH still reachable (Wi-Fi / Ethernet up)
   * systemctl status piwallet-bonnet      # active (running)
+  * systemctl status piwallet-usb-mount   # active (running)
   * systemctl status getty@tty1           # masked
   * ls -la /home/pwsv/.piwallet/          # vault.bin appears after
                                             first-boot setup

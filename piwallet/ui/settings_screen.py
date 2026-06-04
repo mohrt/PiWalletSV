@@ -73,7 +73,9 @@ from piwallet.ui.display import (
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.widgets import draw_text
 
-SettingsScreenResult = Literal["saved", "back", "exit", "change_pin", "airgap"]
+SettingsScreenResult = Literal[
+    "saved", "back", "exit", "change_pin", "airgap", "usb_backup"
+]
 
 #: Step size used by left/right and repeat-events when adjusting brightness.
 BRIGHTNESS_STEP: float = 0.05
@@ -170,7 +172,17 @@ SETTINGS_ROWS: tuple[SettingsRow, ...] = (
         value_text=_action_arrow,
         is_action=True,
     ),
+    SettingsRow(
+        key="usb_backup",
+        label="USB backup",
+        value_text=_action_arrow,
+        is_action=True,
+    ),
 )
+
+
+#: Vertical space reserved for the two-line footer hint strip.
+_FOOTER_RESERVE_PX: int = 36
 
 
 @dataclass
@@ -330,8 +342,10 @@ class SettingsScreen:
 
         _CYCLER_KEYS = {"sleep_timer", "camera_type"}
 
-        row_y = title_h + 4
-        row_h = 32
+        row_y = title_h + 2
+        list_bottom = DISPLAY_HEIGHT - _FOOTER_RESERVE_PX
+        row_h = min(32, (list_bottom - row_y) // max(1, len(self.rows)))
+        row_h = max(row_h, 24)
         for idx, row in enumerate(self.rows):
             is_cursor = idx == self.cursor
             top = row_y + idx * row_h
@@ -364,9 +378,10 @@ class SettingsScreen:
                 anchor="rm",
             )
 
-        # Brightness slider preview (only when on the brightness row).
+        # Brightness slider lives in the footer gutter below the row list.
         if self.rows[self.cursor].key == "brightness":
-            self._draw_slider(fb, self._draft.brightness)
+            track_top = list_bottom + 4
+            self._draw_slider(fb, self._draft.brightness, track_top=track_top)
 
         # Footer hints — vary by row type.
         cur_row = self.rows[self.cursor]
@@ -398,10 +413,10 @@ class SettingsScreen:
             anchor="mm",
         )
 
-    def _draw_slider(self, fb: FrameBuffer, brightness: float) -> None:
+    def _draw_slider(self, fb: FrameBuffer, brightness: float, *, track_top: int) -> None:
         margin = 24
-        track_top = DISPLAY_HEIGHT - 64
-        track_bottom = track_top + 8
+        track_height = 6
+        track_bottom = track_top + track_height
         # Track.
         fb.draw.rectangle(
             (margin, track_top, DISPLAY_WIDTH - margin, track_bottom),
