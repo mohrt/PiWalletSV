@@ -178,15 +178,22 @@ function asU8(v: Uint8Array | ArrayBuffer): Uint8Array {
   return new Uint8Array(v);
 }
 
+/** Copy bytes into a standalone ArrayBuffer for DOM APIs (TS 6 BlobPart typing). */
+function asArrayBuffer(data: Uint8Array): ArrayBuffer {
+  const out = new ArrayBuffer(data.byteLength);
+  new Uint8Array(out).set(data);
+  return out;
+}
+
 async function gzipBytes(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data])
+  const stream = new Blob([asArrayBuffer(asU8(data))])
     .stream()
     .pipeThrough(new CompressionStream("gzip"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 async function gunzipBytes(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data])
+  const stream = new Blob([asArrayBuffer(asU8(data))])
     .stream()
     .pipeThrough(new DecompressionStream("gzip"));
   return new Uint8Array(await new Response(stream).arrayBuffer());

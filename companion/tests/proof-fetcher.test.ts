@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { Hash, MerklePath, P2PKH, Transaction } from "@bsv/sdk";
+import * as Hash from "@bsv/sdk/primitives/Hash";
+import { MerklePath, Transaction } from "@bsv/sdk/transaction";
+import { P2PKH } from "@bsv/sdk/script/templates";
 
 import { tscProofToMerklePath } from "../src/lib/proof-fetcher.js";
 import type { WocTxProof } from "../src/lib/woc.js";

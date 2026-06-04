@@ -1,6 +1,10 @@
 import basicSsl from "@vitejs/plugin-basic-ssl";
 import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+
+const companionRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const appVersion = (
   JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as {
@@ -22,6 +26,12 @@ const useHttps = process.env.PIWALLET_HTTP !== "1";
 export default defineConfig({
   define: {
     "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),
+  },
+  resolve: {
+    alias: {
+      // @bsv/sdk optional Node fast-paths; pure-TS fallbacks run in the browser.
+      "node:crypto": path.resolve(companionRoot, "src/shims/node-crypto-stub.ts"),
+    },
   },
   plugins: useHttps ? [basicSsl()] : [],
   server: {
@@ -78,8 +88,10 @@ export default defineConfig({
       output: {
         // @bsv/sdk is large and rarely changes — give it its own chunk
         // so browser cache survives app-code redeploys.
-        manualChunks: {
-          bsv: ["@bsv/sdk"],
+        manualChunks(id) {
+          if (id.includes("node_modules/@bsv/sdk")) {
+            return "bsv";
+          }
         },
       },
     },

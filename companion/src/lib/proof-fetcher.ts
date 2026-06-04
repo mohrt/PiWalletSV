@@ -24,7 +24,7 @@
  * implementations of the BRC-62 BEEF spec; we rely on spec compliance,
  * not impl coupling.
  */
-import { MerklePath, Transaction } from "@bsv/sdk";
+import { MerklePath, Transaction } from "@bsv/sdk/transaction";
 
 import type { WocClient, WocTxProof } from "./woc.js";
 
