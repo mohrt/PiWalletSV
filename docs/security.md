@@ -49,6 +49,10 @@ The complete disclosure / reporting policy lives in the project's
   is a circuit breaker, not a guarantee: if someone copies
   `vault.bin` off the device they can retry forever offline. Your
   seed phrase backup is what protects you in that scenario.
+- **USB backup sticks hold the same encrypted vault file** as the SD
+  card. Treat a stick like a second copy of `vault.bin`: store it
+  offline. Anyone with the stick **and** your vault PIN can sign.
+  See [User manual § USB backup](user-manual.md#usb-backup).
 - **The seed itself is never persisted.** It only exists in transient
   memory long enough to derive the master xprv and is then zeroed.
 

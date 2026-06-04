@@ -243,6 +243,18 @@ The journald drop-in caps persistent journal size (32 MB) and rotates
 files at 8 MB. This matters on small SD cards — without bounds the
 journal can grow until the filesystem refuses writes.
 
+### USB backup (production images)
+
+Sealed SD-card images are built with `deploy/provision-pi.sh`, which
+installs the USB mount stack automatically:
+
+--8<-- "docs/includes/usb-backup-provisioning.md"
+
+Dev installs that use `piwallet-bonnet.service.example` above do **not**
+include this stack. Either run the `step_usb_backup` function from
+`provision-pi.sh` on the Pi, or use the CLI with a manually mounted
+stick ([CLI § `piwallet backup`](cli.md#piwallet-backup)).
+
 ## 10. Verify the kiosk
 
 After enabling the unit:

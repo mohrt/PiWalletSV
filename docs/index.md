@@ -110,6 +110,13 @@ device signs anything.
     [protocol spec](protocol/README.md). Anyone can build a
     compatible signer or companion.
 
+-   :material-usb: __USB vault backup__
+
+    Export and restore the encrypted vault to a FAT32/exFAT stick from
+    Settings → **USB backup** — included on images built with
+    `deploy/provision-pi.sh`. See
+    [User manual § USB backup](user-manual.md#usb-backup).
+
 -   :material-shopping-outline: __Off-the-shelf parts__
 
     Raspberry Pi, TFT bonnet, Pi Camera. No proprietary hardware,
