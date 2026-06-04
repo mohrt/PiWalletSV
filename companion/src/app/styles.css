@@ -336,21 +336,6 @@ fieldset input[type="checkbox"]:focus-visible {
   outline-offset: 2px;
 }
 
-/* `.qr-status` is still used by the scanner page's status line. */
-.qr-status {
-  flex: 1 1 200px;
-  min-width: 220px;
-}
-
-.qr-status p {
-  margin: 0 0 0.75rem 0;
-  color: var(--muted);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 0.85rem;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 .actions {
   display: flex;
   gap: 0.5rem;
@@ -417,21 +402,6 @@ button:hover:not(:disabled) {
   margin: 0 0 0.5rem;
 }
 
-.scan-card video {
-  background: #000;
-  border-radius: 8px;
-  width: 360px;
-  max-width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  flex: 0 0 auto;
-}
-
-.scan-status {
-  flex: 1 1 220px;
-  min-width: 220px;
-}
-
 .camera-scanner-host {
   width: 100%;
 }
@@ -468,33 +438,11 @@ button:hover:not(:disabled) {
   display: none;
 }
 
-.scan-status p {
-  margin: 0 0 0.6rem 0;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 0.85rem;
-}
-
 .card h2 {
   font-size: 1rem;
   margin: 0 0 0.5rem 0;
   color: var(--muted);
   font-weight: 500;
-}
-
-.envelope-summary {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
-  border-radius: 8px;
-  padding: 0.75rem;
-  margin: 0 0 0.75rem 0;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 0.8rem;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--text);
-  max-height: 320px;
-  overflow-y: auto;
 }
 
 .loop-results {
@@ -633,44 +581,11 @@ body.pair-locked {
   gap: 0.4rem;
 }
 
-.wallet-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  align-items: baseline;
-}
-
 .wallet-label {
   font-size: 1rem;
 }
 
-.wallet-fp {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 0.8rem;
-  color: var(--accent);
-  background: var(--surface);
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-}
-
-.wallet-xpub {
-  margin: 0;
-  font-size: 0.8rem;
-}
-
-.wallet-meta-2 {
-  margin: 0;
-  font-size: 0.75rem;
-}
-
-.wallet-row .actions {
-  margin-top: 0.25rem;
-  align-items: center;
-}
-
-.primary-link,
-.secondary-link {
+.primary-link {
   display: inline-block;
   padding: 0.45rem 0.9rem;
   background: var(--accent);
@@ -682,15 +597,9 @@ body.pair-locked {
   border: 1px solid var(--accent);
 }
 
-.primary-link:hover,
-.secondary-link:hover {
+.primary-link:hover {
   filter: brightness(1.1);
   color: var(--on-accent);
-}
-
-.wallet-meta-card .wallet-xpub-full {
-  white-space: pre-wrap;
-  word-break: break-all;
 }
 
 .receive-row {
@@ -699,12 +608,6 @@ body.pair-locked {
   gap: 1.25rem;
   align-items: flex-start;
   margin-top: 0.5rem;
-}
-
-.receive-card canvas {
-  background: white;
-  border-radius: 8px;
-  flex: 0 0 auto;
 }
 
 .receive-detail {
@@ -1010,25 +913,6 @@ body.pair-locked {
   user-select: none;
 }
 
-.proposal-hex-details {
-  margin-top: 0.6rem;
-}
-
-/* SSH command snippet under the SSH-paste bridge — distinct from the
- * hex-blob textarea so the operator's eye separates "the command to
- * run" from "the payload to paste". Same monospace family for visual
- * consistency. */
-.ssh-snippet {
-  background: rgba(0, 0, 0, 0.35);
-  border-left: 2px solid var(--accent);
-  padding: 0.4rem 0.6rem;
-  margin: 0.3rem 0;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 0.78rem;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
 #proposalQr {
   background: white;
   display: block;
@@ -1036,14 +920,6 @@ body.pair-locked {
   border-radius: 4px;
   max-width: 100%;
   height: auto;
-}
-
-.broadcast-card .broadcast-txid {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 0.85rem;
-  word-break: break-all;
-  color: var(--accent);
-  margin: 0.25rem 0;
 }
 
 body.terms-locked {
@@ -1558,27 +1434,6 @@ body.terms-locked {
   align-self: center;
 }
 .wallet-more-link:hover { color: var(--text); text-decoration: underline; }
-
-/* Inline rename / remove strips */
-
-.inline-rename,
-.inline-remove {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--border);
-}
-
-.inline-rename .rename-input {
-  width: 100%;
-  margin-bottom: 0.5rem;
-  font-family: inherit;
-  font-size: 0.95rem;
-  background: var(--surface);
-  border: 1px solid var(--accent);
-  color: var(--text);
-  border-radius: 6px;
-  padding: 0.4rem 0.6rem;
-}
 
 .remove-confirm-msg {
   margin: 0 0 0.5rem;
@@ -2255,14 +2110,6 @@ label.button-like:hover {
   font-size: 0.82rem;
 }
 
-/* On-device verify callout (legacy) */
-
-.verify-tip {
-  font-size: 0.82rem;
-  margin: 0.75rem 0 0;
-  line-height: 1.5;
-}
-
 /* =========================================================================
    History tab
    ========================================================================= */
@@ -2418,13 +2265,6 @@ label.button-like:hover {
   color: #e3b86c;
 }
 
-.broadcast-success {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #58c47a;
-  margin: 0.5rem 0 0;
-}
-
 /* =========================================================================
    Settings page
    ========================================================================= */
@@ -2496,7 +2336,6 @@ label.button-like:hover {
     flex-direction: column;
   }
 
-  .scan-card video,
   .camera-scanner-video {
     width: 100%;
   }
@@ -2506,11 +2345,6 @@ label.button-like:hover {
   }
 
   .camera-scanner-meta {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .scan-status {
     min-width: 0;
     width: 100%;
   }
@@ -2543,7 +2377,6 @@ label.button-like:hover {
   }
 
   .wallet-card-actions button,
-  .scan-status .actions button,
   .actions button {
     min-height: 2.75rem;
   }
@@ -2558,12 +2391,10 @@ label.button-like:hover {
 @media (prefers-reduced-motion: reduce) {
   .send-progress-fill,
   .settings-saved-banner,
-  .tab-nav-btn,
   .scanner-tab,
   .backup-tab,
-  .history-entry,
   .terms-overlay,
-  .pair-dialog {
+  .pair-modal {
     transition: none !important;
     animation: none !important;
   }
