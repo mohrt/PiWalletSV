@@ -69,6 +69,10 @@ export function captureInstallPrompt(): () => void {
   if (typeof window === "undefined") return () => {};
 
   const handler = (ev: Event): void => {
+    // Only defer when our in-app banner can use it (mobile/narrow viewport).
+    // On desktop, skipping preventDefault avoids Chrome's console warning and
+    // leaves install to the browser menu / omnibox affordance.
+    if (!shouldShowInstallBanner()) return;
     ev.preventDefault();
     deferredInstallPrompt = ev as BeforeInstallPromptEvent;
   };

@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   KEY_INSTALL_DISMISSED,
   _resetInstallPromptForTests,
+  canPromptInstall,
+  captureInstallPrompt,
   dismissInstallPrompt,
   isInstallPromptDismissed,
   isStandalonePwa,
@@ -26,6 +28,7 @@ function mockWindow(opts: {
   displayStandalone?: boolean;
   minWidth768?: boolean;
 }): void {
+  const listeners = new Map<string, Set<(ev: Event) => void>>();
   vi.stubGlobal("window", {
     matchMedia: (query: string) => ({
       matches:
@@ -38,6 +41,17 @@ function mockWindow(opts: {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     }),
+    addEventListener(type: string, handler: (ev: Event) => void): void {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type)!.add(handler);
+    },
+    removeEventListener(type: string, handler: (ev: Event) => void): void {
+      listeners.get(type)?.delete(handler);
+    },
+    dispatchEvent(ev: Event): boolean {
+      listeners.get(ev.type)?.forEach((handler) => handler(ev));
+      return true;
+    },
   });
   vi.stubGlobal("navigator", {
     standalone: opts.standalone ?? false,
@@ -94,5 +108,29 @@ describe("pwa-install", () => {
   it("shouldShowInstallBanner is true on mobile browser", () => {
     mockWindow({});
     expect(shouldShowInstallBanner()).toBe(true);
+  });
+
+  it("captureInstallPrompt defers only when banner would show", () => {
+    mockWindow({ minWidth768: true });
+    const preventDefault = vi.fn();
+    const stop = captureInstallPrompt();
+    window.dispatchEvent(
+      Object.assign(new Event("beforeinstallprompt"), { preventDefault }),
+    );
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(canPromptInstall()).toBe(false);
+    stop();
+  });
+
+  it("captureInstallPrompt captures on narrow viewport", () => {
+    mockWindow({});
+    const preventDefault = vi.fn();
+    const stop = captureInstallPrompt();
+    window.dispatchEvent(
+      Object.assign(new Event("beforeinstallprompt"), { preventDefault }),
+    );
+    expect(preventDefault).toHaveBeenCalled();
+    expect(canPromptInstall()).toBe(true);
+    stop();
   });
 });
