@@ -25,7 +25,11 @@ import {
   fetchFeeRecommendation,
   formatFeeRate,
 } from "../../lib/fee.js";
-import { validatePw1Bytes } from "../../lib/scan-validate.js";
+import { validateAddressQr, validatePw1Bytes } from "../../lib/scan-validate.js";
+import {
+  getAddressBookForNetwork,
+  upsertAddressBookEntry,
+} from "../../lib/address-book.js";
 import { mountCameraScanner } from "../camera-scanner.js";
 import {
   getDefaultCustomFeeRate,
@@ -96,6 +100,33 @@ export function createSendTab(
   } | null = null;
 
   let feeRatesLoading = false;
+
+
+  function refreshAddressBookSelect(): void {
+    const $row = rt.root.querySelector<HTMLElement>("#sendAddressBookRow");
+    const $select = rt.root.querySelector<HTMLSelectElement>("#sendAddressBook");
+    if (!$row || !$select || !rt.wallet) return;
+    const network = rt.wallet.network ?? "main";
+    const entries = getAddressBookForNetwork(network);
+    if (entries.length === 0) {
+      $row.hidden = true;
+      return;
+    }
+    $row.hidden = false;
+    $select.innerHTML =
+      '<option value="">Saved addresses…</option>' +
+      entries
+        .map((e) => {
+          const label = e.label || shortAddress(e.address);
+          return `<option value="${escapeHtml(e.address)}">${escapeHtml(label)}</option>`;
+        })
+        .join("");
+  }
+
+  function addressMatchesNetwork(address: string, network: "main" | "test"): boolean {
+    if (network === "test") return /^[mn]/.test(address);
+    return address.startsWith("1");
+  }
 
   function stopAddrScan(): void {
     rt.addrScanHandle?.destroy();
@@ -436,6 +467,30 @@ export function createSendTab(
       $status.textContent = "enter a recipient address";
       return;
     }
+    const addrCheck = validateAddressQr(recipient);
+    if (!addrCheck.ok) {
+      $status.classList.add("error");
+      $status.textContent = addrCheck.message;
+      $addr.focus();
+      return;
+    }
+    const normalizedRecipient =
+      addrCheck.result.workflow === "send-address"
+        ? addrCheck.result.address
+        : recipient;
+    const walletNet = rt.wallet.network ?? "main";
+    if (!addressMatchesNetwork(normalizedRecipient, walletNet)) {
+      $status.classList.add("error");
+      $status.textContent =
+        walletNet === "test"
+          ? "testnet wallet — recipient must be a testnet address (m… or n…)"
+          : "mainnet wallet — recipient must be a mainnet address (1…)";
+      $addr.focus();
+      return;
+    }
+    if (normalizedRecipient !== recipient) {
+      $addr.value = normalizedRecipient;
+    }
     if (amountRaw === "" || isNaN(amountNum) || amountNum <= 0) {
       $status.classList.add("error");
       $status.textContent = amountRaw === "" ? "enter an amount" : `invalid amount "${amountRaw}"`;
@@ -496,7 +551,7 @@ export function createSendTab(
       changeSats = 0;
     }
 
-    rt.sendStep = { step: "review", recipient, sats, feeRate: rate, feeSats, changeSats };
+    rt.sendStep = { step: "review", recipient: normalizedRecipient, sats, feeRate: rate, feeSats, changeSats };
     showSendStep("review");
     renderReview();
   }
@@ -988,6 +1043,13 @@ export function createSendTab(
       if ($pw1Actions) $pw1Actions.hidden = true;
       if ($pw1Widget) $pw1Widget.hidden = true;
       stopPw1Scan();
+      if (lastSendSummary && rt.wallet) {
+        upsertAddressBookEntry(
+          lastSendSummary.recipient,
+          rt.wallet.network ?? "main",
+        );
+        refreshAddressBookSelect();
+      }
       updateSendFlowProgress("done");
       showBroadcastDone(explorer);
     } catch (e) {

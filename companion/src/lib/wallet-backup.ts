@@ -14,6 +14,7 @@ import {
   exportCompanionSettings,
   validateCompanionSettingsBackup,
 } from "./companion-settings.js";
+import { applyTheme } from "./theme.js";
 import type { HistorySnapshot } from "./history.js";
 import {
   WalletStoreError,
@@ -496,6 +497,7 @@ export async function importWalletBackup(
 
   if (file.settings) {
     applyCompanionSettings(file.settings);
+    applyTheme();
     result.settingsRestored = true;
   }
 

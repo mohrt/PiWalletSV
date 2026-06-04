@@ -6,14 +6,18 @@
  * not migrated. Nothing secret belongs here — the Pi PIN and seed never
  * touch the companion and are not exportable.
  */
+import type { AddressBookEntry } from "./address-book.js";
+import { exportAddressBookBackup, applyAddressBookBackup, validateAddressBookBackup } from "./address-book.js";
 import type { WalletListSort } from "./wallets.js";
 
 export type FeeTier = "economy" | "standard" | "priority" | "custom";
 export type FiatCurrency = "USD" | "EUR" | "AUD" | "GBP";
 export type DefaultNetwork = "main" | "test";
 export type ListUnit = "sats" | "bsv" | "fiat";
+export type ThemePreference = "dark" | "light" | "system";
 
 export const KEY_DEFAULT_FEE_TIER = "piwallet.settings.defaultFeeTier";
+export const KEY_THEME = "piwallet.settings.theme";
 export const KEY_CUSTOM_FEE_RATE = "piwallet.settings.customFeeRate";
 export const KEY_FIAT_CURRENCY = "piwallet.settings.fiatCurrency";
 export const KEY_DEFAULT_NETWORK = "piwallet.settings.defaultNetwork";
@@ -28,11 +32,14 @@ export interface CompanionSettingsBackup {
   defaultNetwork?: DefaultNetwork;
   listUnit?: ListUnit;
   listSort?: WalletListSort;
+  theme?: ThemePreference;
+  addressBook?: AddressBookEntry[];
 }
 
 const FEE_TIERS: FeeTier[] = ["economy", "standard", "priority", "custom"];
 const FIAT: FiatCurrency[] = ["USD", "EUR", "AUD", "GBP"];
 const NETWORKS: DefaultNetwork[] = ["main", "test"];
+const THEMES: ThemePreference[] = ["dark", "light", "system"];
 const LIST_UNITS: ListUnit[] = ["sats", "bsv", "fiat"];
 const LIST_SORTS: WalletListSort[] = [
   "date",
@@ -77,6 +84,11 @@ export function getDefaultNetwork(): DefaultNetwork {
   return NETWORKS.includes(v as DefaultNetwork) ? (v as DefaultNetwork) : "main";
 }
 
+export function getThemePreference(): ThemePreference {
+  const v = storage()?.getItem(KEY_THEME) as ThemePreference | null;
+  return THEMES.includes(v as ThemePreference) ? (v as ThemePreference) : "dark";
+}
+
 export function getListUnit(): ListUnit {
   const v = storage()?.getItem(KEY_LIST_UNIT) as ListUnit | null;
   return LIST_UNITS.includes(v as ListUnit) ? (v as ListUnit) : "sats";
@@ -113,6 +125,12 @@ export function exportCompanionSettings(): CompanionSettingsBackup {
   const listSort = store.getItem(KEY_LIST_SORT) as WalletListSort | null;
   if (listSort && LIST_SORTS.includes(listSort)) out.listSort = listSort;
 
+  const theme = store.getItem(KEY_THEME) as ThemePreference | null;
+  if (theme && THEMES.includes(theme)) out.theme = theme;
+
+  const book = exportAddressBookBackup();
+  if (book.length > 0) out.addressBook = book;
+
   return out;
 }
 
@@ -143,6 +161,10 @@ export function applyCompanionSettings(settings: CompanionSettingsBackup): void 
   if (settings.listSort && LIST_SORTS.includes(settings.listSort)) {
     store.setItem(KEY_LIST_SORT, settings.listSort);
   }
+  if (settings.theme && THEMES.includes(settings.theme)) {
+    store.setItem(KEY_THEME, settings.theme);
+  }
+  applyAddressBookBackup(settings.addressBook);
 }
 
 function validateSettings(raw: unknown): CompanionSettingsBackup | undefined {
@@ -188,6 +210,15 @@ function validateSettings(raw: unknown): CompanionSettingsBackup | undefined {
       throw new Error("settings.listSort invalid");
     }
     out.listSort = s.listSort as WalletListSort;
+  }
+  if (s.theme !== undefined) {
+    if (!THEMES.includes(s.theme as ThemePreference)) {
+      throw new Error("settings.theme invalid");
+    }
+    out.theme = s.theme as ThemePreference;
+  }
+  if (s.addressBook !== undefined) {
+    out.addressBook = validateAddressBookBackup(s.addressBook);
   }
 
   return Object.keys(out).length > 0 ? out : undefined;

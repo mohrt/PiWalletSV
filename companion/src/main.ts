@@ -6,6 +6,7 @@ import { mountWalletDetailPage } from "./app/wallet-detail.js";
 import { mountWalletsPage } from "./app/wallets-page.js";
 import { DOCS_BASE_URL } from "./lib/config.js";
 import { captureInstallPrompt } from "./lib/pwa-install.js";
+import { applyTheme, watchSystemTheme } from "./lib/theme.js";
 import { APP_VERSION, formatAppVersion } from "./lib/version.js";
 
 const app = document.getElementById("app");
@@ -29,8 +30,11 @@ let pageTeardown: (() => void) | null = null;
 // marketing site / docs site (DOCS_BASE_URL — env-driven, see config.ts).
 const DEFAULT_ROUTE = "#/wallets";
 
+applyTheme();
+const stopSystemTheme = watchSystemTheme();
 const stopInstallCapture = captureInstallPrompt();
 window.addEventListener("beforeunload", () => {
+  stopSystemTheme();
   stopInstallCapture();
 });
 

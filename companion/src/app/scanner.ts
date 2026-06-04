@@ -47,6 +47,16 @@ export function mountScannerPage(root: HTMLElement): () => void {
             placeholder="xpub6…"
             spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
           <label class="field">
+            <span>Derivation path</span>
+            <input id="pasteXpubPath" type="text"
+              value="m/44'/236'/0'"
+              spellcheck="false" autocorrect="off" autocomplete="off"
+              aria-describedby="pasteXpubPathHint" />
+            <p id="pasteXpubPathHint" class="muted-line">
+              BIP44 account path from the Pi (default <code>m/44'/236'/0'</code>).
+            </p>
+          </label>
+          <label class="field">
             <span>Network</span>
             <select id="pasteXpubNetwork">
               <option value="main">Mainnet (BSV)</option>
@@ -83,6 +93,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
   `;
 
   const $pasteXpub = root.querySelector<HTMLTextAreaElement>("#pasteXpub")!;
+  const $pasteXpubPath = root.querySelector<HTMLInputElement>("#pasteXpubPath")!;
   const $pasteXpubNetwork = root.querySelector<HTMLSelectElement>("#pasteXpubNetwork")!;
   $pasteXpubNetwork.value = getDefaultNetwork();
   const $pasteXpubImport = root.querySelector<HTMLButtonElement>("#pasteXpubImport")!;
@@ -261,10 +272,19 @@ export function mountScannerPage(root: HTMLElement): () => void {
 
     setXpubStatus("xpub valid — fill in a label in the dialog.");
 
+    const path = $pasteXpubPath.value.trim();
+    if (!/^m(\/\d+'?)+$/.test(path)) {
+      setXpubStatus(
+        "invalid derivation path — expected format like m/44'/236'/0'",
+        true,
+      );
+      return;
+    }
+
     await showPairCard({
       kind: KIND_XPUB,
       xpub: raw,
-      path: "m/44'/236'/0'",
+      path,
       label: "Imported wallet",
       fingerprint: fp,
       network,

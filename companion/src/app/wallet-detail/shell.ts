@@ -129,6 +129,12 @@ export function renderWalletDetailShell(
                   </svg>
                 </button>
               </div>
+              <div id="sendAddressBookRow" class="address-book-row" hidden>
+                <select id="sendAddressBook" class="address-book-select"
+                  aria-label="Saved addresses">
+                  <option value="">Saved addresses…</option>
+                </select>
+              </div>
             </label>
             <div id="addrScanWidget" hidden>
               <div id="addrScanHost"></div>
