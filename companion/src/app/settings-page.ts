@@ -52,7 +52,18 @@ import {
   getDefaultFeeTier,
   getDefaultNetwork,
   getFiatCurrency,
+  getThemePreference,
+  type ThemePreference,
 } from "../lib/companion-settings.js";
+import {
+  getAddressBook,
+  removeAddressBookEntry,
+  updateAddressBookLabel,
+  upsertAddressBookEntry,
+} from "../lib/address-book.js";
+import { getFeeHistory } from "../lib/fee-history.js";
+import { relativeTimeFrom } from "../lib/relative-time.js";
+import { setThemePreference } from "../lib/theme.js";
 
 export type { FeeTier, FiatCurrency, DefaultNetwork } from "../lib/companion-settings.js";
 export { getDefaultFeeTier, getFiatCurrency, getDefaultNetwork } from "../lib/companion-settings.js";
@@ -66,6 +77,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const customFeeRate  = getDefaultCustomFeeRate();
   const fiatCurrency   = getFiatCurrency();
   const defaultNetwork = getDefaultNetwork();
+  const themePref        = getThemePreference();
 
   const sel = (v: string, cur: string) => v === cur ? " selected" : "";
 
@@ -87,6 +99,15 @@ export function mountSettingsPage(root: HTMLElement): () => void {
             <option value="custom"${sel("custom", feeTier)}>Custom…</option>
           </select>
           <p class="muted-line send-fee-loading" id="feeRateLoading">Loading current rates…</p>
+          <div id="feeHistoryBlock" hidden>
+            <p class="muted-line" style="margin-top:0.75rem">Recent standard-tier samples (local)</p>
+            <table class="fee-history-table" id="feeHistoryTable">
+              <thead>
+                <tr><th>When</th><th>Standard</th><th>Source</th></tr>
+              </thead>
+              <tbody id="feeHistoryBody"></tbody>
+            </table>
+          </div>
         </label>
         <div id="settingsFeeCustomRow" class="fee-custom-row"${feeTier === "custom" ? "" : " hidden"}>
           <label class="field">
@@ -111,6 +132,15 @@ export function mountSettingsPage(root: HTMLElement): () => void {
         <h2>Display</h2>
 
         <label class="field">
+          <span>Theme</span>
+          <select id="themePreference">
+            <option value="dark"${sel("dark", themePref)}>Dark</option>
+            <option value="light"${sel("light", themePref)}>Light</option>
+            <option value="system"${sel("system", themePref)}>System</option>
+          </select>
+        </label>
+
+        <label class="field">
           <span>Fiat currency (for balance toggle)</span>
           <select id="fiatCurrency">
             <option value="USD"${sel("USD", fiatCurrency)}>USD — US Dollar</option>
@@ -119,6 +149,37 @@ export function mountSettingsPage(root: HTMLElement): () => void {
             <option value="AUD"${sel("AUD", fiatCurrency)}>AUD — Australian Dollar</option>
           </select>
         </label>
+      </section>
+
+      <section class="card">
+        <h2>Address book</h2>
+        <p class="muted-line">
+          Saved send recipients, scoped by network. Addresses are added after
+          a successful send; edit labels here or pick them on the Send tab.
+        </p>
+        <label class="field">
+          <span>Add address manually</span>
+          <input id="addressBookAddInput" type="text" autocomplete="off"
+            placeholder="1… or m… / n…" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>Label (optional)</span>
+          <input id="addressBookAddLabel" type="text" maxlength="48"
+            autocomplete="off" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>Network</span>
+          <select id="addressBookAddNetwork">
+            <option value="main"${sel("main", defaultNetwork)}>Mainnet</option>
+            <option value="test"${sel("test", defaultNetwork)}>Testnet</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button id="addressBookAddBtn" type="button" class="primary">Save address</button>
+        </div>
+        <p id="addressBookAddStatus" class="muted-line"></p>
+        <ul id="addressBookList" class="address-book-list"></ul>
+        <p id="addressBookEmpty" class="muted-line">No saved addresses yet.</p>
       </section>
 
       <section class="card">
@@ -321,6 +382,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $feeRateLoading  = root.querySelector<HTMLElement>("#feeRateLoading")!;
   const $feeTierSelect   = root.querySelector<HTMLSelectElement>("#settingsFeeTierSelect")!;
   const $feeCustomRow    = root.querySelector<HTMLElement>("#settingsFeeCustomRow")!;
+  const $themePref       = root.querySelector<HTMLSelectElement>("#themePreference")!;
   const $fiat            = root.querySelector<HTMLSelectElement>("#fiatCurrency")!;
   const $network         = root.querySelector<HTMLSelectElement>("#defaultNetwork")!;
   const $clearBtn        = root.querySelector<HTMLButtonElement>("#clearBtn")!;
@@ -332,6 +394,15 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $savedBanner     = root.querySelector<HTMLElement>("#settingsSavedBanner")!;
   const $customRateInput = root.querySelector<HTMLInputElement>("#sCustomRate")!;
   const $customRateStatus = root.querySelector<HTMLElement>("#customRateStatus")!;
+  const $feeHistoryBlock  = root.querySelector<HTMLElement>("#feeHistoryBlock")!;
+  const $feeHistoryBody   = root.querySelector<HTMLElement>("#feeHistoryBody")!;
+  const $addressBookList  = root.querySelector<HTMLElement>("#addressBookList")!;
+  const $addressBookEmpty = root.querySelector<HTMLElement>("#addressBookEmpty")!;
+  const $addressBookAddInput = root.querySelector<HTMLInputElement>("#addressBookAddInput")!;
+  const $addressBookAddLabel = root.querySelector<HTMLInputElement>("#addressBookAddLabel")!;
+  const $addressBookAddNetwork = root.querySelector<HTMLSelectElement>("#addressBookAddNetwork")!;
+  const $addressBookAddBtn = root.querySelector<HTMLButtonElement>("#addressBookAddBtn")!;
+  const $addressBookAddStatus = root.querySelector<HTMLElement>("#addressBookAddStatus")!;
   const $exportDownload   = root.querySelector<HTMLButtonElement>("#exportDownload")!;
   const $exportCopy       = root.querySelector<HTMLButtonElement>("#exportCopy")!;
   const $exportQrToggle   = root.querySelector<HTMLButtonElement>("#exportQrToggle")!;
@@ -469,6 +540,110 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     $customRateInput.blur();
   });
 
+
+  function renderFeeHistory(): void {
+    const history = getFeeHistory().slice().reverse().slice(0, 12);
+    if (history.length === 0) {
+      $feeHistoryBlock.hidden = true;
+      return;
+    }
+    $feeHistoryBlock.hidden = false;
+    $feeHistoryBody.innerHTML = history
+      .map(
+        (s) =>
+          `<tr>` +
+          `<td>${escapeHtml(relativeTimeFrom(s.at))}</td>` +
+          `<td>${escapeHtml(formatFeeRate(s.standard))}</td>` +
+          `<td>${s.fromApi ? "WoC" : "default"}</td>` +
+          `</tr>`,
+      )
+      .join("");
+  }
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function renderAddressBookList(): void {
+    const entries = getAddressBook();
+    $addressBookEmpty.hidden = entries.length > 0;
+    $addressBookList.innerHTML = entries
+      .map((e) => {
+        const net = e.network === "test" ? "testnet" : "mainnet";
+        const label = escapeHtml(e.label || "—");
+        const addr = escapeHtml(e.address);
+        return (
+          `<li class="address-book-item" data-address="${addr}" data-network="${e.network}">` +
+          `<input class="address-book-label-input" type="text" maxlength="48" ` +
+          `value="${label === "—" ? "" : label}" placeholder="Label" ` +
+          `aria-label="Label for ${addr}" />` +
+          `<code>${addr}</code>` +
+          `<span class="muted-line">${net}</span>` +
+          `<button type="button" class="address-book-remove">Remove</button>` +
+          `</li>`
+        );
+      })
+      .join("");
+  }
+
+  $themePref.addEventListener("change", () => {
+    setThemePreference($themePref.value as ThemePreference);
+    flashSaved();
+  });
+
+  $addressBookList.addEventListener("click", (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".address-book-remove");
+    if (!btn) return;
+    const li = btn.closest<HTMLElement>(".address-book-item");
+    if (!li) return;
+    const address = li.dataset.address ?? "";
+    const network = (li.dataset.network ?? "main") as "main" | "test";
+    removeAddressBookEntry(address, network);
+    renderAddressBookList();
+    flashSaved();
+  });
+
+  $addressBookList.addEventListener("change", (e) => {
+    const input = e.target as HTMLInputElement;
+    if (!input.classList.contains("address-book-label-input")) return;
+    const li = input.closest<HTMLElement>(".address-book-item");
+    if (!li) return;
+    updateAddressBookLabel(
+      li.dataset.address ?? "",
+      (li.dataset.network ?? "main") as "main" | "test",
+      input.value,
+    );
+    flashSaved();
+  });
+
+  $addressBookAddBtn.addEventListener("click", () => {
+    const raw = $addressBookAddInput.value.trim();
+    const network = $addressBookAddNetwork.value as "main" | "test";
+    $addressBookAddStatus.classList.remove("error");
+    if (!raw) {
+      $addressBookAddStatus.classList.add("error");
+      $addressBookAddStatus.textContent = "enter an address";
+      return;
+    }
+    if (!/^[13mn][a-km-zA-HJ-NP-Z1-9]{20,}$/.test(raw)) {
+      $addressBookAddStatus.classList.add("error");
+      $addressBookAddStatus.textContent = "does not look like a BSV address";
+      return;
+    }
+    upsertAddressBookEntry(raw, network, $addressBookAddLabel.value.trim());
+    $addressBookAddInput.value = "";
+    $addressBookAddLabel.value = "";
+    $addressBookAddStatus.textContent = "Saved.";
+    renderAddressBookList();
+    flashSaved();
+  });
+
+  renderAddressBookList();
+
   // ---- load live fee rates from WoC mainnet ----
   void (async () => {
     try {
@@ -477,6 +652,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     } catch { /* use defaults */ }
 
     refreshFeeTierLabels();
+    renderFeeHistory();
     $feeRateLoading.hidden = true;
   })();
 

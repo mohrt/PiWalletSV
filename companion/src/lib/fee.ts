@@ -17,6 +17,7 @@
  * multiple times doesn't spam the API.
  */
 
+import { recordFeeSnapshot } from "./fee-history.js";
 import type { WocClient } from "./woc.js";
 
 /** BSV network recommended fee in sat/kB as of 2025. */
@@ -94,6 +95,7 @@ export async function fetchFeeRecommendation(
 
   _cache = rec;
   _cacheAt = now;
+  recordFeeSnapshot(rec);
   return rec;
 }
 

@@ -1,4 +1,5 @@
-:root {
+:root,
+[data-theme="dark"] {
   color-scheme: dark;
   --bg: #0b0f15;
   --surface: #131a24;
@@ -16,6 +17,19 @@
   --radius: 6px;
   font-family:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #eef1f5;
+  --text: #1a2332;
+  --muted: #5c6878;
+  --border: #d0d7de;
+  --accent: #0969da;
+  --accent-strong: #0550ae;
+  --danger: #cf222e;
 }
 
 * {
@@ -2551,5 +2565,61 @@ label.button-like:hover {
     transition: none !important;
     animation: none !important;
   }
+}
+.address-book-row {
+  margin-top: 0.5rem;
+}
+
+.address-book-select {
+  width: 100%;
+  max-width: 100%;
+}
+
+.fee-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.fee-history-table th,
+.fee-history-table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.fee-history-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.address-book-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.address-book-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.address-book-item:last-child {
+  border-bottom: none;
+}
+
+.address-book-item code {
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+.address-book-label-input {
+  flex: 1 1 8rem;
+  min-width: 6rem;
 }
 
