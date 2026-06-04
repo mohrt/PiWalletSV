@@ -86,6 +86,21 @@ def test_mark_accepted_writes_state(tmp_path: Path) -> None:
     }
 
 
+def test_requires_acceptance_when_version_1_and_current_is_2(
+    tmp_path: Path,
+) -> None:
+    state_file = tmp_path / "terms.json"
+    save_state(
+        TermsState(
+            terms_version=1,
+            accepted_at="2026-05-11T00:00:00+00:00",
+            device_id="cafebabecafebabe",
+        ),
+        state_file,
+    )
+    assert requires_acceptance(state_file, current_version=2) is True
+
+
 def test_mark_accepted_preserves_device_id_across_version_bumps(tmp_path: Path) -> None:
     state_file = tmp_path / "terms.json"
     # First acceptance under v0.
@@ -95,15 +110,15 @@ def test_mark_accepted_preserves_device_id_across_version_bumps(tmp_path: Path) 
         random_id=lambda: "deadbeefdeadbeef",
         current_version=0,
     )
-    # Bump to v1; device_id must stay the same.
+    # Bump to v2; device_id must stay the same.
     new_state = mark_accepted(
         state_file,
         now=_fixed_now,
         random_id=lambda: "should-not-be-used",
-        current_version=1,
+        current_version=2,
     )
     assert new_state.device_id == "deadbeefdeadbeef"
-    assert new_state.terms_version == 1
+    assert new_state.terms_version == 2
 
 
 def test_mark_accepted_regenerates_when_preserve_false(tmp_path: Path) -> None:

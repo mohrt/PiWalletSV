@@ -27,7 +27,7 @@ from pathlib import Path
 #: whenever the canonical disclaimer changes in a way the user must
 #: re-consent to. Old saved states with a strictly lower version trigger
 #: a re-prompt on next boot.
-CURRENT_TERMS_VERSION: int = 1
+CURRENT_TERMS_VERSION: int = 2
 
 
 @dataclass(frozen=True, slots=True)

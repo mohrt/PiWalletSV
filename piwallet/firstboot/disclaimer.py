@@ -56,7 +56,8 @@ DEFAULT_DISCLAIMER_PAGES: tuple[DisclaimerPage, ...] = (
         title="No liability",
         body=(
             "Authors disclaim all liability. Use at your own risk. "
-            "Hold A to accept and continue."
+            "Commercial kit/case resale needs permission (@PiWalletSV). "
+            "Hold A to accept."
         ),
         footer="< back   |   HOLD A to accept",
     ),

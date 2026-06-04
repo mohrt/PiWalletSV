@@ -166,9 +166,34 @@ modal both track a `termsVersion` integer; when that integer is
 incremented (because this document materially changed), you will be
 re-prompted to acknowledge the updated disclaimer before continuing.
 
+## 12. Kits and Case — No Unauthorized Resale
+
+The Software in this repository is licensed under the MIT License
+(see `LICENSE`). Nothing in this section limits your rights under that
+license to use, modify, or distribute the **source code or software**.
+
+Separately, without **prior written permission** from the project,
+you may not sell, offer for sale, or commercially transfer:
+
+- a **PiWalletSV kit** or assembled signer marketed or sold as
+  PiWalletSV hardware;
+- a **3D-printed enclosure** made from the PiWallet case design in
+  this repository;
+- the **printable case design or a printed case by itself** (standalone
+  commercial sale of case files or printed shells).
+
+To request permission, contact **[@PiWalletSV on X](https://x.com/PiWalletSV)**.
+Personal, non-commercial use — including printing a case for your own
+device — is permitted.
+
+Generic Raspberry Pi, bonnet, camera, and other third-party parts may
+be bought and sold independently; this section applies only to
+PiWalletSV-branded kits and the PiWallet case design/goods described
+above.
+
 ---
 
 By continuing to use PiWalletSV, you acknowledge that you have read
 and accepted this Disclaimer in full.
 
-_Last reviewed: 2026-05-11. termsVersion: 1._
+_Last reviewed: 2026-05-27. termsVersion: 2._
