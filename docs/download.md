@@ -72,8 +72,8 @@ Once the image is verified and flashed:
   TESTNET smoke test.
 - See the [User manual](user-manual.md) for routine use after the
   device is set up, including
-  [Airgap status](user-manual.md#airgap-status) (what each Settings
-  indicator means).
+  [Upgrade your device](user-manual.md#upgrade-your-device) and
+  [Airgap status](user-manual.md#airgap-status).
 
 ## Building from source
 

@@ -45,6 +45,7 @@ piwallet
 ├── sign        verify + sign an unsigned_proposal
 ├── firstboot   manage the legal disclaimer state
 ├── diag        on-device diagnostics (airgap, display, GPIO, vault)
+├── backup      export/import vault backups to USB
 └── bonnet      launch the full on-device UI
 ```
 
@@ -465,6 +466,23 @@ Options worth knowing:
   to 15 if you want longer SD-card lifetime on a quiet kiosk.
 
 Exit codes are documented under [Operate § Exit codes](operate.md#exit-codes).
+
+## `piwallet backup`
+
+Export or import encrypted vault backups to a USB stick (FAT32/exFAT)
+under `PiWalletSV/backups/<timestamp>/`. **`terms.json` is never
+included** — disclaimer is re-accepted after a firmware upgrade.
+
+```bash
+piwallet backup list-devices
+piwallet backup export --stick-root /media/usb
+piwallet backup list-backups --stick-root /media/usb
+piwallet backup import --backup-dir /media/usb/PiWalletSV/backups/20260527-120000Z/
+```
+
+Import **replaces** the entire vault. Use `--import-settings` to also
+replace `settings.json`. See
+[User manual § Upgrade your device](user-manual.md#upgrade-your-device).
 
 ## `piwallet diag airgap`
 

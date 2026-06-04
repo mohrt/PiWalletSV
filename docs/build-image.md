@@ -326,15 +326,21 @@ operations there are deliberately atomic.
 ## Updating
 
 There is no in-place update mechanism, by design: an air-gapped
-device that can pull updates is not air-gapped. To upgrade:
+device that can pull updates is not air-gapped. The full end-user
+workflow — backup, re-flash, restore mnemonic or vault file, and
+post-upgrade verification — is documented in
+[User manual § Upgrade your device](user-manual.md#upgrade-your-device).
 
-1. Back up your existing vault: see
-   [Operate](operate.md#vault-stewardship).
-2. Download and verify a new image from the [Download](download.md)
-   page (Step&nbsp;1 above).
-3. Re-flash and re-set up.
-4. Restore the wallet from your written-down mnemonic, OR import the
-   vault file from the backup.
+Brief summary:
+
+1. Back up your mnemonic and/or copy `vault.bin` off the SD card
+   **before** flashing.
+2. Download and verify a new image from [Download](download.md)
+   (Step&nbsp;1 above).
+3. Re-flash the microSD (Step&nbsp;2 above).
+4. Restore from your written-down mnemonic, or copy `vault.bin` back
+   onto the new image — see the user manual for step-by-step detail.
+5. Re-run **Airgap status** and a TESTNET smoke test.
 
 ## Troubleshooting
 

@@ -21,7 +21,7 @@ Documentation=https://piwalletsv.com/operate/
 # Wait until /home is mounted before launching — vault state lives
 # under the pwsv home. We don't need the network (the device has
 # none) so no After=network-* dependency.
-After=local-fs.target
+After=local-fs.target piwallet-usb-mount.service
 # The bonnet drives the SPI panel directly; we don't want a getty
 # competing for tty1. Mask hciuart / wpa_supplicant separately in
 # provision-pi.sh — they're irrelevant here, listed only for clarity.
@@ -95,7 +95,7 @@ ProtectSystem=strict
 # subdirectory and nothing else — the rest of /home/pwsv stays
 # read-only and other users' homes are completely hidden.
 ProtectHome=read-only
-ReadWritePaths=/home/pwsv/.piwallet
+ReadWritePaths=/home/pwsv/.piwallet /mnt/piwallet-usb
 
 # /tmp and /var/tmp become a private tmpfs invisible to other
 # services. Picamera2 writes a few transient files; this isolates

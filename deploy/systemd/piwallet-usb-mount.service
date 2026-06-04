@@ -1,0 +1,22 @@
+# PiWalletSV USB mount daemon — root socket for bonnet backup/restore.
+#
+# The bonnet runs with NoNewPrivileges=yes; sudo cannot work. This
+# service exposes /run/piwallet/usb-mount.sock to group pwsv.
+[Unit]
+Description=PiWalletSV USB mount socket (root)
+Documentation=https://piwalletsv.com/operate/
+After=local-fs.target
+Before=piwallet-bonnet.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/piwallet/.venv/bin/python -m piwallet.backup.usb_mount_socket
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=piwallet
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target

@@ -37,6 +37,7 @@ import logging
 import os
 import time
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -70,6 +71,12 @@ def _acquire_display_lock() -> bool:
         return False
 
 from piwallet.bonnet.airgap_screen import AirgapScreen
+from piwallet.bonnet.usb_backup import (
+    release_usb_session,
+    run_usb_backup,
+    run_usb_backup_menu,
+    run_usb_restore,
+)
 from piwallet.bonnet.change_pin import run_change_pin
 from piwallet.bonnet.companion_pairing import (
     OfferCompanionPairingScreen,
@@ -108,10 +115,10 @@ from piwallet.ui.display import (
     FrameBuffer,
     open_display,
 )
-from piwallet.ui.input import InputManager, open_input
+from piwallet.ui.input import Button, Event, EventKind, InputManager, open_input
 from piwallet.ui.pairing_multipart_qr_screen import PairingMultipartQrScreen
 from piwallet.ui.settings_screen import SettingsScreen
-from piwallet.ui.widgets import Modal, draw_text
+from piwallet.ui.widgets import ListItem, ListView, Modal, draw_text
 
 log = logging.getLogger(__name__)
 
@@ -304,6 +311,8 @@ def _run_settings_loop(
           vault-gated operations.
         - ``"wiped"``     vault was wiped while verifying the current
           PIN; caller must propagate as exit code 3.
+        - ``"restored_usb"`` vault replaced from USB; caller must
+          re-unlock with the backup PIN.
     * ``exit_requested`` is the legacy long-B flag, retained for
       callers that still treat it specially.
     * ``pin`` is the active PIN to use after this call returns.
@@ -311,66 +320,102 @@ def _run_settings_loop(
     Live brightness preview is wired to ``display.set_brightness`` so
     the panel reflects the in-progress draft.
     """
-    screen = SettingsScreen(
-        settings=settings,
-        apply_brightness=display.set_brightness,
-    )
-    run_screen(
-        display,
-        input_mgr,
-        screen,
-        target_fps=target_fps,
-        idle_wake=idle_wake,
-    )
-    if screen.result == "saved":
-        save_settings(screen.settings, settings_path)
-        display.set_brightness(screen.settings.brightness)
-        return screen.settings, "saved", False, pin
-    if screen.result == "exit":
-        return settings, "exit", True, pin
-    if screen.result == "change_pin":
-        # The screen saved any value-row drafts on its own (A on an
-        # action row commits the draft so a half-adjusted brightness
-        # slider isn't lost while the sub-flow runs). Persist now,
-        # then drive the change-PIN sub-flow.
-        save_settings(screen.settings, settings_path)
-        display.set_brightness(screen.settings.brightness)
-        result, new_pin = run_change_pin(
-            display,
-            input_mgr,
-            vault,
-            pin,
-            target_fps=target_fps,
-            idle_wake=idle_wake,
+    while True:
+        screen = SettingsScreen(
+            settings=settings,
+            apply_brightness=display.set_brightness,
         )
-        if result == "wiped":
-            return screen.settings, "wiped", False, pin
-        if result == "changed" and new_pin is not None:
-            return screen.settings, "changed_pin", False, new_pin
-        # "cancelled" - keep the saved settings, original PIN.
-        return screen.settings, "saved", False, pin
-    if screen.result == "airgap":
-        # Same value-row-draft-saving pattern as change_pin: persist
-        # any in-flight tweaks before opening the airgap diag, so an
-        # operator who fiddled with brightness and then tapped the
-        # airgap row doesn't lose their slider change. The airgap
-        # screen itself is read-only — it can return only "back" or
-        # "exit".
-        save_settings(screen.settings, settings_path)
-        display.set_brightness(screen.settings.brightness)
-        airgap = AirgapScreen()
         run_screen(
             display,
             input_mgr,
-            airgap,
+            screen,
             target_fps=target_fps,
             idle_wake=idle_wake,
         )
-        if airgap.result == "exit":
-            return screen.settings, "exit", True, pin
-        return screen.settings, "saved", False, pin
-    # "back": SettingsScreen has already reverted the live preview.
-    return settings, "back", False, pin
+        if screen.result == "saved":
+            save_settings(screen.settings, settings_path)
+            display.set_brightness(screen.settings.brightness)
+            return screen.settings, "saved", False, pin
+        if screen.result == "exit":
+            return settings, "exit", True, pin
+        if screen.result == "change_pin":
+            # The screen saved any value-row drafts on its own (A on an
+            # action row commits the draft so a half-adjusted brightness
+            # slider isn't lost while the sub-flow runs). Persist now,
+            # then drive the change-PIN sub-flow.
+            save_settings(screen.settings, settings_path)
+            display.set_brightness(screen.settings.brightness)
+            result, new_pin = run_change_pin(
+                display,
+                input_mgr,
+                vault,
+                pin,
+                target_fps=target_fps,
+                idle_wake=idle_wake,
+            )
+            if result == "wiped":
+                return screen.settings, "wiped", False, pin
+            if result == "changed" and new_pin is not None:
+                return screen.settings, "changed_pin", False, new_pin
+            # "cancelled" - keep the saved settings, original PIN.
+            return screen.settings, "saved", False, pin
+        if screen.result == "airgap":
+            # Same value-row-draft-saving pattern as change_pin: persist
+            # any in-flight tweaks before opening the airgap diag, so an
+            # operator who fiddled with brightness and then tapped the
+            # airgap row doesn't lose their slider change. The airgap
+            # screen itself is read-only — it can return only "back" or
+            # "exit".
+            save_settings(screen.settings, settings_path)
+            display.set_brightness(screen.settings.brightness)
+            airgap = AirgapScreen()
+            run_screen(
+                display,
+                input_mgr,
+                airgap,
+                target_fps=target_fps,
+                idle_wake=idle_wake,
+            )
+            if airgap.result == "exit":
+                return screen.settings, "exit", True, pin
+            return screen.settings, "saved", False, pin
+        if screen.result == "usb_backup":
+            save_settings(screen.settings, settings_path)
+            display.set_brightness(screen.settings.brightness)
+            settings = screen.settings
+            while True:
+                choice = run_usb_backup_menu(
+                    display,
+                    input_mgr,
+                    target_fps=target_fps,
+                    idle_wake=idle_wake,
+                )
+                if choice is None:
+                    release_usb_session()
+                    break
+                if choice == "backup":
+                    run_usb_backup(
+                        display,
+                        input_mgr,
+                        vault_path=vault.path,
+                        settings_path=settings_path,
+                        target_fps=target_fps,
+                        idle_wake=idle_wake,
+                    )
+                elif choice == "restore":
+                    flow = run_usb_restore(
+                        display,
+                        input_mgr,
+                        vault_path=vault.path,
+                        settings_path=settings_path,
+                        target_fps=target_fps,
+                        idle_wake=idle_wake,
+                    )
+                    if flow == "ok":
+                        return screen.settings, "restored_usb", False, pin
+            continue
+        # "back": SettingsScreen has already reverted the live preview.
+        return settings, "back", False, pin
 
 
 def run_bonnet(
@@ -474,31 +519,146 @@ def run_bonnet(
         # ---- 2. Vault setup (first boot) or Unlock --------------
         vault = Vault(vault_path)
         if not vault.exists or not vault.is_initialized:
-            # First boot on this device. Walk the operator through
-            # picking a PIN twice, then drop into the wallet-list
-            # loop without an extra unlock prompt — they just typed
-            # the PIN twice, asking again would be hostile.
-            setup_result = run_vault_setup(
+            @dataclass
+            class _FirstBootChooser:
+                done: bool = False
+                result: str | None = None
+                _list: ListView = field(init=False)
+
+                def __post_init__(self) -> None:
+                    self._list = ListView(
+                        items=[
+                            ListItem(label="New vault (set PIN)", value="new"),
+                            ListItem(label="Restore from USB", value="usb"),
+                        ],
+                        title="First setup",
+                    )
+
+                def on_event(self, event: Event) -> None:
+                    if self.done:
+                        return
+                    if event.button == Button.B and event.kind in (
+                        EventKind.PRESS,
+                        EventKind.LONG,
+                    ):
+                        self.done = True
+                        return
+                    self._list.on_event(event)
+                    if self._list.confirmed is not None:
+                        self.done = True
+                        self.result = str(self._list.confirmed)
+
+                def draw(self, fb: FrameBuffer) -> None:
+                    self._list.draw(fb)
+
+            chooser = _FirstBootChooser()
+            run_screen(
                 display,
                 input_mgr,
-                vault_path,
+                chooser,
                 target_fps=target_fps,
                 idle_wake=idle_wake,
             )
-            if setup_result is None:
-                # Vault.create() failed (e.g. on-disk race). Fall
-                # back to the legacy "No vault" exit so the operator
-                # can investigate via the CLI.
-                _show_message(
+            if chooser.result == "usb":
+                flow = run_usb_restore(
                     display,
-                    title="No vault",
-                    body=(
-                        "Vault setup failed. Try `piwallet vault init` "
-                        "from the CLI."
-                    ),
+                    input_mgr,
+                    vault_path=vault_path,
+                    settings_path=settings_path,
+                    target_fps=target_fps,
+                    idle_wake=idle_wake,
                 )
-                return 1
-            vault, pin = setup_result
+                vault = Vault(vault_path)
+                if flow == "ok" and vault.is_initialized:
+                    verify = _make_verify_fn(vault)
+                    unlock = UnlockScreen(
+                        verify=verify,
+                        attempts_remaining=vault.attempts_remaining,
+                    )
+                    outcome: UnlockOutcome | None = run_screen(
+                        display,
+                        input_mgr,
+                        unlock,
+                        target_fps=target_fps,
+                        idle_wake=idle_wake,
+                    )
+                    if outcome is None:
+                        return 2
+                    if outcome.kind == "wiped":
+                        return 3
+                    assert outcome.kind == "ok" and outcome.pin is not None
+                    pin = outcome.pin
+                elif flow == "cancelled":
+                    chooser = _FirstBootChooser()
+                    run_screen(
+                        display,
+                        input_mgr,
+                        chooser,
+                        target_fps=target_fps,
+                        idle_wake=idle_wake,
+                    )
+                    if chooser.result != "new":
+                        return 2
+                    setup_result = run_vault_setup(
+                        display,
+                        input_mgr,
+                        vault_path,
+                        target_fps=target_fps,
+                        idle_wake=idle_wake,
+                    )
+                    if setup_result is None:
+                        _show_message(
+                            display,
+                            title="No vault",
+                            body=(
+                                "Vault setup failed. Try `piwallet vault init` "
+                                "from the CLI."
+                            ),
+                        )
+                        return 1
+                    vault, pin = setup_result
+                elif flow != "ok":
+                    return 2
+                else:
+                    setup_result = run_vault_setup(
+                        display,
+                        input_mgr,
+                        vault_path,
+                        target_fps=target_fps,
+                        idle_wake=idle_wake,
+                    )
+                    if setup_result is None:
+                        _show_message(
+                            display,
+                            title="No vault",
+                            body=(
+                                "Vault setup failed. Try `piwallet vault init` "
+                                "from the CLI."
+                            ),
+                        )
+                        return 1
+                    vault, pin = setup_result
+            elif chooser.result == "new":
+                setup_result = run_vault_setup(
+                    display,
+                    input_mgr,
+                    vault_path,
+                    target_fps=target_fps,
+                    idle_wake=idle_wake,
+                )
+                if setup_result is None:
+                    _show_message(
+                        display,
+                        title="No vault",
+                        body=(
+                            "Vault setup failed. Try `piwallet vault init` "
+                            "from the CLI."
+                        ),
+                    )
+                    return 1
+                vault, pin = setup_result
+            else:
+                return 2
         else:
             verify = _make_verify_fn(vault)
             unlock = UnlockScreen(
@@ -592,6 +752,29 @@ def run_bonnet(
                 idle_wake.timeout_ms = settings.sleep_timeout_ms
                 if status == "wiped":
                     return 3
+                if status == "restored_usb":
+                    vault = Vault(vault_path)
+                    verify = _make_verify_fn(vault)
+                    unlock = UnlockScreen(
+                        verify=verify,
+                        attempts_remaining=vault.attempts_remaining,
+                    )
+                    outcome = run_screen(
+                        display,
+                        input_mgr,
+                        unlock,
+                        target_fps=target_fps,
+                        idle_wake=idle_wake,
+                    )
+                    if outcome is None:
+                        return 2
+                    if outcome.kind == "wiped":
+                        return 3
+                    assert outcome.kind == "ok" and outcome.pin is not None
+                    pin = outcome.pin
+                    settings = load_settings(settings_path)
+                    display.set_brightness(settings.brightness)
+                    idle_wake.timeout_ms = settings.sleep_timeout_ms
                 if exit_requested:
                     return 0
                 continue

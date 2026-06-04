@@ -918,6 +918,125 @@ def firstboot_run(
         sys.exit(1)
 
 
+# ---- backup ----------------------------------------------------------
+
+
+@main.group(help="Export/import vault backups to USB or a directory.")
+def backup() -> None:
+    pass
+
+
+@backup.command("list-devices", help="List removable USB volumes (vfat/exfat).")
+def backup_list_devices() -> None:
+    from piwallet.backup.usb import list_usb_volumes
+
+    volumes = list_usb_volumes()
+    if not volumes:
+        click.echo("no removable USB volumes found")
+        return
+    for vol in volumes:
+        mp = vol.mountpoint or "(not mounted)"
+        click.echo(f"{vol.device}  {vol.display_name}  mount={mp}")
+
+
+@backup.command("list-backups", help="List backups on a mounted stick root.")
+@click.option(
+    "--stick-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    required=True,
+    help="Mount point of the USB volume (e.g. /media/usb).",
+)
+def backup_list_backups(stick_root: Path) -> None:
+    from piwallet.backup.bundle import list_backup_summaries
+
+    for manifest in list_backup_summaries(stick_root):
+        wallets = ", ".join(w.label for w in manifest.wallet_summary) or "(empty)"
+        click.echo(
+            f"{manifest.backup_dir_name}  {manifest.exported_at}  wallets={wallets}"
+        )
+
+
+@backup.command("export", help="Write vault (+ settings) to USB stick directory.")
+@click.option(
+    "--stick-root",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    required=True,
+)
+@click.option(
+    "--vault-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="Vault file (default ~/.piwallet/vault.bin).",
+)
+@click.option(
+    "--no-settings",
+    is_flag=True,
+    help="Omit settings.json from the export.",
+)
+def backup_export(stick_root: Path, vault_path: Path | None, no_settings: bool) -> None:
+    from piwallet.core.paths import default_vault_path
+    from piwallet.backup.bundle import BackupBundleError, export_backup
+
+    try:
+        result = export_backup(
+            stick_root,
+            vault_path=vault_path or default_vault_path(),
+            include_settings=not no_settings,
+        )
+    except BackupBundleError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+    click.echo(f"exported to {result.backup_dir}")
+    for w in result.manifest.wallet_summary:
+        click.echo(f"  wallet: {w.label} ({w.fingerprint})")
+
+
+@backup.command("import", help="Replace vault from a backup directory on USB.")
+@click.option(
+    "--backup-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    required=True,
+)
+@click.option(
+    "--vault-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+)
+@click.option(
+    "--import-settings",
+    is_flag=True,
+    help="Also replace settings.json from the backup.",
+)
+@click.option(
+    "--pin",
+    help="PIN for the backup vault (prompted if omitted).",
+)
+def backup_import(
+    backup_dir: Path,
+    vault_path: Path | None,
+    import_settings: bool,
+    pin: str | None,
+) -> None:
+    from piwallet.core.paths import default_vault_path
+    from piwallet.backup.bundle import BackupBundleError, import_backup
+
+    if pin is None:
+        pin = click.prompt("Backup vault PIN", hide_input=True)
+    try:
+        result = import_backup(
+            backup_dir,
+            vault_path=vault_path or default_vault_path(),
+            import_settings=import_settings,
+            pin=pin,
+        )
+    except BackupBundleError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+    click.echo(f"imported vault to {result.vault_path}")
+    if result.settings_imported:
+        click.echo("settings imported")
+
+
 # ---- diagnostics -------------------------------------------------------
 
 
