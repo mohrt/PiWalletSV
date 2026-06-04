@@ -188,6 +188,11 @@ export function formatImportWalletResult(result: ImportWalletResult): string {
   return parts.length > 0 ? parts.join("; ") + "." : "Nothing to import.";
 }
 
+/** Parse backup JSON without importing — for scan validation. */
+export function validateWalletBackupJson(raw: string): void {
+  parseBackupFile(raw);
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }

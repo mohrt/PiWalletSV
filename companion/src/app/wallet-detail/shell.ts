@@ -131,11 +131,7 @@ export function renderWalletDetailShell(
               </div>
             </label>
             <div id="addrScanWidget" hidden>
-              <video id="addrScanVideo" class="addr-scan-video" playsinline muted autoplay></video>
-              <p class="muted-line" id="addrScanStatus">Scanning for address QR…</p>
-              <div class="actions">
-                <button id="addrScanCancel" type="button">Cancel</button>
-              </div>
+              <div id="addrScanHost"></div>
             </div>
             <label class="field">
               <span>Network fee</span>
@@ -252,12 +248,7 @@ export function renderWalletDetailShell(
                 After the Pi signs, point this camera at the Pi's response QR.
               </p>
               <div id="pw1ScanWidget" hidden>
-                <video id="pw1ScanVideo" class="addr-scan-video" playsinline muted autoplay></video>
-                <p class="muted-line" id="pw1ScanStatus">Scanning for signed TX…</p>
-                <p class="muted-line" id="pw1ScanProgress"></p>
-                <div class="actions">
-                  <button id="pw1ScanCancel" type="button">Cancel</button>
-                </div>
+                <div id="pw1ScanHost"></div>
               </div>
               <div id="pw1ScanActions" class="actions send-scan-actions">
                 <button id="pw1ScanStart" type="button" class="primary">Scan Pi's response</button>

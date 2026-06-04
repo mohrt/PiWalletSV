@@ -28,7 +28,7 @@ import {
   BACKUP_FORMAT_VERSION,
   formatAppVersion,
 } from "../lib/version.js";
-import { startPw1Scan, type Pw1ScanHandle } from "../lib/camera-scan-pw1.js";
+import { mountCameraScanner, type CameraScannerHandle } from "./camera-scanner.js";
 import {
   clearPw1QrCanvas,
   startPw1QrPlayback,
@@ -244,9 +244,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
                 </button>
               </div>
               <div id="importQrPanel" class="backup-scan-panel" hidden>
-                <video id="importQrVideo" playsinline muted autoplay></video>
-                <p id="importQrStatus" class="muted-line" aria-live="polite"></p>
-                <p id="importQrProgress" class="muted-line"></p>
+                <div id="importQrHost"></div>
               </div>
             </div>
             <div id="importTab-json" class="backup-tab-panel" role="tabpanel" hidden>
@@ -344,9 +342,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $importPasteClear = root.querySelector<HTMLButtonElement>("#importPasteClear")!;
   const $importQrToggle   = root.querySelector<HTMLButtonElement>("#importQrToggle")!;
   const $importQrPanel    = root.querySelector<HTMLElement>("#importQrPanel")!;
-  const $importQrVideo    = root.querySelector<HTMLVideoElement>("#importQrVideo")!;
-  const $importQrStatus   = root.querySelector<HTMLElement>("#importQrStatus")!;
-  const $importQrProgress = root.querySelector<HTMLElement>("#importQrProgress")!;
+  const $importQrHost     = root.querySelector<HTMLElement>("#importQrHost")!;
   const $importReplaceWarning = root.querySelector<HTMLElement>("#importReplaceWarning")!;
   const $importReplaceStrip = root.querySelector<HTMLElement>("#importReplaceStrip")!;
   const $importReplaceMsg = root.querySelector<HTMLElement>("#importReplaceMsg")!;
@@ -359,7 +355,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
 
   let exportQrPlayback: Pw1QrPlayback | null = null;
   let exportQrUnwire: (() => void) | null = null;
-  let importQrScan: Pw1ScanHandle | null = null;
+  let importQrScan: CameraScannerHandle | null = null;
   let pendingReplaceRaw: string | null = null;
 
   // ---- saved flash ----
@@ -604,12 +600,9 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   }
 
   function stopImportQrScan(): void {
-    importQrScan?.stop();
+    importQrScan?.destroy();
     importQrScan = null;
-    $importQrVideo.srcObject = null;
     $importQrPanel.hidden = true;
-    $importQrProgress.textContent = "";
-    $importQrStatus.textContent = "";
     $importQrToggle.textContent = "Scan transfer QR";
     $importQrToggle.disabled = false;
   }
@@ -814,32 +807,24 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       stopImportQrScan();
       return;
     }
-    $importQrToggle.disabled = true;
     $importQrToggle.textContent = "Stop scanning";
-    $importQrPanel.hidden = true;
-    void (async () => {
-      importQrScan = await startPw1Scan(
-        $importQrVideo,
-        (received, total) => {
-          $importQrProgress.textContent = total
-            ? `Frame ${received} / ${total}`
-            : received > 0
-              ? `${received} frame${received > 1 ? "s" : ""} received…`
-              : "";
-        },
-        (bytes) => {
+    $importQrPanel.hidden = false;
+    importQrScan = mountCameraScanner($importQrHost, {
+      workflow: "settings-backup",
+      variant: "compact",
+      autoStart: true,
+      labels: {
+        scanning: "Scanning for transfer QR…",
+        cancel: "Cancel",
+      },
+      onAccept: (validation) => {
+        if (validation.result.workflow === "settings-backup") {
           stopImportQrScan();
-          void runImportBytes(bytes);
-        },
-        (err) => {
-          stopImportQrScan();
-          setBackupStatus(err, true);
-        },
-      );
-      $importQrPanel.hidden = false;
-      $importQrStatus.textContent = "Scanning for transfer QR…";
-      $importQrToggle.disabled = false;
-    })();
+          void runImportBytes(validation.result.bytes);
+        }
+      },
+      onStopped: () => stopImportQrScan(),
+    });
   });
 
   // ---- clear all data ----

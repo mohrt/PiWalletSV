@@ -3,8 +3,7 @@ import type { NetworkT } from "../../lib/envelope.js";
 import type { WalletRecord } from "../../lib/wallets.js";
 import type { BitailsClient } from "../../lib/bitails.js";
 import type { WocClient } from "../../lib/woc.js";
-import type { CameraScanHandle } from "../../lib/camera-scan.js";
-import type { Pw1ScanHandle } from "../../lib/camera-scan-pw1.js";
+import type { CameraScannerHandle } from "../camera-scanner.js";
 import type { Pw1QrPlayback } from "../../lib/pw1-qr-playback.js";
 
 export type Tab = "balance" | "send" | "receive" | "history" | "advanced";
@@ -55,8 +54,8 @@ export interface WalletDetailRuntime {
   sendBusy: boolean;
   sendStep: SendStep;
   feeRec: FeeRecommendation | null;
-  addrScanHandle: CameraScanHandle | null;
-  pw1ScanHandle: Pw1ScanHandle | null;
+  addrScanHandle: CameraScannerHandle | null;
+  pw1ScanHandle: CameraScannerHandle | null;
   sendQrTab: "proposal" | "scan";
   sendAmountIsMax: boolean;
   suppressSendAmountInput: boolean;

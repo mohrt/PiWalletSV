@@ -25,8 +25,8 @@ import {
   fetchFeeRecommendation,
   formatFeeRate,
 } from "../../lib/fee.js";
-import { startCameraScan } from "../../lib/camera-scan.js";
-import { startPw1Scan } from "../../lib/camera-scan-pw1.js";
+import { validatePw1Bytes } from "../../lib/scan-validate.js";
+import { mountCameraScanner } from "../camera-scanner.js";
 import {
   getDefaultCustomFeeRate,
   getFiatCurrency,
@@ -98,34 +98,36 @@ export function createSendTab(
   let feeRatesLoading = false;
 
   function stopAddrScan(): void {
-    rt.addrScanHandle?.stop();
+    rt.addrScanHandle?.destroy();
     rt.addrScanHandle = null;
     const $widget = rt.root.querySelector<HTMLElement>("#addrScanWidget");
     if ($widget) $widget.hidden = true;
   }
 
-  async function onStartAddrScan(): Promise<void> {
+  function onStartAddrScan(): void {
     const $widget = rt.root.querySelector<HTMLElement>("#addrScanWidget");
-    const $video = rt.root.querySelector<HTMLVideoElement>("#addrScanVideo");
-    const $status = rt.root.querySelector<HTMLElement>("#addrScanStatus");
+    const $host = rt.root.querySelector<HTMLElement>("#addrScanHost");
     const $addr = rt.root.querySelector<HTMLInputElement>("#sendAddress");
-    if (!$widget || !$video || !$status || !$addr) return;
+    if (!$widget || !$host || !$addr) return;
 
     stopAddrScan();
-    $status.textContent = "Scanning for address QR…";
     $widget.hidden = false;
 
-    rt.addrScanHandle = await startCameraScan(
-      $video,
-      (raw) => {
-        const addr = raw.replace(/^bitcoin:/i, "").split("?")[0].trim();
-        $addr.value = addr;
-        stopAddrScan();
+    rt.addrScanHandle = mountCameraScanner($host, {
+      workflow: "send-address",
+      variant: "compact",
+      autoStart: true,
+      labels: {
+        scanning: "Scanning for address QR…",
+        cancel: "Cancel",
       },
-      (err) => {
-        if ($status) $status.textContent = err;
+      onAccept: (validation) => {
+        if (validation.result.workflow === "send-address") {
+          $addr.value = validation.result.address;
+        }
       },
-    );
+      onStopped: () => stopAddrScan(),
+    });
   }
 
   function updateSendFlowProgress(phase: SendFlowPhase): void {
@@ -772,7 +774,7 @@ export function createSendTab(
   // ---------------------------------------------------------------------------
 
   function stopPw1Scan(): void {
-    rt.pw1ScanHandle?.stop();
+    rt.pw1ScanHandle?.destroy();
     rt.pw1ScanHandle = null;
     const $widget = rt.root.querySelector<HTMLElement>("#pw1ScanWidget");
     const $actions = rt.root.querySelector<HTMLElement>("#pw1ScanActions");
@@ -806,6 +808,11 @@ export function createSendTab(
     }
     setPasteSignedTxStatus(`decoding ${decoded.bytes.length} bytes…`);
     stopPw1Scan();
+    const validation = await validatePw1Bytes("send-signed-tx", decoded.bytes);
+    if (!validation.ok) {
+      setPasteSignedTxStatus(validation.message, true);
+      return;
+    }
     await onSignedTxReceived(decoded.bytes);
     const dropped =
       decoded.parsed.droppedLabeled.length + decoded.parsed.droppedOther.length;
@@ -814,37 +821,31 @@ export function createSendTab(
     setPasteSignedTxStatus(noteParts.join(" — "));
   }
 
-  async function onStartPw1Scan(): Promise<void> {
+  function onStartPw1Scan(): void {
     const $widget = rt.root.querySelector<HTMLElement>("#pw1ScanWidget");
     const $actions = rt.root.querySelector<HTMLElement>("#pw1ScanActions");
-    const $video = rt.root.querySelector<HTMLVideoElement>("#pw1ScanVideo");
-    const $status = rt.root.querySelector<HTMLElement>("#pw1ScanStatus");
-    const $progress = rt.root.querySelector<HTMLElement>("#pw1ScanProgress");
-    if (!$widget || !$video || !$status || !$actions) return;
+    const $host = rt.root.querySelector<HTMLElement>("#pw1ScanHost");
+    if (!$widget || !$host || !$actions) return;
 
     stopPw1Scan();
-    $status.textContent = "Scanning for signed TX…";
-    if ($progress) $progress.textContent = "";
     $widget.hidden = false;
     $actions.hidden = true;
 
-    rt.pw1ScanHandle = await startPw1Scan(
-      $video,
-      (received, total) => {
-        if ($progress) {
-          $progress.textContent = total
-            ? `Frame ${received} / ${total}`
-            : received > 0 ? `${received} frame${received > 1 ? "s" : ""} received…` : "";
+    rt.pw1ScanHandle = mountCameraScanner($host, {
+      workflow: "send-signed-tx",
+      variant: "compact",
+      autoStart: true,
+      labels: {
+        scanning: "Scanning for signed TX…",
+        cancel: "Cancel",
+      },
+      onAccept: (validation) => {
+        if (validation.result.workflow === "send-signed-tx") {
+          void onSignedTxReceived(validation.result.bytes);
         }
       },
-      (bytes) => {
-        stopPw1Scan();
-        void onSignedTxReceived(bytes);
-      },
-      (err) => {
-        if ($status) $status.textContent = err;
-      },
-    );
+      onStopped: () => stopPw1Scan(),
+    });
   }
 
   function showBroadcastWidget(): void {
@@ -1073,9 +1074,7 @@ export function createSendTab(
         if (tip) tip.hidden = !tip.hidden;
       });
     rt.root.querySelector<HTMLButtonElement>("#scanAddress")
-      ?.addEventListener("click", () => void onStartAddrScan());
-    rt.root.querySelector<HTMLButtonElement>("#addrScanCancel")
-      ?.addEventListener("click", stopAddrScan);
+      ?.addEventListener("click", () => onStartAddrScan());
     rt.root.querySelector<HTMLButtonElement>("#sendNext")
       ?.addEventListener("click", () => void onSendNext());
     rt.root.querySelector<HTMLButtonElement>("#sendMax")
@@ -1109,9 +1108,7 @@ export function createSendTab(
     rt.root.querySelector<HTMLButtonElement>("#copyProposalHex")
       ?.addEventListener("click", () => void onCopyProposalHex());
     rt.root.querySelector<HTMLButtonElement>("#pw1ScanStart")
-      ?.addEventListener("click", () => void onStartPw1Scan());
-    rt.root.querySelector<HTMLButtonElement>("#pw1ScanCancel")
-      ?.addEventListener("click", stopPw1Scan);
+      ?.addEventListener("click", () => onStartPw1Scan());
     rt.root.querySelector<HTMLButtonElement>("#pasteSignedTxDecode")
       ?.addEventListener("click", () => void onPasteSignedTxDecode());
     rt.root.querySelector<HTMLButtonElement>("#pasteSignedTxClear")

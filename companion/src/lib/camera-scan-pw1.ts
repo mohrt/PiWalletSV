@@ -1,36 +1,71 @@
 /**
  * PW1 multipart camera scanner — reusable utility for scanning an animated
  * PW1 QR sequence from a caller-supplied <video> element.
- *
- * Feeds frames through jsQR + MultipartAssembler. Calls onResult with the
- * fully reassembled bytes, then stops automatically. Call handle.stop() to
- * cancel early.
  */
 import jsQR from "jsqr";
-import { MultipartAssembler, MultipartQrError, pw1LineMeta } from "../pw1.js";
+import { MultipartAssembler, MultipartQrError } from "../pw1.js";
 
-const SCAN_INTERVAL_MS = 100;
+const DEFAULT_SCAN_INTERVAL_MS = 100;
+
+export interface Pw1ScanProgress {
+  received: number;
+  total: number | null;
+  missingIndices: number[];
+}
 
 export interface Pw1ScanHandle {
   stop(): void;
+  resetAssembler(): void;
+}
+
+export type Pw1ScanResultHandler = (
+  bytes: Uint8Array,
+) => boolean | void | Promise<boolean | void>;
+
+function missingFragmentIndices(asm: MultipartAssembler, cap = 16): number[] {
+  const total = asm.expectedTotal;
+  if (total === null) return [];
+  const have = new Set(asm.receivedIndices);
+  const missing: number[] = [];
+  for (let i = 0; i < total && missing.length < cap; i++) {
+    if (!have.has(i)) missing.push(i);
+  }
+  return missing;
+}
+
+function emitProgress(
+  asm: MultipartAssembler,
+  onProgress: (progress: Pw1ScanProgress) => void,
+): void {
+  onProgress({
+    received: asm.partsReceived,
+    total: asm.expectedTotal,
+    missingIndices: missingFragmentIndices(asm),
+  });
 }
 
 export async function startPw1Scan(
   videoEl: HTMLVideoElement,
-  onProgress: (received: number, total: number | null) => void,
-  onResult: (bytes: Uint8Array) => void,
+  onProgress: (progress: Pw1ScanProgress) => void,
+  onResult: Pw1ScanResultHandler,
   onError: (msg: string) => void,
+  options?: {
+    scanIntervalMs?: number;
+    onPw1Error?: (msg: string) => void;
+  },
 ): Promise<Pw1ScanHandle> {
   if (!navigator.mediaDevices?.getUserMedia) {
     onError("camera unavailable: needs HTTPS or localhost");
-    return { stop: () => {} };
+    return { stop: () => {}, resetAssembler: () => {} };
   }
 
+  const scanIntervalMs = options?.scanIntervalMs ?? DEFAULT_SCAN_INTERVAL_MS;
   let stream: MediaStream | null = null;
   let rafHandle: number | null = null;
   let done = false;
   let lastScanAt = 0;
   let asm = new MultipartAssembler();
+  let resolving = false;
 
   const offscreen = document.createElement("canvas");
   const offscreenCtx = offscreen.getContext("2d", { willReadFrequently: true });
@@ -48,10 +83,35 @@ export async function startPw1Scan(
     videoEl.srcObject = null;
   }
 
+  function resetAssembler() {
+    asm.reset();
+    emitProgress(asm, onProgress);
+  }
+
+  async function handleComplete(out: Uint8Array) {
+    if (resolving) return;
+    resolving = true;
+    try {
+      const accepted = await onResult(out);
+      if (accepted === false) {
+        resetAssembler();
+        resolving = false;
+        return;
+      }
+      release();
+    } catch (e) {
+      resolving = false;
+      onError((e as Error).message);
+    }
+  }
+
   function tick(now: number) {
-    if (done) return;
+    if (done || resolving) {
+      if (!done) rafHandle = requestAnimationFrame(tick);
+      return;
+    }
     if (
-      now - lastScanAt >= SCAN_INTERVAL_MS &&
+      now - lastScanAt >= scanIntervalMs &&
       videoEl.readyState >= 2 &&
       videoEl.videoWidth > 0 &&
       offscreenCtx
@@ -74,19 +134,14 @@ export async function startPw1Scan(
             out = asm.feed(trimmed);
           } catch (e) {
             if (e instanceof MultipartQrError) {
-              asm = new MultipartAssembler();
+              options?.onPw1Error?.(e.message);
+              resetAssembler();
             }
           }
-          const meta = pw1LineMeta(trimmed);
-          if (out !== null && meta) {
-            onProgress(meta[0], meta[0]);
-          } else {
-            onProgress(asm.partsReceived, asm.expectedTotal);
-          }
           if (out !== null) {
-            release();
-            onResult(out);
-            return;
+            void handleComplete(out);
+          } else {
+            emitProgress(asm, onProgress);
           }
         }
       }
@@ -108,7 +163,7 @@ export async function startPw1Scan(
       OverconstrainedError: "camera constraints failed",
     };
     onError(map[err.name] ?? `camera error: ${err.message ?? err.name}`);
-    return { stop: () => {} };
+    return { stop: () => {}, resetAssembler: () => {} };
   }
 
   videoEl.srcObject = stream;
@@ -118,6 +173,7 @@ export async function startPw1Scan(
   });
   try { await videoEl.play(); } catch { /* AbortError on rapid teardown is benign */ }
 
+  emitProgress(asm, onProgress);
   rafHandle = requestAnimationFrame(tick);
-  return { stop: release };
+  return { stop: release, resetAssembler };
 }
