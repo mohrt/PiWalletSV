@@ -262,6 +262,9 @@ export function createReceiveTab(
   }
 
   function bind(): void {
+    rt.root
+      .querySelector<HTMLInputElement>("#receiveVerifiedCheck")
+      ?.addEventListener("change", onReceiveVerifiedChange);
     rt.root.querySelector<HTMLButtonElement>("#receiveVerifyTip")?.addEventListener("click", (e) => {
       e.preventDefault();
       const tip = rt.root.querySelector<HTMLElement>("#receiveVerifyText");
@@ -283,6 +286,7 @@ export function createReceiveTab(
     rt.root
       .querySelector<HTMLButtonElement>("#receiveAdvanceConfirmNo")
       ?.addEventListener("click", hideReceiveAdvanceConfirm);
+    syncReceiveVerifiedUi();
   }
 
   function onActivate(): void {
