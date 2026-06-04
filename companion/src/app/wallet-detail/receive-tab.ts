@@ -22,6 +22,39 @@ export function createReceiveTab(
   rt: WalletDetailRuntime,
   actions: WalletDetailActions,
 ): ReceiveTab {
+  /** Receive index the user last checked "verified on Pi" for. */
+  let verifiedReceiveIndex: number | null = null;
+
+  function isReceiveVerified(): boolean {
+    return rt.wallet != null && verifiedReceiveIndex === rt.wallet.nextReceiveIndex;
+  }
+
+  function syncReceiveVerifiedUi(): void {
+    const verified = isReceiveVerified();
+    const $block = rt.root.querySelector<HTMLElement>("#receiveShareBlock");
+    const $check = rt.root.querySelector<HTMLInputElement>("#receiveVerifiedCheck");
+    const $hint = rt.root.querySelector<HTMLElement>("#receiveVerifyHint");
+    const $copy = rt.root.querySelector<HTMLButtonElement>("#copyAddress");
+    const $gate = rt.root.querySelector<HTMLElement>("#receiveQrGate");
+    const $toggle = rt.root.querySelector<HTMLButtonElement>("#receiveQrSizeToggle");
+    if ($block) $block.classList.toggle("receive-gated", !verified);
+    if ($check) $check.checked = verified;
+    if ($hint) $hint.hidden = verified;
+    if ($copy) $copy.disabled = !verified;
+    if ($gate) {
+      $gate.hidden = verified;
+      $gate.setAttribute("aria-hidden", verified ? "true" : "false");
+    }
+    if ($toggle) $toggle.disabled = !verified;
+  }
+
+  function onReceiveVerifiedChange(): void {
+    const $check = rt.root.querySelector<HTMLInputElement>("#receiveVerifiedCheck");
+    if (!rt.wallet || !$check) return;
+    verifiedReceiveIndex = $check.checked ? rt.wallet.nextReceiveIndex : null;
+    syncReceiveVerifiedUi();
+  }
+
   function receiveAdvanceWarning(nextIndex: number): string | null {
     if (!rt.wallet || nextIndex <= rt.wallet.nextReceiveIndex) return null;
     if (!rt.wallet.lastScan) {
@@ -157,6 +190,7 @@ export function createReceiveTab(
       $status.textContent = `qr render error: ${(e as Error).message}`;
     }
     renderRecentList();
+    syncReceiveVerifiedUi();
   }
 
   function renderRecentList(): void {
@@ -182,7 +216,9 @@ export function createReceiveTab(
       `;
       $list.appendChild(li);
     }
+    const verified = isReceiveVerified();
     $list.querySelectorAll<HTMLButtonElement>("button.copy").forEach((b) => {
+      b.disabled = !verified;
       b.addEventListener("click", () => {
         const v = b.dataset.address ?? "";
         void navigator.clipboard
@@ -250,6 +286,7 @@ export function createReceiveTab(
   }
 
   function onActivate(): void {
+    syncReceiveVerifiedUi();
     void refreshReceiveIndex();
   }
 
