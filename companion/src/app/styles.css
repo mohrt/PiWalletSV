@@ -416,6 +416,42 @@ button:hover:not(:disabled) {
   min-width: 220px;
 }
 
+.camera-scanner-host {
+  width: 100%;
+}
+
+.camera-scanner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.camera-scanner-video {
+  background: #000;
+  border-radius: 8px;
+  width: 360px;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.camera-scanner-meta {
+  flex: 1 1 220px;
+  min-width: 220px;
+}
+
+.camera-scanner-meta p {
+  margin: 0.35rem 0;
+}
+
+.camera-scanner-progress[hidden],
+.camera-scanner-missing[hidden] {
+  display: none;
+}
+
 .scan-status p {
   margin: 0 0 0.6rem 0;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -2444,7 +2480,17 @@ label.button-like:hover {
     flex-direction: column;
   }
 
-  .scan-card video {
+  .scan-card video,
+  .camera-scanner-video {
+    width: 100%;
+  }
+
+  .camera-scanner {
+    flex-direction: column;
+  }
+
+  .camera-scanner-meta {
+    min-width: 0;
     width: 100%;
   }
 

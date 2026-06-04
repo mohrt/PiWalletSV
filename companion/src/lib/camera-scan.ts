@@ -1,10 +1,6 @@
 /**
  * Lightweight single-QR camera scanner.
- * Scans frames from a caller-supplied <video> element using jsQR and calls
- * onResult once with the first decoded string, then stops automatically.
- * Call handle.stop() to cancel early (e.g. user dismisses the widget).
  */
-
 import jsQR from "jsqr";
 
 const SCAN_INTERVAL_MS = 150;
@@ -13,9 +9,13 @@ export interface CameraScanHandle {
   stop(): void;
 }
 
+export type CameraScanResultHandler = (
+  raw: string,
+) => boolean | void | Promise<boolean | void>;
+
 export async function startCameraScan(
   videoEl: HTMLVideoElement,
-  onResult: (raw: string) => void,
+  onResult: CameraScanResultHandler,
   onError: (msg: string) => void,
 ): Promise<CameraScanHandle> {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -27,6 +27,7 @@ export async function startCameraScan(
   let rafHandle: number | null = null;
   let done = false;
   let lastScanAt = 0;
+  let resolving = false;
 
   const offscreen = document.createElement("canvas");
   const offscreenCtx = offscreen.getContext("2d", { willReadFrequently: true });
@@ -44,8 +45,27 @@ export async function startCameraScan(
     videoEl.srcObject = null;
   }
 
+  async function handleDecode(raw: string) {
+    if (resolving) return;
+    resolving = true;
+    try {
+      const accepted = await onResult(raw);
+      if (accepted === false) {
+        resolving = false;
+        return;
+      }
+      release();
+    } catch (e) {
+      resolving = false;
+      onError((e as Error).message);
+    }
+  }
+
   function tick(now: number) {
-    if (done) return;
+    if (done || resolving) {
+      if (!done) rafHandle = requestAnimationFrame(tick);
+      return;
+    }
     if (
       now - lastScanAt >= SCAN_INTERVAL_MS &&
       videoEl.readyState >= 2 &&
@@ -63,9 +83,7 @@ export async function startCameraScan(
         inversionAttempts: "dontInvert",
       });
       if (code?.data) {
-        release();
-        onResult(code.data);
-        return;
+        void handleDecode(code.data);
       }
     }
     rafHandle = requestAnimationFrame(tick);
