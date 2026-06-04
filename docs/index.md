@@ -20,6 +20,9 @@ just signs.
 [Launch wallet ↗]({{ companion_url }}/){ .pwsv-cta }
 [Read the docs](getting-started.md){ .pwsv-cta-secondary }
 
+!!! tip "On your phone"
+    For full-screen access (camera pairing, sends), [add the companion to your Home Screen](user-manual.md#add-to-home-screen).
+
 </div>
 </div>
 
@@ -134,3 +137,7 @@ device signs anything.
     Coming soon.
 
 </div>
+
+## Help & support
+
+--8<-- "docs/includes/support-contact.md"

@@ -31,6 +31,13 @@ import {
 import { renderHeader } from "./nav.js";
 import { WocClient, effectiveWocBase } from "../lib/woc.js";
 import { scanWalletUtxos } from "../lib/utxo.js";
+import {
+  canPromptInstall,
+  detectInstallPlatform,
+  dismissInstallPrompt,
+  promptInstall,
+  shouldShowInstallBanner,
+} from "../lib/pwa-install.js";
 
 const SATS_PER_BSV = 100_000_000;
 
@@ -53,6 +60,17 @@ export function mountWalletsPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
       ${renderHeader("Wallets", "wallets")}
+
+      <section id="installBanner" class="card install-banner" hidden>
+        <h2 class="install-banner-title">Install PiWalletSV on this device</h2>
+        <p id="installBannerBody" class="muted-line install-banner-body"></p>
+        <div class="actions install-banner-actions">
+          <button id="installBannerPrimary" type="button" class="primary" hidden>
+            Install
+          </button>
+          <button id="installBannerDismiss" type="button">Not now</button>
+        </div>
+      </section>
 
       <div class="wallets-toolbar">
         <p class="muted-line" id="walletHint" hidden></p>
@@ -107,6 +125,77 @@ export function mountWalletsPage(root: HTMLElement): () => void {
   }
   const $unit   = root.querySelector<HTMLSelectElement>("#listUnitSelect")!;
   const $sort   = root.querySelector<HTMLSelectElement>("#listSortSelect")!;
+  const $installBanner = root.querySelector<HTMLElement>("#installBanner")!;
+  const $installBody = root.querySelector<HTMLElement>("#installBannerBody")!;
+  const $installPrimary = root.querySelector<HTMLButtonElement>("#installBannerPrimary")!;
+  const $installDismiss = root.querySelector<HTMLButtonElement>("#installBannerDismiss")!;
+
+  function hideInstallBanner(): void {
+    $installBanner.hidden = true;
+  }
+
+  function setupInstallBanner(): void {
+    if (!shouldShowInstallBanner()) {
+      hideInstallBanner();
+      return;
+    }
+
+    const platform = detectInstallPlatform();
+    $installBanner.hidden = false;
+
+    if (platform === "ios") {
+      $installBody.textContent =
+        "Tap Share (↑), then Add to Home Screen. Opens full-screen like an app — " +
+        "handy for camera pairing and sends.";
+      $installPrimary.hidden = true;
+      $installDismiss.textContent = "Got it";
+    } else if (platform === "chromium" && canPromptInstall()) {
+      $installBody.textContent =
+        "Install for full-screen access without the browser chrome.";
+      $installPrimary.hidden = false;
+      $installPrimary.textContent = "Install";
+      $installDismiss.textContent = "Not now";
+    } else if (platform === "chromium") {
+      $installBody.textContent =
+        "Open the browser menu (⋮) and choose Install app or Add to Home screen.";
+      $installPrimary.hidden = true;
+      $installDismiss.textContent = "Got it";
+    } else {
+      $installBody.textContent =
+        "Add this page to your home screen for full-screen access.";
+      $installPrimary.hidden = true;
+      $installDismiss.textContent = "Got it";
+    }
+  }
+
+  $installDismiss.addEventListener("click", () => {
+    dismissInstallPrompt();
+    hideInstallBanner();
+  });
+
+  $installPrimary.addEventListener("click", () => {
+    void (async () => {
+      $installPrimary.disabled = true;
+      const outcome = await promptInstall();
+      $installPrimary.disabled = false;
+      if (outcome === "accepted") {
+        hideInstallBanner();
+        $status.classList.remove("error");
+        $status.textContent = "Installed — open PiWalletSV from your home screen.";
+        return;
+      }
+      if (outcome === "dismissed") {
+        $status.textContent = "Install dismissed — use the browser menu anytime.";
+        return;
+      }
+      $installBody.textContent =
+        "Install unavailable here — use the browser menu (⋮) → Install app.";
+      $installPrimary.hidden = true;
+      $installDismiss.textContent = "Got it";
+    })();
+  });
+
+  setupInstallBanner();
 
   function displayWallets(): WalletRecord[] {
     return sortWalletRecords(cachedWallets, listSort);

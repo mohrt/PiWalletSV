@@ -101,6 +101,14 @@ re-prompts.
 After accepting, you land on `/#/wallets`, which is empty until you
 pair a wallet.
 
+### Add to Home Screen { #add-to-home-screen }
+
+On a phone, install the companion to your home screen so it opens
+full-screen like an app — without the browser address bar getting in
+the way during QR scans.
+
+--8<-- "docs/includes/pwa-install-steps.md"
+
 ## 4. Pair the Pi with the companion
 
 Pairing copies the **public** account xpub from the Pi onto the
@@ -472,3 +480,7 @@ signed.**
 - You have lost your funds. We're sorry. This is the
   non-custodial promise: no party (the project, the device, the
   companion) can recover your wallet without the mnemonic.
+
+## Help & support
+
+--8<-- "docs/includes/support-contact.md"
