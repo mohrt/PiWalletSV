@@ -318,8 +318,10 @@ export function renderWalletDetailShell(
           </p>
           <p class="muted-line" id="receivePath"></p>
           <label class="receive-verify-check">
-            <input id="receiveVerifiedCheck" type="checkbox" />
-            <span>I verified this address on the Pi</span>
+            <span class="receive-verify-check-mark">
+              <input id="receiveVerifiedCheck" type="checkbox" />
+            </span>
+            <span class="receive-verify-check-text">I verified this address on the Pi</span>
           </label>
           <p id="receiveVerifyHint" class="muted-line receive-verify-hint">
             Check the box after matching this address on the Pi bonnet.

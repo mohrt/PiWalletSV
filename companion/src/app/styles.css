@@ -2030,15 +2030,23 @@ label.button-like:hover {
    ========================================================================= */
 
 
+.card > label.receive-verify-check {
+  display: flex;
+  color: var(--text);
+  font-size: 0.95rem;
+  margin-bottom: 0;
+}
+
 .receive-verify-check {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 0.75rem;
   margin: 0.75rem 0 0;
-  padding: 0.65rem 0.85rem;
+  padding: 0 0.85rem;
   min-height: 44px;
+  box-sizing: border-box;
   font-size: 0.95rem;
-  line-height: 1.4;
   cursor: pointer;
   user-select: none;
   border: 1px solid var(--border);
@@ -2058,13 +2066,24 @@ label.button-like:hover {
   background: rgba(88, 196, 122, 0.08);
 }
 
+.receive-verify-check-mark {
+  display: flex;
+  align-items: center;
+  flex: 0 0 1.35rem;
+}
+
 .receive-verify-check input {
-  flex-shrink: 0;
   width: 1.35rem;
   height: 1.35rem;
   margin: 0;
+  padding: 0;
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+.receive-verify-check-text {
+  flex: 1 1 auto;
+  line-height: 1.25;
 }
 
 .receive-verify-check input:focus-visible {
@@ -2435,7 +2454,7 @@ label.button-like:hover {
   }
 
   .receive-verify-check {
-    padding: 0.75rem 0.9rem;
+    padding: 0 0.9rem;
   }
 
   .receive-row {
