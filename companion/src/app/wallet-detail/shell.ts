@@ -317,8 +317,19 @@ export function renderWalletDetailShell(
             </span>
           </p>
           <p class="muted-line" id="receivePath"></p>
+          <label class="receive-verify-check">
+            <input id="receiveVerifiedCheck" type="checkbox" />
+            <span>I verified this address on the Pi</span>
+          </label>
+          <p id="receiveVerifyHint" class="muted-line receive-verify-hint">
+            Check the box after matching this address on the Pi bonnet.
+          </p>
+          <div id="receiveShareBlock" class="receive-share-block receive-gated">
           <div class="receive-row">
             <div class="receive-qr-wrap">
+              <div id="receiveQrGate" class="receive-qr-gate" aria-hidden="true">
+                Verify on Pi to show QR
+              </div>
               <canvas id="receiveQr" width="240" height="240"></canvas>
               <button id="receiveQrSizeToggle" type="button" class="receive-qr-size-btn">
                 Larger QR
@@ -342,6 +353,7 @@ export function renderWalletDetailShell(
               </div>
               <p class="muted-line" id="receiveStatus"></p>
             </div>
+          </div>
           </div>
           <details class="panel-details">
             <summary><span class="panel-details-label">Recent receive addresses</span></summary>
