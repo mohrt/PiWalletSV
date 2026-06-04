@@ -219,6 +219,47 @@ export async function addWallet(input: AddWalletInput): Promise<WalletRecord> {
   return rec;
 }
 
+/** Client-side sort keys for the wallet list page. */
+export type WalletListSort =
+  | "date"
+  | "date-asc"
+  | "label"
+  | "label-desc"
+  | "balance"
+  | "balance-asc";
+
+export function sortWalletRecords(
+  wallets: WalletRecord[],
+  sort: WalletListSort,
+): WalletRecord[] {
+  const copy = [...wallets];
+  copy.sort((a, b) => {
+    switch (sort) {
+      case "date":
+        return a.addedAt < b.addedAt ? 1 : a.addedAt > b.addedAt ? -1 : 0;
+      case "date-asc":
+        return a.addedAt > b.addedAt ? 1 : a.addedAt < b.addedAt ? -1 : 0;
+      case "label":
+        return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+      case "label-desc":
+        return b.label.localeCompare(a.label, undefined, { sensitivity: "base" });
+      case "balance": {
+        const ba = a.lastScan?.totalSats ?? -1;
+        const bb = b.lastScan?.totalSats ?? -1;
+        return bb - ba || a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+      }
+      case "balance-asc": {
+        const ba = a.lastScan?.totalSats ?? Number.MAX_SAFE_INTEGER;
+        const bb = b.lastScan?.totalSats ?? Number.MAX_SAFE_INTEGER;
+        return ba - bb || a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+      }
+      default:
+        return 0;
+    }
+  });
+  return copy;
+}
+
 export async function listWallets(): Promise<WalletRecord[]> {
   const out = await withStore("readonly", (store) =>
     txPromise<WalletRecord[]>(
@@ -226,8 +267,7 @@ export async function listWallets(): Promise<WalletRecord[]> {
       "getAll",
     ),
   );
-  // Stable order: newest first.
-  return out.sort((a, b) => (a.addedAt < b.addedAt ? 1 : -1));
+  return sortWalletRecords(out, "date");
 }
 
 export async function getWallet(id: string): Promise<WalletRecord | null> {

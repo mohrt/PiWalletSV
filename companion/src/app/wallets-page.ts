@@ -12,18 +12,27 @@ import { splitConfirmedPending } from "../lib/balance-split.js";
 import { relativeTimeFrom } from "../lib/relative-time.js";
 import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
 import {
+  KEY_LIST_SORT,
+  KEY_LIST_UNIT,
+  getFiatCurrency,
+  getListSort,
+  getListUnit,
+  parseListSort,
+  type ListUnit,
+} from "../lib/companion-settings.js";
+import {
+  type WalletListSort,
   type WalletRecord,
   listWallets,
   setLastScan,
+  sortWalletRecords,
   withDefaults,
 } from "../lib/wallets.js";
 import { renderHeader } from "./nav.js";
 import { WocClient, effectiveWocBase } from "../lib/woc.js";
-import { getFiatCurrency } from "./settings-page.js";
 import { scanWalletUtxos } from "../lib/utxo.js";
 
 const SATS_PER_BSV = 100_000_000;
-const LIST_UNIT_KEY = "piwallet.listUnit";
 
 function escapeHtml(s: string): string {
   return s
@@ -34,9 +43,8 @@ function escapeHtml(s: string): string {
 }
 
 export function mountWalletsPage(root: HTMLElement): () => void {
-  type ListUnit = "sats" | "bsv" | "fiat";
-  let listUnit: ListUnit =
-    (localStorage.getItem(LIST_UNIT_KEY) as ListUnit) ?? "sats";
+  let listUnit: ListUnit = getListUnit();
+  let listSort: WalletListSort = getListSort();
   let bsvUsdPrice: number | null = null;
   let priceFetchedAt = 0;
   let cachedWallets: WalletRecord[] = [];
@@ -50,7 +58,15 @@ export function mountWalletsPage(root: HTMLElement): () => void {
         <p class="muted-line" id="walletHint" hidden></p>
         <p class="muted-line" id="walletStatus" aria-live="polite"></p>
         <div class="wallets-toolbar-right">
-          <select id="listUnitSelect" class="list-unit-select">
+          <select id="listSortSelect" class="list-unit-select" aria-label="Sort wallets">
+            <option value="date"${listSort === "date" ? " selected" : ""}>Newest first</option>
+            <option value="date-asc"${listSort === "date-asc" ? " selected" : ""}>Oldest first</option>
+            <option value="label"${listSort === "label" ? " selected" : ""}>Label A–Z</option>
+            <option value="label-desc"${listSort === "label-desc" ? " selected" : ""}>Label Z–A</option>
+            <option value="balance"${listSort === "balance" ? " selected" : ""}>Balance high–low</option>
+            <option value="balance-asc"${listSort === "balance-asc" ? " selected" : ""}>Balance low–high</option>
+          </select>
+          <select id="listUnitSelect" class="list-unit-select" aria-label="Balance unit">
             <option value="sats"${listUnit === "sats" ? " selected" : ""}>sats</option>
             <option value="bsv"${listUnit === "bsv" ? " selected" : ""}>BSV</option>
             <option value="fiat"${listUnit === "fiat" ? " selected" : ""}>${getFiatCurrency()}</option>
@@ -90,6 +106,11 @@ export function mountWalletsPage(root: HTMLElement): () => void {
     $hint.textContent = signedTxHint;
   }
   const $unit   = root.querySelector<HTMLSelectElement>("#listUnitSelect")!;
+  const $sort   = root.querySelector<HTMLSelectElement>("#listSortSelect")!;
+
+  function displayWallets(): WalletRecord[] {
+    return sortWalletRecords(cachedWallets, listSort);
+  }
 
   // ── price fetch ────────────────────────────────────────────────────────────
   async function fetchPrice(): Promise<void> {
@@ -204,7 +225,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
     $status.textContent = wallets.length === 0
       ? ""
       : `${wallets.length} wallet${wallets.length === 1 ? "" : "s"}`;
-    renderList(wallets);
+    renderList(displayWallets());
   }
 
   // ── per-wallet balance refresh ─────────────────────────────────────────────
@@ -237,7 +258,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
       if (listUnit === "fiat" && bsvUsdPrice === null) await fetchPrice();
       const idx = cachedWallets.findIndex(w => w.id === wallet.id);
       if (idx >= 0) cachedWallets[idx] = { ...cachedWallets[idx], lastScan: snapshot };
-      renderList(cachedWallets);
+      renderList(displayWallets());
     } catch (e) {
       btn.disabled = false;
       btn.textContent = "↻";
@@ -251,16 +272,22 @@ export function mountWalletsPage(root: HTMLElement): () => void {
   // ── unit selector ──────────────────────────────────────────────────────────
   $unit.addEventListener("change", async () => {
     listUnit = $unit.value as ListUnit;
-    localStorage.setItem(LIST_UNIT_KEY, listUnit);
+    localStorage.setItem(KEY_LIST_UNIT, listUnit);
     if (listUnit === "fiat" && bsvUsdPrice === null) {
       await fetchPrice();
     }
-    if (!cancelled) renderList(cachedWallets);
+    if (!cancelled) renderList(displayWallets());
+  });
+
+  $sort.addEventListener("change", () => {
+    listSort = parseListSort($sort.value);
+    localStorage.setItem(KEY_LIST_SORT, listSort);
+    if (!cancelled) renderList(displayWallets());
   });
 
   void render();
   // Pre-fetch price if fiat is the stored unit
-  if (listUnit === "fiat") void fetchPrice().then(() => { if (!cancelled) renderList(cachedWallets); });
+  if (listUnit === "fiat") void fetchPrice().then(() => { if (!cancelled) renderList(displayWallets()); });
 
   return () => { cancelled = true; };
 }
