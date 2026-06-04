@@ -1,5 +1,11 @@
 import { relativeTimeFrom } from "../../lib/relative-time.js";
-import { fetchWalletHistory, formatTxTimestamp } from "../../lib/history.js";
+import {
+  enrichWalletHistorySlice,
+  fetchWalletHistory,
+  formatTxTimestamp,
+  historyAddressesForWallet,
+} from "../../lib/history.js";
+import { HISTORY_PAGE_SIZE } from "../../lib/config.js";
 import { BitailsClient, effectiveBitailsBase } from "../../lib/bitails.js";
 import { WocClient, effectiveWocBase, wocExplorerTxUrl } from "../../lib/woc.js";
 import { setLastHistory } from "../../lib/wallets.js";
@@ -10,12 +16,42 @@ export interface HistoryTab extends WalletDetailTab {
   renderHistory(): void;
   refreshHistory(): Promise<void>;
   scanBalanceForHistory(): Promise<void>;
+  loadMoreHistory(): Promise<void>;
 }
 
 export function createHistoryTab(
   rt: WalletDetailRuntime,
   actions: WalletDetailActions,
 ): HistoryTab {
+  let historyVisibleCount = HISTORY_PAGE_SIZE;
+
+  function historyStatusLine(snap: NonNullable<typeof rt.wallet>["lastHistory"]): string {
+    if (!snap) return "";
+    const shown = Math.min(historyVisibleCount, snap.entries.length);
+    const countPart =
+      shown < snap.entries.length
+        ? `Showing ${shown} of ${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"}`
+        : `${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"}`;
+    const truncatedNote = snap.truncated ? " (list capped)" : "";
+    return (
+      `${countPart}${truncatedNote} · ` +
+      `${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} checked · ` +
+      `last fetched ${relativeTimeFrom(snap.at)}`
+    );
+  }
+
+  function updateLoadMoreButton(snap: NonNullable<typeof rt.wallet>["lastHistory"]): void {
+    const $loadMore = rt.root.querySelector<HTMLButtonElement>("#historyLoadMore");
+    if (!$loadMore || !snap) return;
+    const hasMore = historyVisibleCount < snap.entries.length;
+    $loadMore.hidden = !hasMore;
+    if (hasMore) {
+      const remaining = snap.entries.length - historyVisibleCount;
+      const next = Math.min(HISTORY_PAGE_SIZE, remaining);
+      $loadMore.textContent = `Load ${next} more`;
+      $loadMore.disabled = rt.historyRunning;
+    }
+  }
   function renderHistory(): void {
     if (!rt.wallet) return;
     const { root } = rt;
@@ -51,6 +87,8 @@ export function createHistoryTab(
             : "Click Refresh to fetch history from Bitails.";
       }
       if ($status) $status.textContent = "";
+      const $loadMore = root.querySelector<HTMLButtonElement>("#historyLoadMore");
+      if ($loadMore) $loadMore.hidden = true;
       return;
     }
     $empty.hidden = snap.entries.length > 0;
@@ -62,13 +100,12 @@ export function createHistoryTab(
         `Checked ${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} — none had history.`;
     }
     if ($status) {
-      $status.textContent =
-        `${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"} · ` +
-        `${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} checked · ` +
-        `last fetched ${relativeTimeFrom(snap.at)}`;
+      $status.textContent = historyStatusLine(snap);
     }
+    updateLoadMoreButton(snap);
     $list.innerHTML = "";
-    for (const tx of snap.entries) {
+    const visible = snap.entries.slice(0, historyVisibleCount);
+    for (const tx of visible) {
       const li = document.createElement("li");
       const deltaKnown = tx.deltaKnown !== false;
       const isReceive = tx.deltaSats >= 0;
@@ -147,12 +184,18 @@ export function createHistoryTab(
         },
       });
       if (rt.cancelled) return;
+      historyVisibleCount = HISTORY_PAGE_SIZE;
       await setLastHistory(rt.wallet.id, snap);
       rt.wallet.lastHistory = snap;
       renderHistory();
       if ($status) {
+        const shown = Math.min(historyVisibleCount, snap.entries.length);
+        const countPart =
+          shown < snap.entries.length
+            ? `Showing ${shown} of ${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"}`
+            : `${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"}`;
         $status.textContent =
-          `${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"} · ` +
+          `${countPart} · ` +
           `${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} checked · ` +
           `last fetched just now`;
       }
@@ -171,6 +214,83 @@ export function createHistoryTab(
     }
   }
 
+  async function loadMoreHistory(): Promise<void> {
+    if (!rt.wallet?.lastHistory || rt.historyRunning) return;
+    const snap = rt.wallet.lastHistory;
+    if (historyVisibleCount >= snap.entries.length) return;
+
+    const prevVisible = historyVisibleCount;
+    historyVisibleCount = Math.min(
+      historyVisibleCount + HISTORY_PAGE_SIZE,
+      snap.entries.length,
+    );
+
+    const needsEnrich =
+      rt.wallet.network === "test" &&
+      snap.entries
+        .slice(prevVisible, historyVisibleCount)
+        .some((e) => e.deltaKnown === false);
+
+    if (!needsEnrich) {
+      renderHistory();
+      return;
+    }
+
+    rt.historyRunning = true;
+    const $loadMore = rt.root.querySelector<HTMLButtonElement>("#historyLoadMore");
+    const $status = rt.root.querySelector<HTMLElement>("#historyStatus");
+    if ($loadMore) {
+      $loadMore.disabled = true;
+      $loadMore.textContent = "Loading…";
+    }
+    if ($status) {
+      $status.classList.remove("error");
+      $status.textContent = "Loading transaction details…";
+    }
+    if (!rt.woc) {
+      rt.woc = new WocClient({ baseUrl: effectiveWocBase(rt.wallet.network) });
+    }
+
+    try {
+      const addresses = historyAddressesForWallet(rt.wallet.xpub, {
+        network: rt.wallet.network,
+        stoppedAtReceive: rt.wallet.lastScan?.stoppedAt?.receive,
+        stoppedAtChange: rt.wallet.lastScan?.stoppedAt?.change,
+        lastReceiveUsed: rt.wallet.lastScan?.lastReceiveUsed,
+        lastChangeUsed: rt.wallet.lastScan?.lastChangeUsed,
+      });
+      await enrichWalletHistorySlice(
+        snap.entries,
+        addresses,
+        rt.woc,
+        prevVisible,
+        historyVisibleCount,
+        (done, total) => {
+          if (rt.cancelled || !$status) return;
+          $status.textContent = `Loading transaction details (${done}/${total})…`;
+        },
+      );
+      if (rt.cancelled) return;
+      await setLastHistory(rt.wallet.id, snap);
+      renderHistory();
+    } catch (e) {
+      if (rt.cancelled) return;
+      historyVisibleCount = prevVisible;
+      if ($status) {
+        $status.classList.add("error");
+        $status.textContent = `history load failed: ${(e as Error).message}`;
+      }
+      updateLoadMoreButton(snap);
+    } finally {
+      rt.historyRunning = false;
+      if ($loadMore && historyVisibleCount < snap.entries.length) {
+        $loadMore.disabled = false;
+        const remaining = snap.entries.length - historyVisibleCount;
+        $loadMore.textContent = `Load ${Math.min(HISTORY_PAGE_SIZE, remaining)} more`;
+      }
+    }
+  }
+
   function bind(): void {
     rt.root
       .querySelector<HTMLButtonElement>("#refreshHistory")
@@ -178,6 +298,9 @@ export function createHistoryTab(
     rt.root
       .querySelector<HTMLButtonElement>("#scanBalanceForHistory")
       ?.addEventListener("click", () => void scanBalanceForHistory());
+    rt.root
+      .querySelector<HTMLButtonElement>("#historyLoadMore")
+      ?.addEventListener("click", () => void loadMoreHistory());
   }
 
   return {
@@ -185,5 +308,6 @@ export function createHistoryTab(
     renderHistory,
     refreshHistory,
     scanBalanceForHistory,
+    loadMoreHistory,
   };
 }

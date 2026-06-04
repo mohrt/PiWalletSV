@@ -362,6 +362,9 @@ export function renderWalletDetailShell(
             </button>
           </div>
           <ul id="historyList" class="history-list"></ul>
+          <div class="history-footer">
+            <button id="historyLoadMore" type="button" hidden>Load more</button>
+          </div>
         </section>
 
         <!-- Advanced tab -->
@@ -394,6 +397,10 @@ export function renderWalletDetailShell(
               <button id="exportHide" type="button">Hide</button>
             </div>
           </div>
+          <p class="muted-line">
+            To move all wallets and companion settings to another device, use
+            <a href="#/settings">Backup &amp; migration</a> in Settings.
+          </p>
 
           <h2 style="margin-top:1.5rem">Account xpub</h2>
           <p class="muted-line">

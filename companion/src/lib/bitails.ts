@@ -276,7 +276,7 @@ export class BitailsClient {
     if (addresses.length === 0) return [];
     const params = new URLSearchParams();
     params.set("limit", String(opts.limit ?? 100));
-    if (opts.from) params.set("from", String(opts.from));
+    if (opts.from !== undefined) params.set("from", String(opts.from));
     const raw = await this.request<BitailsHistoryMultiRaw[]>(
       "POST",
       `/address/history/multi?${params.toString()}`,
