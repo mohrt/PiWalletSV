@@ -688,6 +688,10 @@ body.pair-locked {
   pointer-events: none;
 }
 
+.receive-qr-gate[hidden] {
+  display: none;
+}
+
 .receive-row {
   display: flex;
   flex-wrap: wrap;
