@@ -74,7 +74,7 @@ export function mountCameraScanner(
 
   host.innerHTML = `
     <div class="camera-scanner camera-scanner--${variant}">
-      <video class="camera-scanner-video" playsinline muted autoplay></video>
+      <video class="camera-scanner-video" playsinline muted autoplay aria-label="Camera preview"></video>
       <div class="camera-scanner-meta">
         <p class="camera-scanner-status muted-line" aria-live="polite"></p>
         <p class="camera-scanner-progress muted-line" hidden></p>

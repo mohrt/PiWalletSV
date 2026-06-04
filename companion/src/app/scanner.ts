@@ -36,7 +36,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
           <p class="muted-line">
             Paste the xpub below, and select the network.
             <span class="info-tip-wrap">
-              <button class="info-tip" type="button" aria-label="What is an xpub?">ⓘ</button>
+              <button class="info-tip" type="button" aria-label="What is an xpub?" aria-expanded="false">ⓘ</button>
               <span class="info-tip-text" hidden>
                 An xpub (extended public key) lets the companion derive your wallet
                 addresses without exposing your private keys or seed phrase.
@@ -75,7 +75,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
     </main>
 
     <div id="pairOverlay" class="pair-overlay" hidden role="dialog"
-      aria-modal="true" aria-labelledby="pairDialogTitle">
+      aria-modal="true" aria-labelledby="pairDialogTitle" aria-describedby="pairFp">
       <div class="pair-modal card pair-card">
         <h2 id="pairDialogTitle">Save as paired wallet</h2>
         <p id="pairStatus" class="muted-line" aria-live="polite"></p>
@@ -294,8 +294,11 @@ export function mountScannerPage(root: HTMLElement): () => void {
   root.querySelector<HTMLButtonElement>(".info-tip")
     ?.addEventListener("click", (e) => {
       e.preventDefault();
+      const btn = e.currentTarget as HTMLButtonElement;
       const tip = root.querySelector<HTMLElement>(".info-tip-text");
-      if (tip) tip.hidden = !tip.hidden;
+      if (!tip) return;
+      tip.hidden = !tip.hidden;
+      btn.setAttribute("aria-expanded", tip.hidden ? "false" : "true");
     });
 
   $pasteXpubImport.addEventListener("click", () => {
