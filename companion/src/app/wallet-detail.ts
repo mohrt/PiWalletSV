@@ -17,7 +17,7 @@ import {
   deriveAddress,
   deriveAddressBatch,
 } from "../lib/derive.js";
-import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS, PW1_QR_FRAME_MS } from "../lib/config.js";
+import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
 import { relativeTimeFrom } from "../lib/relative-time.js";
 import {
   KIND_XPUB,
@@ -31,6 +31,12 @@ import {
 import { CoinSelectError, computeMaxSendSats, selectUtxosGreedy } from "../lib/coin-select.js";
 import { decodeHexPasteToBytes } from "../lib/hex-paste.js";
 import { encodeMultipartLines } from "../pw1.js";
+import {
+  clearPw1QrCanvas,
+  startPw1QrPlayback,
+  wirePw1QrControls,
+  type Pw1QrPlayback,
+} from "../lib/pw1-qr-playback.js";
 import { Transaction } from "@bsv/sdk";
 import { ProofFetchError, fetchInputProof } from "../lib/proof-fetcher.js";
 import { renderHeader } from "./nav.js";
@@ -162,15 +168,11 @@ export function mountWalletDetailPage(
   let sendAmountIsMax = false;
   let suppressSendAmountInput = false;
 
-  let proposalFrames: string[] | null = null;
-  let proposalFrameIdx = 0;
-  let proposalLastFrameAt = 0;
-  let proposalRaf: number | null = null;
+  let proposalPlayback: Pw1QrPlayback | null = null;
+  let proposalQrUnwire: (() => void) | null = null;
 
-  let exportFrames: string[] | null = null;
-  let exportFrameIdx = 0;
-  let exportLastFrameAt = 0;
-  let exportRaf: number | null = null;
+  let exportPlayback: Pw1QrPlayback | null = null;
+  let exportQrUnwire: (() => void) | null = null;
 
   // Price cache for fiat/BSV display
   let bsvUsdPrice: number | null = null;
@@ -428,14 +430,16 @@ export function mountWalletDetailPage(
 
             <div id="sendQrTab-proposal" role="tabpanel">
               <p id="spvCompleteBanner" class="spv-complete-banner" hidden></p>
-              <p class="muted-line">Point the Pi camera at this animated QR.</p>
+              <p id="proposalQrHint" class="muted-line">Point the Pi camera at this animated QR.</p>
               <canvas id="proposalQr" width="320" height="320"></canvas>
               <p class="muted-line">
                 Frame <span id="proposalFrameIdx">0</span> /
                 <span id="proposalFrameCount">0</span> ·
                 <span id="proposalByteCount">0</span> bytes
               </p>
-              <div class="actions">
+              <div class="actions pw1-qr-controls">
+                <button id="proposalPrev" type="button" hidden>Previous</button>
+                <button id="proposalNext" type="button" hidden>Next</button>
                 <button id="proposalToggle" type="button" class="primary">Pause</button>
                 <button id="sendQrGoScan" type="button">Step 2 →</button>
                 <button id="proposalDone" type="button">New send</button>
@@ -594,12 +598,19 @@ export function mountWalletDetailPage(
           </div>
           <div id="exportResult" hidden>
             <canvas id="exportQr" width="320" height="320"></canvas>
+            <p id="exportQrHint" class="muted-line">
+              Point another companion at this animated QR.
+            </p>
+            <p class="muted-line">
+              Scan from <a href="#/scan">+ Add wallet</a> on the other device.
+            </p>
             <p class="muted-line">
               Frame <span id="exportFrameIdx">0</span> /
               <span id="exportFrameCount">0</span>
-              — scan from <a href="#/scan">+ Add wallet</a> on another companion
             </p>
-            <div class="actions">
+            <div class="actions pw1-qr-controls">
+              <button id="exportPrev" type="button" hidden>Previous</button>
+              <button id="exportNext" type="button" hidden>Next</button>
               <button id="exportToggle" type="button" class="primary">Pause</button>
               <button id="exportHide" type="button">Hide</button>
             </div>
@@ -731,8 +742,6 @@ export function mountWalletDetailPage(
       });
     root.querySelector<HTMLButtonElement>("#reviewConfirm")
       ?.addEventListener("click", () => void onBuildProposal());
-    root.querySelector<HTMLButtonElement>("#proposalToggle")
-      ?.addEventListener("click", toggleAnimation);
     root.querySelector<HTMLButtonElement>("#sendQrGoScan")
       ?.addEventListener("click", () => switchSendQrTab("scan"));
     root.querySelector<HTMLButtonElement>("#proposalDone")
@@ -803,8 +812,6 @@ export function mountWalletDetailPage(
     // Advanced tab
     root.querySelector<HTMLButtonElement>("#exportShow")
       ?.addEventListener("click", () => void onShowExport());
-    root.querySelector<HTMLButtonElement>("#exportToggle")
-      ?.addEventListener("click", toggleExportAnimation);
     root.querySelector<HTMLButtonElement>("#exportHide")
       ?.addEventListener("click", hideExport);
     root.querySelector<HTMLButtonElement>("#copyXpub")
@@ -1881,9 +1888,6 @@ export function mountWalletDetailPage(
       const blob = await encodeEnvelope(envelope);
       const frames = encodeMultipartLines(blob);
 
-      proposalFrames = frames;
-      proposalFrameIdx = 0;
-      proposalLastFrameAt = 0;
       const $frameCount = root.querySelector<HTMLElement>("#proposalFrameCount");
       const $byteCount = root.querySelector<HTMLElement>("#proposalByteCount");
       if ($frameCount) $frameCount.textContent = String(frames.length);
@@ -1899,7 +1903,7 @@ export function mountWalletDetailPage(
       showSendStep("qr");
       sendStep = { step: "qr" };
       resetBroadcastWidget();
-      startProposalAnimation();
+      await startProposalPlayback(frames);
     } catch (e) {
       $status.classList.add("error");
       const msg =
@@ -1918,43 +1922,69 @@ export function mountWalletDetailPage(
     }
   }
 
-  // QR animation helpers (proposal)
-  function startProposalAnimation(): void {
-    stopProposalAnimation();
-    if (!proposalFrames?.length) return;
+  // PW1 QR playback (proposal + export)
+  function stopProposalPlayback(): void {
+    proposalQrUnwire?.();
+    proposalQrUnwire = null;
+    proposalPlayback?.stop();
+    proposalPlayback = null;
+  }
+
+  async function startProposalPlayback(frames: string[]): Promise<void> {
+    stopProposalPlayback();
+    const $canvas = root.querySelector<HTMLCanvasElement>("#proposalQr");
+    const $frameIdx = root.querySelector<HTMLElement>("#proposalFrameIdx");
+    const $frameCount = root.querySelector<HTMLElement>("#proposalFrameCount");
     const $toggle = root.querySelector<HTMLButtonElement>("#proposalToggle");
-    if ($toggle) $toggle.textContent = "Pause";
-    proposalRaf = requestAnimationFrame(tickProposal);
+    const $prev = root.querySelector<HTMLButtonElement>("#proposalPrev");
+    const $next = root.querySelector<HTMLButtonElement>("#proposalNext");
+    const $hint = root.querySelector<HTMLElement>("#proposalQrHint");
+    if (!$canvas || !$toggle || !$prev || !$next) return;
+
+    proposalPlayback = await startPw1QrPlayback($canvas, frames, {
+      onFrame: (idx, total) => {
+        if ($frameIdx) $frameIdx.textContent = String(idx);
+        if ($frameCount) $frameCount.textContent = String(total);
+      },
+    });
+    proposalQrUnwire = wirePw1QrControls(proposalPlayback, {
+      autoToggle: $toggle,
+      prev: $prev,
+      next: $next,
+      hint: $hint,
+    });
   }
 
-  function stopProposalAnimation(): void {
-    if (proposalRaf !== null) cancelAnimationFrame(proposalRaf);
-    proposalRaf = null;
-    const $toggle = root.querySelector<HTMLButtonElement>("#proposalToggle");
-    if ($toggle) $toggle.textContent = "Resume";
+  function stopExportPlayback(): void {
+    exportQrUnwire?.();
+    exportQrUnwire = null;
+    exportPlayback?.stop();
+    exportPlayback = null;
   }
 
-  function toggleAnimation(): void {
-    if (proposalRaf !== null) stopProposalAnimation();
-    else startProposalAnimation();
-  }
+  async function startExportPlayback(frames: string[]): Promise<void> {
+    stopExportPlayback();
+    const $canvas = root.querySelector<HTMLCanvasElement>("#exportQr");
+    const $frameIdx = root.querySelector<HTMLElement>("#exportFrameIdx");
+    const $frameCount = root.querySelector<HTMLElement>("#exportFrameCount");
+    const $toggle = root.querySelector<HTMLButtonElement>("#exportToggle");
+    const $prev = root.querySelector<HTMLButtonElement>("#exportPrev");
+    const $next = root.querySelector<HTMLButtonElement>("#exportNext");
+    const $hint = root.querySelector<HTMLElement>("#exportQrHint");
+    if (!$canvas || !$toggle || !$prev || !$next) return;
 
-  function tickProposal(now: number): void {
-    if (!proposalFrames || cancelled) { proposalRaf = null; return; }
-    const interval = PW1_QR_FRAME_MS;
-    if (now - proposalLastFrameAt >= interval) {
-      proposalLastFrameAt = now;
-      const $canvas = root.querySelector<HTMLCanvasElement>("#proposalQr");
-      const $idx = root.querySelector<HTMLElement>("#proposalFrameIdx");
-      if ($canvas && $idx) {
-        $idx.textContent = String(proposalFrameIdx + 1);
-        void QRCode.toCanvas($canvas, proposalFrames[proposalFrameIdx], {
-          width: 320, margin: 1, errorCorrectionLevel: "M",
-        });
-      }
-      proposalFrameIdx = (proposalFrameIdx + 1) % proposalFrames.length;
-    }
-    proposalRaf = requestAnimationFrame(tickProposal);
+    exportPlayback = await startPw1QrPlayback($canvas, frames, {
+      onFrame: (idx, total) => {
+        if ($frameIdx) $frameIdx.textContent = String(idx);
+        if ($frameCount) $frameCount.textContent = String(total);
+      },
+    });
+    exportQrUnwire = wirePw1QrControls(exportPlayback, {
+      autoToggle: $toggle,
+      prev: $prev,
+      next: $next,
+      hint: $hint,
+    });
   }
 
   async function onCopyProposalHex(): Promise<void> {
@@ -2231,10 +2261,8 @@ export function mountWalletDetailPage(
   }
 
   function resetSendCard(): void {
-    stopProposalAnimation();
+    stopProposalPlayback();
     stopPw1Scan();
-    proposalFrames = null;
-    proposalFrameIdx = 0;
     sendStep = { step: "form" };
     sendAmountIsMax = false;
     showSendStep("form");
@@ -2429,63 +2457,23 @@ export function mountWalletDetailPage(
       network: wallet.network,
     } as const;
     const blob = await encodeEnvelope(envelope);
-    exportFrames = encodeMultipartLines(blob);
-    exportFrameIdx = 0;
-    exportLastFrameAt = 0;
+    const frames = encodeMultipartLines(blob);
     const $result = root.querySelector<HTMLElement>("#exportResult")!;
     const $count = root.querySelector<HTMLElement>("#exportFrameCount")!;
     const $showBtn = root.querySelector<HTMLButtonElement>("#exportShow");
     $result.hidden = false;
     if ($showBtn) $showBtn.hidden = true;
-    $count.textContent = String(exportFrames.length);
-    startExportAnimation();
-  }
-
-  function startExportAnimation(): void {
-    stopExportAnimation();
-    if (!exportFrames?.length) return;
-    const $toggle = root.querySelector<HTMLButtonElement>("#exportToggle");
-    if ($toggle) $toggle.textContent = "Pause";
-    exportRaf = requestAnimationFrame(tickExport);
-  }
-
-  function stopExportAnimation(): void {
-    if (exportRaf !== null) cancelAnimationFrame(exportRaf);
-    exportRaf = null;
-    const $toggle = root.querySelector<HTMLButtonElement>("#exportToggle");
-    if ($toggle) $toggle.textContent = "Resume";
-  }
-
-  function toggleExportAnimation(): void {
-    if (exportRaf !== null) stopExportAnimation();
-    else startExportAnimation();
+    $count.textContent = String(frames.length);
+    await startExportPlayback(frames);
   }
 
   function hideExport(): void {
-    stopExportAnimation();
-    exportFrames = null;
+    stopExportPlayback();
+    clearPw1QrCanvas(root.querySelector<HTMLCanvasElement>("#exportQr")!);
     const $result = root.querySelector<HTMLElement>("#exportResult");
     if ($result) $result.hidden = true;
     const $showBtn = root.querySelector<HTMLButtonElement>("#exportShow");
     if ($showBtn) $showBtn.hidden = false;
-  }
-
-  function tickExport(now: number): void {
-    if (!exportFrames || cancelled) { exportRaf = null; return; }
-    const interval = PW1_QR_FRAME_MS;
-    if (now - exportLastFrameAt >= interval) {
-      exportLastFrameAt = now;
-      const $canvas = root.querySelector<HTMLCanvasElement>("#exportQr");
-      const $idx = root.querySelector<HTMLElement>("#exportFrameIdx");
-      if ($canvas && $idx) {
-        $idx.textContent = String(exportFrameIdx + 1);
-        void QRCode.toCanvas($canvas, exportFrames[exportFrameIdx], {
-          width: 320, margin: 1, errorCorrectionLevel: "M",
-        });
-      }
-      exportFrameIdx = (exportFrameIdx + 1) % exportFrames.length;
-    }
-    exportRaf = requestAnimationFrame(tickExport);
   }
 
   // ---------------------------------------------------------------------------
@@ -2494,8 +2482,8 @@ export function mountWalletDetailPage(
 
   return () => {
     cancelled = true;
-    stopProposalAnimation();
-    stopExportAnimation();
+    stopProposalPlayback();
+    stopExportPlayback();
     stopAddrScan();
     stopPw1Scan();
   };
