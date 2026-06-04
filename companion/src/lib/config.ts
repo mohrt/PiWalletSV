@@ -40,6 +40,12 @@ export function docsUrl(path = ""): string {
 export const HISTORY_PAGE_SIZE = 50;
 
 /**
+ * Upper bound on transaction history rows fetched and stored per refresh.
+ * The History tab shows {@link HISTORY_PAGE_SIZE} at a time with "Load more".
+ */
+export const MAX_HISTORY_ENTRIES = 500;
+
+/**
  * Price cache TTL in milliseconds. The fiat toggle fetches the BSV/USD
  * rate from WoC and caches it this long before re-fetching.
  */

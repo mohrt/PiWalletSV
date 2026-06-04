@@ -29,7 +29,7 @@ import {
   type BitailsHistoryEntry,
   type BitailsClient,
 } from "./bitails.js";
-import { HISTORY_PAGE_SIZE } from "./config.js";
+import { HISTORY_PAGE_SIZE, MAX_HISTORY_ENTRIES } from "./config.js";
 import { DEFAULT_GAP_LIMIT } from "./utxo.js";
 import { type WocClient, type WocTxDetail } from "./woc.js";
 
@@ -57,6 +57,11 @@ export interface HistorySnapshot {
   entries: WalletTxEntry[];
   /** Total addresses queried. */
   addressesQueried: number;
+  /**
+   * True when the fetch hit {@link MAX_HISTORY_ENTRIES} and older txs may
+   * exist on-chain beyond what we stored.
+   */
+  truncated?: boolean;
 }
 
 export interface FetchHistoryOptions {
@@ -84,7 +89,10 @@ export interface FetchHistoryOptions {
   lookahead?: number;
   /** Wallet network; selects address encoding. Defaults to "main". */
   network?: NetworkT;
-  /** Max entries to return (newest first). Defaults to HISTORY_PAGE_SIZE. */
+  /**
+   * Max entries to fetch and store (newest first).
+   * Defaults to {@link MAX_HISTORY_ENTRIES}.
+   */
   limit?: number;
   /** Progress callback — phase distinguishes address scan vs tx detail fetch. */
   onProgress?: (
@@ -128,6 +136,53 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
+/** Bitails page size when walking `from` offsets per address batch. */
+const BITAILS_HISTORY_FETCH_PAGE = 100;
+
+function buildHistoryAddresses(
+  accountXpub: string,
+  opts: FetchHistoryOptions,
+): { addresses: string[]; network: NetworkT } {
+  const lookahead = opts.lookahead ?? 5;
+  const network: NetworkT = opts.network ?? "main";
+  const recvEnd = historyBranchEnd(
+    opts.stoppedAtReceive,
+    opts.lastReceiveUsed,
+    lookahead,
+  );
+  const chgEnd = historyBranchEnd(
+    opts.stoppedAtChange,
+    opts.lastChangeUsed,
+    lookahead,
+  );
+  const addresses: string[] = [];
+  for (let i = 0; i < recvEnd; i++) {
+    addresses.push(deriveAddress(accountXpub, RECEIVE_BRANCH, i, network).address);
+  }
+  for (let i = 0; i < chgEnd; i++) {
+    addresses.push(deriveAddress(accountXpub, CHANGE_BRANCH, i, network).address);
+  }
+  return { addresses, network };
+}
+
+async function fetchAllHistoryForChunk(
+  bitails: BitailsClient,
+  addresses: string[],
+): Promise<BitailsHistoryEntry[]> {
+  const all: BitailsHistoryEntry[] = [];
+  let from = 0;
+  while (true) {
+    const batch = await bitails.getHistoryBatch(addresses, {
+      limit: BITAILS_HISTORY_FETCH_PAGE,
+      from,
+    });
+    all.push(...batch);
+    if (batch.length < BITAILS_HISTORY_FETCH_PAGE) break;
+    from += batch.length;
+  }
+  return all;
+}
+
 function aggregateByTxid(entries: BitailsHistoryEntry[]): WalletTxEntry[] {
   const byTxid = new Map<string, WalletTxEntry>();
   for (const h of entries) {
@@ -164,60 +219,46 @@ export async function fetchWalletHistory(
   bitails: BitailsClient,
   opts: FetchHistoryOptions = {},
 ): Promise<HistorySnapshot> {
-  const lookahead = opts.lookahead ?? 5;
-  const network: NetworkT = opts.network ?? "main";
-  const limit = opts.limit ?? HISTORY_PAGE_SIZE;
-
-  const recvEnd = historyBranchEnd(
-    opts.stoppedAtReceive,
-    opts.lastReceiveUsed,
-    lookahead,
-  );
-  const chgEnd = historyBranchEnd(
-    opts.stoppedAtChange,
-    opts.lastChangeUsed,
-    lookahead,
-  );
-
-  const addresses: string[] = [];
-  for (let i = 0; i < recvEnd; i++) {
-    addresses.push(deriveAddress(accountXpub, RECEIVE_BRANCH, i, network).address);
-  }
-  for (let i = 0; i < chgEnd; i++) {
-    addresses.push(deriveAddress(accountXpub, CHANGE_BRANCH, i, network).address);
-  }
+  const maxEntries = opts.limit ?? MAX_HISTORY_ENTRIES;
+  const { addresses, network } = buildHistoryAddresses(accountXpub, opts);
 
   if (network === "test") {
     if (!opts.woc) {
       throw new Error("testnet history requires a WoC client (Bitails test API unavailable)");
     }
-    return fetchWalletHistoryViaWoc(addresses, opts.woc, limit, opts.onProgress);
+    return fetchWalletHistoryViaWoc(
+      addresses,
+      opts.woc,
+      maxEntries,
+      opts.onProgress,
+    );
   }
 
-  const batchLimit = Math.max(limit * 2, 200);
   const allEntries: BitailsHistoryEntry[] = [];
   const chunks = chunkArray(addresses, BITAILS_BULK_BATCH_MAX);
   let done = 0;
   for (const chunk of chunks) {
-    const batchEntries = await bitails.getHistoryBatch(chunk, { limit: batchLimit });
+    const batchEntries = await fetchAllHistoryForChunk(bitails, chunk);
     allEntries.push(...batchEntries);
     done += chunk.length;
     opts.onProgress?.(done, addresses.length, "addresses");
   }
 
   const sorted = aggregateByTxid(allEntries);
+  const truncated = sorted.length > maxEntries;
 
   return {
     at: new Date().toISOString(),
-    entries: sorted.slice(0, limit),
+    entries: sorted.slice(0, maxEntries),
     addressesQueried: addresses.length,
+    ...(truncated ? { truncated: true } : {}),
   };
 }
 
 async function fetchWalletHistoryViaWoc(
   addresses: string[],
   woc: WocClient,
-  limit: number,
+  maxEntries: number,
   onProgress?: (
     done: number,
     total: number,
@@ -252,29 +293,79 @@ async function fetchWalletHistoryViaWoc(
     if (b.blockHeight === 0 && a.blockHeight !== 0) return 1;
     return b.blockHeight - a.blockHeight;
   });
-  const top = sorted.slice(0, limit);
+  const truncated = sorted.length > maxEntries;
+  const stored = sorted.slice(0, maxEntries);
+  const enrichCount = Math.min(HISTORY_PAGE_SIZE, stored.length);
   const txCache = new Map<string, WocTxDetail>();
-  for (let i = 0; i < top.length; i++) {
-    const entry = top[i]!;
+  for (let i = 0; i < enrichCount; i++) {
+    const entry = stored[i]!;
     try {
-      const enriched = await enrichWalletTxFromWoc(
+      stored[i] = await enrichWalletTxFromWoc(
         entry.txid,
         entry.blockHeight,
         walletSet,
         woc,
         txCache,
       );
-      top[i] = enriched;
     } catch {
       // Keep txid + height; amount stays unknown for this row.
     }
-    onProgress?.(i + 1, top.length, "transactions");
+    onProgress?.(i + 1, enrichCount, "transactions");
   }
   return {
     at: new Date().toISOString(),
-    entries: top,
+    entries: stored,
     addressesQueried: addresses.length,
+    ...(truncated ? { truncated: true } : {}),
   };
+}
+
+/**
+ * Fill in sat deltas for testnet history rows that only have txid + height.
+ * Mutates and returns `entries` (same array reference).
+ */
+export async function enrichWalletHistorySlice(
+  entries: WalletTxEntry[],
+  walletAddresses: string[],
+  woc: WocClient,
+  startIndex: number,
+  endIndex: number,
+  onProgress?: (done: number, total: number) => void,
+): Promise<WalletTxEntry[]> {
+  const walletSet = new Set(walletAddresses);
+  const txCache = new Map<string, WocTxDetail>();
+  const end = Math.min(endIndex, entries.length);
+  let enriched = 0;
+  for (let i = startIndex; i < end; i++) {
+    const entry = entries[i]!;
+    if (entry.deltaKnown !== false) {
+      enriched += 1;
+      onProgress?.(enriched, end - startIndex);
+      continue;
+    }
+    try {
+      entries[i] = await enrichWalletTxFromWoc(
+        entry.txid,
+        entry.blockHeight,
+        walletSet,
+        woc,
+        txCache,
+      );
+    } catch {
+      // Keep txid + height; amount stays unknown for this row.
+    }
+    enriched += 1;
+    onProgress?.(enriched, end - startIndex);
+  }
+  return entries;
+}
+
+/** Derive the same address list used for a history fetch (for WoC enrichment). */
+export function historyAddressesForWallet(
+  accountXpub: string,
+  opts: FetchHistoryOptions,
+): string[] {
+  return buildHistoryAddresses(accountXpub, opts).addresses;
 }
 
 function bsvToSats(valueBsv: number): number {

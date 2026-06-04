@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import { BitailsClient } from "../src/lib/bitails.js";
+import { HISTORY_PAGE_SIZE, MAX_HISTORY_ENTRIES } from "../src/lib/config.js";
 import { deriveAddress } from "../src/lib/derive.js";
 import {
+  enrichWalletHistorySlice,
   enrichWalletTxFromWoc,
   fetchWalletHistory,
   historyBranchEnd,
@@ -144,6 +146,69 @@ describe("fetchWalletHistory", () => {
     expect(sizes).toEqual([20, 20, 5]);
   });
 
+  it("paginates Bitails history per address batch with from offsets", async () => {
+    const txidA = "11".repeat(32);
+    const txidB = "22".repeat(32);
+    const getHistoryBatch = vi.fn(
+      async (_addresses: string[], opts?: { limit?: number; from?: number }) => {
+        if (opts?.from === 101) {
+          return [{ txid: txidB, timestamp: 50, blockHeight: 50, deltaSats: 200 }];
+        }
+        return Array.from({ length: 100 }, (_, i) => ({
+          txid: `${String(i).padStart(2, "0")}${"aa".repeat(15)}`,
+          timestamp: 100 - i,
+          blockHeight: 100 - i,
+          deltaSats: 1000,
+        })).concat([
+          { txid: txidA, timestamp: 1, blockHeight: 1, deltaSats: 500 },
+        ]);
+      },
+    );
+    const bitails = { getHistoryBatch } as unknown as BitailsClient;
+
+    const snap = await fetchWalletHistory(XPUB, bitails, {
+      stoppedAtReceive: 1,
+      stoppedAtChange: 0,
+      lookahead: 0,
+    });
+
+    expect(getHistoryBatch).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ limit: 100, from: 0 }),
+    );
+    expect(getHistoryBatch).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({ limit: 100, from: 101 }),
+    );
+    expect(snap.entries.some((e) => e.txid === txidB)).toBe(true);
+    expect(snap.entries.some((e) => e.txid === txidA)).toBe(true);
+  });
+
+  it("stores more than one UI page and sets truncated at the cap", async () => {
+    let call = 0;
+    const getHistoryBatch = vi.fn(async () => {
+      call += 1;
+      if (call > 1) return [];
+      return Array.from({ length: MAX_HISTORY_ENTRIES + 10 }, (_, i) => ({
+        txid: `${String(i).padStart(4, "0")}${"cc".repeat(14)}`,
+        timestamp: i,
+        blockHeight: MAX_HISTORY_ENTRIES + 10 - i,
+        deltaSats: 1,
+      }));
+    });
+    const bitails = { getHistoryBatch } as unknown as BitailsClient;
+
+    const snap = await fetchWalletHistory(XPUB, bitails, {
+      stoppedAtReceive: 1,
+      stoppedAtChange: 0,
+      lookahead: 0,
+    });
+
+    expect(snap.entries).toHaveLength(MAX_HISTORY_ENTRIES);
+    expect(snap.truncated).toBe(true);
+    expect(snap.entries.length).toBeGreaterThan(HISTORY_PAGE_SIZE);
+  });
+
   it("uses WoC for testnet instead of Bitails", async () => {
     const getHistoryBatch = vi.fn(async () => {
       throw new Error("Bitails should not be called on testnet");
@@ -203,6 +268,41 @@ describe("fetchWalletHistory", () => {
         deltaKnown: true,
       },
     ]);
+  });
+});
+
+describe("enrichWalletHistorySlice", () => {
+  it("fills deltas for a slice of testnet rows", async () => {
+    const walletAddr = "1TestAddr";
+    const txid = "aa".repeat(32);
+    const entries = [
+      {
+        txid,
+        timestamp: 0,
+        blockHeight: 99,
+        deltaSats: 0,
+        deltaKnown: false as const,
+      },
+    ];
+    const getTxDetail = vi.fn(async () => ({
+      txid,
+      time: 1_700_000_000,
+      blockHeight: 99,
+      vin: [],
+      vout: [{ valueBsv: 0.00001, address: walletAddr }],
+    }));
+    const woc = { getTxDetail } as unknown as import("../src/lib/woc.js").WocClient;
+
+    await enrichWalletHistorySlice(
+      entries,
+      [walletAddr],
+      woc,
+      0,
+      1,
+    );
+
+    expect(entries[0]?.deltaKnown).toBe(true);
+    expect(entries[0]?.deltaSats).toBe(1000);
   });
 });
 

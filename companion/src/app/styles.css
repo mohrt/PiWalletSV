@@ -2018,6 +2018,16 @@ label.button-like:hover {
   gap: 0.4rem;
 }
 
+.history-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+.history-footer button {
+  min-width: 8rem;
+}
+
 .history-row {
   display: flex;
   flex-direction: column;
