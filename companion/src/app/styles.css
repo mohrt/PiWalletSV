@@ -1784,6 +1784,64 @@ label.button-like:hover {
   color: var(--danger);
 }
 
+
+/* =========================================================================
+   Advanced tab (wallet detail)
+   ========================================================================= */
+
+#tab-advanced .advanced-intro {
+  margin-bottom: 0.75rem;
+}
+
+#tab-advanced .advanced-fold {
+  margin-top: 0.65rem;
+}
+
+#tab-advanced .advanced-fold:first-of-type {
+  margin-top: 0.5rem;
+}
+
+#tab-advanced .danger-fold > summary {
+  color: var(--danger);
+}
+
+#tab-advanced .danger-fold[open] > summary {
+  border-bottom-color: var(--border);
+}
+
+#tab-advanced .xpub-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+#tab-advanced .xpub-preview {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-size: 0.82rem;
+  word-break: break-all;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+}
+
+#tab-advanced #exportResult {
+  margin-top: 0.75rem;
+  align-items: center;
+}
+
+#tab-advanced #exportResult[hidden] {
+  display: none;
+}
+
+#tab-advanced .backup-format-note {
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+}
+
 /* =========================================================================
    Send flow
    ========================================================================= */

@@ -15,6 +15,7 @@ import type { WalletDetailRuntime, WalletDetailTab } from "./types.js";
 
 export interface AdvancedTab extends WalletDetailTab {
   stopExportPlayback(): void;
+  onLeaveTab(): void;
 }
 
 export function createAdvancedTab(rt: WalletDetailRuntime): AdvancedTab {
@@ -169,6 +170,9 @@ export function createAdvancedTab(rt: WalletDetailRuntime): AdvancedTab {
       .querySelector<HTMLButtonElement>("#renameSaveBtn")
       ?.addEventListener("click", () => void onRenameSave());
     rt.root.querySelector<HTMLInputElement>("#renameInput")?.addEventListener("input", syncRenameSaveBtn);
+    rt.root.querySelector<HTMLInputElement>("#renameInput")?.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Enter") void onRenameSave();
+    });
     syncRenameSaveBtn();
     rt.root
       .querySelector<HTMLButtonElement>("#removeWalletBtn")
@@ -185,9 +189,14 @@ export function createAdvancedTab(rt: WalletDetailRuntime): AdvancedTab {
     stopExportPlayback();
   }
 
+  function onLeaveTab(): void {
+    hideExport();
+  }
+
   return {
     bind,
     dispose,
+    onLeaveTab,
     stopExportPlayback,
   };
 }

@@ -62,7 +62,13 @@ export function mountWalletDetailPage(
   const receiveTab = createReceiveTab(rt, actions);
   const balanceTab = createBalanceTab(rt, actions);
   const sendTab = createSendTab(rt, actions);
-  const tabNav = createTabNav(rt, actions);
+  const tabNav = createTabNav(rt, actions, {
+    onTabSwitch(prev, next) {
+      if (prev === "advanced" && next !== "advanced") {
+        advancedTab.onLeaveTab();
+      }
+    },
+  });
 
   Object.assign(actions, {
     switchTab: tabNav.switchTab,
