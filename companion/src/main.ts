@@ -5,6 +5,7 @@ import { ensureTermsAccepted } from "./app/terms-modal.js";
 import { mountWalletDetailPage } from "./app/wallet-detail.js";
 import { mountWalletsPage } from "./app/wallets-page.js";
 import { DOCS_BASE_URL } from "./lib/config.js";
+import { captureInstallPrompt } from "./lib/pwa-install.js";
 import { APP_VERSION, formatAppVersion } from "./lib/version.js";
 
 const app = document.getElementById("app");
@@ -27,6 +28,11 @@ let pageTeardown: (() => void) | null = null;
 // playground, security briefing, and codec round-trip live on the
 // marketing site / docs site (DOCS_BASE_URL — env-driven, see config.ts).
 const DEFAULT_ROUTE = "#/wallets";
+
+const stopInstallCapture = captureInstallPrompt();
+window.addEventListener("beforeunload", () => {
+  stopInstallCapture();
+});
 
 function render(): void {
   if (!app) return;

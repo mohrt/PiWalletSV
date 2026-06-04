@@ -260,7 +260,8 @@ You should see a green **&ldquo;Air-gapped&rdquo;** header and six rows reading
 If any row shows `!!`, **stop**. The device is leaking somewhere
 and the prebuilt image has been altered or built incorrectly. Re-do
 Step&nbsp;1 (signature verification) and re-flash. If the second flash
-also fails the airgap check, file an issue on
+also fails the airgap check, contact [@PiWalletSV on X](https://x.com/PiWalletSV)
+or file an issue on
 [GitHub](https://github.com/mohrt/PiWalletSV/issues) with the
 specific failing rows.
 
@@ -275,6 +276,11 @@ broadcast). It never sees your private keys.
 
 1. On a separate device with a camera, open the
    [companion]({{ companion_url }}) in a modern browser.
+
+### Add the companion to your Home Screen
+
+--8<-- "docs/includes/pwa-install-steps.md"
+
 2. The companion's first-run flow walks you through pairing: it
    shows a button to start a pairing handshake.
 3. On the bonnet, scroll to the wallet on the wallet list and press
@@ -351,8 +357,10 @@ problem (5&nbsp;V/2.5&nbsp;A or better is the minimum).
 
 **Joystick or buttons unresponsive.**
 A bonnet revision difference: some early Adafruit batches mount the
-joystick chip on a different I2C address. Open an issue on GitHub
-with your bonnet's silkscreen revision string.
+joystick chip on a different I2C address. Contact
+[@PiWalletSV on X](https://x.com/PiWalletSV) or open an issue on
+[GitHub](https://github.com/mohrt/PiWalletSV/issues) with your
+bonnet's silkscreen revision string.
 
 **Camera doesn't detect QR codes.**
 The Pi Camera v2 has a fixed focal length around 30&nbsp;cm. If your
@@ -364,9 +372,15 @@ autofocus and is much more forgiving.
 This is the diagnostic working as designed: it found a leak. Don't
 sign anything on this device until the report is all-green. The
 fastest fix is to re-verify the image signature (Step&nbsp;1) and
-re-flash; if it persists, file an issue.
+re-flash; if it persists, contact [@PiWalletSV on X](https://x.com/PiWalletSV)
+or file a [GitHub issue](https://github.com/mohrt/PiWalletSV/issues).
 
-For everything else, see [Operate](operate.md).
+For everything else, see [Operate](operate.md) or
+[Help & support](index.md#help--support).
+
+## Help & support
+
+--8<-- "docs/includes/support-contact.md"
 
 *[PWA]: Progressive Web App
 *[CSI]: Camera Serial Interface

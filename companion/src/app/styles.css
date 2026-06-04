@@ -146,6 +146,24 @@ a:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.install-banner {
+  margin-bottom: 1rem;
+}
+
+.install-banner-title {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.install-banner-body {
+  margin: 0 0 0.75rem;
+}
+
+.install-banner-actions {
+  margin: 0;
+}
+
 /* Inline logo in the page header */
 
 .page-header-brand {
