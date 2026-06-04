@@ -718,78 +718,10 @@ body.pair-locked {
   font-size: 0.75rem;
 }
 
-.balance-card .balance-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.balance-figures {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.balance-sats {
-  font-size: 1.6rem;
-  font-weight: 600;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  color: var(--text);
-}
-
-.balance-sats-row {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.balance-badge {
-  display: inline-flex;
-  align-items: center;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-/* Amber pending pill — distinct from the blue accent so it reads as
- * informational ("this includes in-flight value") without looking
- * alarming. Soft fill + crisper border keeps it legible on the dark
- * surface.
- */
-.balance-badge.pending {
-  background: rgba(212, 158, 63, 0.15);
-  border: 1px solid rgba(212, 158, 63, 0.5);
-  color: #e3b86c;
-}
-
-.balance-split {
-  font-size: 0.85rem;
-  margin: 0.1rem 0 0;
-}
-
 .balance-bsv {
   font-size: 0.95rem;
   color: var(--accent);
   margin: 0;
-}
-
-.balance-card details {
-  margin-top: 0.75rem;
-}
-
-.balance-card summary {
-  color: var(--accent);
-  cursor: pointer;
-  font-size: 0.9rem;
-  user-select: none;
-  padding: 0.25rem 0;
 }
 
 /* Collapsible panels (Balance UTXOs, Receive address list, etc.) */
@@ -898,18 +830,6 @@ body.pair-locked {
 .utxo-pending-tag {
   color: #e3b86c;
   font-weight: 600;
-}
-
-.utxo-spv-tag {
-  font-weight: 600;
-}
-
-.utxo-spv-tag.verified {
-  color: #6cd09a;
-}
-
-.utxo-spv-tag.failed {
-  color: #e07b7b;
 }
 
 .utxo-top {
