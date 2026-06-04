@@ -13,3 +13,7 @@
     [from source](getting-started.md).
 
     Questions about kits? Message [@PiWalletSV on X](https://x.com/PiWalletSV).
+
+    Official PiWalletSV kits and resale of printed case goods require
+    prior written permission from the project (see
+    [Disclaimer §12](disclaimer.md#12-kits-and-case-no-unauthorized-resale)).

@@ -73,6 +73,13 @@ export async function ensureTermsAccepted(): Promise<void> {
             cloud editors, password managers, or AI assistants.
           </li>
           <li>
+            <strong>Kits and case goods.</strong> Software stays MIT;
+            commercial resale of PiWalletSV kits or printed case goods
+            requires prior permission — contact
+            <a href="https://x.com/PiWalletSV" target="_blank"
+               rel="noopener noreferrer">@PiWalletSV on X</a>.
+          </li>
+          <li>
             <strong>Not financial / legal / tax advice.</strong>
             Consult qualified professionals before relying on this
             wallet for material amounts.

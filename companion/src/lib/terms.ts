@@ -15,7 +15,7 @@
  * pi-first-boot-tos todo).
  */
 
-export const CURRENT_TERMS_VERSION = 1;
+export const CURRENT_TERMS_VERSION = 2;
 
 const KEY_VERSION = "piwallet.termsAcceptedVersion";
 const KEY_AT = "piwallet.termsAcceptedAt";

@@ -6,6 +6,13 @@ PETG enclosure. Holds a Raspberry Pi Zero 2 W, an Adafruit 1.3"
 the LCD facing the operator and the camera lens facing the back of
 the unit on the same optical axis.
 
+**Use of the case design:** Printing a case for your own PiWalletSV
+device is fine. Commercial sale of printed shells or the case design
+files requires prior permission from the project — contact
+[@PiWalletSV on X](https://x.com/PiWalletSV). The project software
+remains MIT-licensed; this restriction applies to physical case goods
+only (see [Disclaimer §12](../../DISCLAIMER.md#12-kits-and-case--no-unauthorized-resale)).
+
 ## Files
 
 | File | Purpose |

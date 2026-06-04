@@ -29,7 +29,7 @@ Vault file format (CBOR-encoded, on disk):
         "pinAttemptThreshold": 10,
         "lockedUntil": <None or float>,
         "termsAcceptedAt": <None or "ISO8601">,
-        "termsVersion": 1,
+        "termsVersion": 2,
         "wallets": [
             {
                 "id": "uuid",
