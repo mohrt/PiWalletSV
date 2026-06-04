@@ -11,3 +11,5 @@
     In the meantime, build your own using the
     [pre-built image](download.md) or
     [from source](getting-started.md).
+
+    Questions about kits? Message [@PiWalletSV on X](https://x.com/PiWalletSV).
