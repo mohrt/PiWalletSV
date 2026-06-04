@@ -2327,3 +2327,18 @@ label.button-like:hover {
   }
 }
 
+/* Accessibility — decorative motion only; PW1 QR stepping is JS-driven. */
+@media (prefers-reduced-motion: reduce) {
+  .send-progress-fill,
+  .settings-saved-banner,
+  .tab-nav-btn,
+  .scanner-tab,
+  .backup-tab,
+  .history-entry,
+  .terms-overlay,
+  .pair-dialog {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+

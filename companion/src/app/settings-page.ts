@@ -32,6 +32,7 @@ import { startPw1Scan, type Pw1ScanHandle } from "../lib/camera-scan-pw1.js";
 import {
   clearPw1QrCanvas,
   startPw1QrPlayback,
+  wirePw1QrControls,
   type Pw1QrPlayback,
 } from "../lib/pw1-qr-playback.js";
 import { WocClient, effectiveWocBase } from "../lib/woc.js";
@@ -158,12 +159,14 @@ export function mountSettingsPage(root: HTMLElement): () => void {
                 </button>
               </div>
               <div id="exportQrPanel" class="backup-qr-panel" hidden>
-                <p class="muted-line">
+                <p id="exportQrHint" class="muted-line">
                   Point the other phone at this animated QR.
                 </p>
                 <canvas id="exportQrCanvas" width="320" height="320"></canvas>
                 <p id="exportQrProgress" class="muted-line">Frame 1 / 1</p>
-                <div class="actions">
+                <div class="actions pw1-qr-controls">
+                  <button id="exportQrPrev" type="button" hidden>Previous</button>
+                  <button id="exportQrNext" type="button" hidden>Next</button>
                   <button id="exportQrPause" type="button">Pause</button>
                 </div>
               </div>
@@ -331,6 +334,9 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $exportQrCanvas   = root.querySelector<HTMLCanvasElement>("#exportQrCanvas")!;
   const $exportQrProgress = root.querySelector<HTMLElement>("#exportQrProgress")!;
   const $exportQrPause    = root.querySelector<HTMLButtonElement>("#exportQrPause")!;
+  const $exportQrPrev     = root.querySelector<HTMLButtonElement>("#exportQrPrev")!;
+  const $exportQrNext     = root.querySelector<HTMLButtonElement>("#exportQrNext")!;
+  const $exportQrHint     = root.querySelector<HTMLElement>("#exportQrHint")!;
   const $exportJsonView   = root.querySelector<HTMLTextAreaElement>("#exportJsonView")!;
   const $importFile       = root.querySelector<HTMLInputElement>("#importWalletsFile")!;
   const $importPaste      = root.querySelector<HTMLTextAreaElement>("#importPasteJson")!;
@@ -352,6 +358,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $backupStatus     = root.querySelector<HTMLElement>("#backupStatus")!;
 
   let exportQrPlayback: Pw1QrPlayback | null = null;
+  let exportQrUnwire: (() => void) | null = null;
   let importQrScan: Pw1ScanHandle | null = null;
   let pendingReplaceRaw: string | null = null;
 
@@ -583,11 +590,16 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   });
 
   function stopExportQr(): void {
+    exportQrUnwire?.();
+    exportQrUnwire = null;
     exportQrPlayback?.stop();
     exportQrPlayback = null;
     clearPw1QrCanvas($exportQrCanvas);
     $exportQrPanel.hidden = true;
     $exportQrPause.textContent = "Pause";
+    $exportQrPause.hidden = false;
+    $exportQrPrev.hidden = true;
+    $exportQrNext.hidden = true;
     $exportQrToggle.textContent = "Show transfer QR";
   }
 
@@ -747,8 +759,14 @@ export function mountSettingsPage(root: HTMLElement): () => void {
           $exportQrProgress.textContent = `Frame ${idx} / ${total}`;
         },
       });
+      exportQrUnwire = wirePw1QrControls(exportQrPlayback, {
+        autoToggle: $exportQrPause,
+        prev: $exportQrPrev,
+        next: $exportQrNext,
+        hint: $exportQrHint,
+        autoHint: "Point the other phone at this animated QR.",
+      });
       $exportQrPanel.hidden = false;
-      $exportQrPause.textContent = "Pause";
       $exportQrToggle.textContent = "Hide transfer QR";
       setBackupStatus(
         `Showing transfer QR (${lines.length} frame${lines.length === 1 ? "" : "s"}, ${walletCount} wallet${walletCount === 1 ? "" : "s"}).`,
@@ -758,17 +776,6 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       setBackupStatus(`QR export failed: ${(e as Error).message}`, true);
     } finally {
       $exportQrToggle.disabled = false;
-    }
-  });
-
-  $exportQrPause.addEventListener("click", () => {
-    if (!exportQrPlayback) return;
-    if (exportQrPlayback.isRunning()) {
-      exportQrPlayback.pause();
-      $exportQrPause.textContent = "Resume";
-    } else {
-      exportQrPlayback.resume();
-      $exportQrPause.textContent = "Pause";
     }
   });
 
