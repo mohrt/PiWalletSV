@@ -327,7 +327,7 @@ export function renderWalletDetailShell(
           <div id="receiveShareBlock" class="receive-share-block receive-gated">
           <div class="receive-row">
             <div class="receive-qr-wrap">
-              <div id="receiveQrGate" class="receive-qr-gate" aria-hidden="true">
+              <div id="receiveQrGate" class="receive-qr-gate">
                 Verify on Pi to show QR
               </div>
               <canvas id="receiveQr" width="240" height="240"></canvas>
