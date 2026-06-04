@@ -245,28 +245,17 @@ list:
 2. Joystick down to **&ldquo;Airgap status&rdquo;**.
 3. Press **A**.
 
-You should see a green **&ldquo;Air-gapped&rdquo;** header and six rows reading
-`OK`:
+You should see a green **&ldquo;Air-gapped&rdquo;** header and six rows
+reading `OK`. The full reference for the header, status glyphs (`OK` /
+`!!` / `--`), and each check row lives in the
+[User manual § Airgap status](user-manual.md#airgap-status); it is
+included here for convenience:
 
-| Check | What it proves |
-|-------|----------------|
-| `modules` | No Wi-Fi or Bluetooth driver modules are loaded into the kernel. |
-| `rfkill` | Every radio the kernel knows about is soft- or hard-blocked. |
-| `interfaces` | Only the loopback (`lo`) network interface is present. |
-| `services` | wpa\_supplicant, NetworkManager, hciuart, and bluetooth are all inactive. |
-| `boot_config` | Firmware-level overlays disable Wi-Fi and Bluetooth at boot. |
-| `blacklist` | The radio kernel modules are blacklisted in modprobe. |
+--8<-- "docs/includes/airgap-status-reference.md"
 
-If any row shows `!!`, **stop**. The device is leaking somewhere
-and the prebuilt image has been altered or built incorrectly. Re-do
-Step&nbsp;1 (signature verification) and re-flash. If the second flash
-also fails the airgap check, contact [@PiWalletSV on X](https://x.com/PiWalletSV)
-or file an issue on
-[GitHub](https://github.com/mohrt/PiWalletSV/issues) with the
-specific failing rows.
-
-Press **A** at any time to refresh the report. Press **B** to return
-to Settings.
+If any row shows `!!`, **stop** and follow the BREACH steps above.
+For a prebuilt image, re-do Step&nbsp;1 (signature verification) and
+re-flash before contacting support.
 
 ## Step 8 &mdash; Pair with the companion PWA
 
@@ -369,11 +358,11 @@ blurry. Hold the bonnet about a foot away. The Camera v3 has
 autofocus and is much more forgiving.
 
 **&ldquo;Airgap status&rdquo; shows BREACH.**
-This is the diagnostic working as designed: it found a leak. Don't
-sign anything on this device until the report is all-green. The
-fastest fix is to re-verify the image signature (Step&nbsp;1) and
-re-flash; if it persists, contact [@PiWalletSV on X](https://x.com/PiWalletSV)
-or file a [GitHub issue](https://github.com/mohrt/PiWalletSV/issues).
+This is the diagnostic working as designed: it found a leak. See
+[User manual § Airgap status](user-manual.md#airgap-status) for what
+each indicator means. Don't sign anything until the report is
+all-green. The fastest fix is to re-verify the image signature
+(Step&nbsp;1) and re-flash.
 
 For everything else, see [Operate](operate.md) or
 [Help & support](index.md#help--support).

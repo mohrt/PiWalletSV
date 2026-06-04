@@ -69,7 +69,10 @@ The complete disclosure / reporting policy lives in the project's
 - **Air-gap discipline still applies.** Don't plug the Pi into the
   internet, don't type the seed into anything online, and don't let
   cameras or screen-recorders see the disclaimer-revealed phrase
-  during initial setup or recovery.
+  during initial setup or recovery. Verify the device is still quiet
+  with Settings &rarr; **Airgap status** on the bonnet; see
+  [User manual § Airgap status](user-manual.md#airgap-status) for
+  what each indicator means.
 
 ## Seed generation { #seed-generation }
 

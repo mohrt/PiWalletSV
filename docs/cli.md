@@ -44,6 +44,7 @@ piwallet
 ├── qr          multipart-QR transport (join, split, scan-camera)
 ├── sign        verify + sign an unsigned_proposal
 ├── firstboot   manage the legal disclaimer state
+├── diag        on-device diagnostics (airgap, display, GPIO, vault)
 └── bonnet      launch the full on-device UI
 ```
 
@@ -464,6 +465,22 @@ Options worth knowing:
   to 15 if you want longer SD-card lifetime on a quiet kiosk.
 
 Exit codes are documented under [Operate § Exit codes](operate.md#exit-codes).
+
+## `piwallet diag airgap`
+
+Verify the Pi has no live radio path. Same six checks as Settings
+&rarr; **Airgap status** on the bonnet; run from a shell for the full
+host report (including interfaces). See
+[User manual § Airgap status](user-manual.md#airgap-status) for what
+each row means.
+
+```bash
+piwallet diag airgap              # table on stdout; exit 1 on BREACH
+piwallet diag airgap --json       # machine-readable report
+```
+
+Inconclusive rows (`--`) are listed but do not flip the exit code — so
+the command is usable on a dev laptop without sysfs nodes.
 
 ## Environment variables
 

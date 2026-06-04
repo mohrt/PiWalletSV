@@ -481,6 +481,30 @@ signed.**
   non-custodial promise: no party (the project, the device, the
   companion) can recover your wallet without the mnemonic.
 
+**&ldquo;Airgap status&rdquo; shows BREACH or a row with `!!`.**
+
+- See [§12 Airgap status](#airgap-status) for what each indicator
+  means and what to do. Do not sign until the report is all-green.
+
+## 12. Airgap status { #airgap-status }
+
+PiWalletSV's security model depends on the signing device having no
+network path. The **Airgap status** screen in Settings runs six
+independent checks so you can verify that claim on demand — at first
+setup, after a reflash, or any time before signing something sensitive.
+
+From the wallet list:
+
+1. **Long-press B** to open Settings.
+2. Joystick down to **&ldquo;Airgap status&rdquo;**.
+3. Press **A**.
+
+--8<-- "docs/includes/airgap-status-reference.md"
+
+For the shell equivalent (recommended periodically, and required for
+full host interface verification), see
+[Operate — Airgap diagnostic](operate.md#airgap-diagnostic).
+
 ## Help & support
 
 --8<-- "docs/includes/support-contact.md"
