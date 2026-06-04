@@ -18,10 +18,16 @@ import {
   formatImportWalletResult,
   importWalletBackup,
   importWalletBackupBytes,
+  type BackupExportScope,
   type ImportWalletMode,
   serializeWalletBackup,
   walletBackupBytesToJson,
 } from "../lib/wallet-backup.js";
+import {
+  APP_VERSION,
+  BACKUP_FORMAT_VERSION,
+  formatAppVersion,
+} from "../lib/version.js";
 import { startPw1Scan, type Pw1ScanHandle } from "../lib/camera-scan-pw1.js";
 import {
   clearPw1QrCanvas,
@@ -36,31 +42,22 @@ import {
   formatFeeRate,
 } from "../lib/fee.js";
 
-// localStorage keys
-const KEY_DEFAULT_FEE_TIER   = "piwallet.settings.defaultFeeTier";
-const KEY_CUSTOM_FEE_RATE    = "piwallet.settings.customFeeRate";
-const KEY_FIAT_CURRENCY      = "piwallet.settings.fiatCurrency";
-const KEY_DEFAULT_NETWORK    = "piwallet.settings.defaultNetwork";
+import {
+  KEY_CUSTOM_FEE_RATE,
+  KEY_DEFAULT_FEE_TIER,
+  KEY_DEFAULT_NETWORK,
+  KEY_FIAT_CURRENCY,
+  getDefaultCustomFeeRate as readCustomFeeRate,
+  getDefaultFeeTier,
+  getDefaultNetwork,
+  getFiatCurrency,
+} from "../lib/companion-settings.js";
 
-export type FeeTier = "economy" | "standard" | "priority" | "custom";
-export type FiatCurrency = "USD" | "EUR" | "AUD" | "GBP";
-export type DefaultNetwork = "main" | "test";
-
-export function getDefaultFeeTier(): FeeTier {
-  return (localStorage.getItem(KEY_DEFAULT_FEE_TIER) as FeeTier) ?? "standard";
-}
+export type { FeeTier, FiatCurrency, DefaultNetwork } from "../lib/companion-settings.js";
+export { getDefaultFeeTier, getFiatCurrency, getDefaultNetwork } from "../lib/companion-settings.js";
 
 export function getDefaultCustomFeeRate(): number {
-  const stored = parseInt(localStorage.getItem(KEY_CUSTOM_FEE_RATE) ?? "", 10);
-  return Number.isInteger(stored) && stored >= 0 ? stored : DEFAULT_FEE_RATE_SATSKB;
-}
-
-export function getFiatCurrency(): FiatCurrency {
-  return (localStorage.getItem(KEY_FIAT_CURRENCY) as FiatCurrency) ?? "USD";
-}
-
-export function getDefaultNetwork(): DefaultNetwork {
-  return (localStorage.getItem(KEY_DEFAULT_NETWORK) as DefaultNetwork) ?? "main";
+  return readCustomFeeRate(DEFAULT_FEE_RATE_SATSKB);
 }
 
 export function mountSettingsPage(root: HTMLElement): () => void {
@@ -125,14 +122,25 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       <section class="card">
         <details class="backup-section" id="backupSection">
           <summary>Backup &amp; migration</summary>
-          <p class="muted-line">
-            Move paired wallets to another phone or browser (xpub and labels
-            only — no seed phrases or private keys).
-          </p>
 
           <details class="backup-fold" id="backupFold-export">
             <summary>Export</summary>
             <div class="backup-fold-body">
+            <fieldset class="import-mode-field export-scope-field">
+              <legend>Export includes</legend>
+              <label>
+                <input type="radio" name="exportScope" value="wallets-only" />
+                Wallets only
+              </label>
+              <label>
+                <input type="radio" name="exportScope" value="wallets-and-settings" checked />
+                Wallets and settings
+              </label>
+            </fieldset>
+            <p class="muted-line export-scope-hint">
+              Wallets only: pairing metadata and receive index. With settings:
+              fee tier, fiat currency, list sort, and cached balances/history.
+            </p>
             <div class="backup-tabs backup-sub-tabs" role="tablist" aria-label="Export method">
               <button type="button" class="backup-tab active" role="tab"
                 data-export-tab="qr" aria-selected="true" aria-controls="exportTab-qr">
@@ -257,8 +265,24 @@ export function mountSettingsPage(root: HTMLElement): () => void {
             </div>
           </details>
 
+          <p class="muted-line backup-format-note">
+            Backup format v${BACKUP_FORMAT_VERSION} (companion
+            ${formatAppVersion(APP_VERSION)}). Import requires this version or
+            newer; older apps cannot read backups from newer versions.
+          </p>
           <p id="backupStatus" class="muted-line" aria-live="polite"></p>
         </details>
+      </section>
+
+      <section class="card">
+        <h2>About</h2>
+        <p class="muted-line">
+          Companion ${formatAppVersion(APP_VERSION)}
+        </p>
+        <p class="muted-line">
+          Pair with PiWalletSV on your Pi device. The Pi shows its version
+          on Settings.
+        </p>
       </section>
 
       <section class="card">
@@ -433,8 +457,26 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   }
 
   async function loadBackupJson(): Promise<string> {
-    const file = await buildWalletBackupFile();
+    const file = await buildWalletBackupFile({ scope: getExportScope() });
     return serializeWalletBackup(file);
+  }
+
+  function getExportScope(): BackupExportScope {
+    const checked = root.querySelector<HTMLInputElement>(
+      'input[name="exportScope"]:checked',
+    );
+    return checked?.value === "wallets-only"
+      ? "wallets-only"
+      : "wallets-and-settings";
+  }
+
+  function onExportScopeChange(): void {
+    if (isExportQrVisible()) stopExportQr();
+    if (isExportJsonTabActive()) void refreshExportJsonView();
+  }
+
+  for (const r of root.querySelectorAll<HTMLInputElement>('input[name="exportScope"]')) {
+    r.addEventListener("change", onExportScopeChange);
   }
 
   function getImportMode(): ImportWalletMode {
@@ -693,7 +735,9 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     setBackupStatus("");
     $exportQrPanel.hidden = true;
     try {
-      const { lines, walletCount } = await buildWalletBackupPw1Lines();
+      const { lines, walletCount } = await buildWalletBackupPw1Lines({
+        scope: getExportScope(),
+      });
       if (lines.length === 0) {
         setBackupStatus("Nothing to show — no paired wallets yet.", true);
         return;

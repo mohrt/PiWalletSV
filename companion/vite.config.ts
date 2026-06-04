@@ -1,5 +1,12 @@
 import basicSsl from "@vitejs/plugin-basic-ssl";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
+
+const appVersion = (
+  JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as {
+    version: string;
+  }
+).version;
 
 // HTTPS is on by default in dev because the multipart-QR scan page uses
 // `getUserMedia`, which iOS Safari (and most other browsers) only expose
@@ -13,6 +20,9 @@ import { defineConfig } from "vite";
 const useHttps = process.env.PIWALLET_HTTP !== "1";
 
 export default defineConfig({
+  define: {
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(appVersion),
+  },
   plugins: useHttps ? [basicSsl()] : [],
   server: {
     port: 5173,

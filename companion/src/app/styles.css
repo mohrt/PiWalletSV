@@ -142,6 +142,10 @@ a:hover {
   opacity: 0.6;
 }
 
+.app-footer .app-version {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Inline logo in the page header */
 
 .page-header-brand {
@@ -1651,6 +1655,11 @@ label.button-like:hover {
   margin-top: 0.85rem;
 }
 
+.backup-format-note {
+  margin-top: 0.85rem;
+  font-size: 0.82rem;
+}
+
 .backup-subhead {
   margin: 1.1rem 0 0.5rem;
   font-size: 0.95rem;
@@ -1788,6 +1797,15 @@ label.button-like:hover {
   border: none;
   margin: 0.5rem 0 0.75rem;
   padding: 0;
+}
+
+.export-scope-field {
+  margin-top: 0;
+}
+
+.export-scope-hint {
+  margin: -0.35rem 0 0.75rem;
+  font-size: 0.82rem;
 }
 
 .import-mode-field legend {

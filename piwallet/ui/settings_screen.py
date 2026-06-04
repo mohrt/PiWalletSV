@@ -52,6 +52,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
+from piwallet import __version__ as PIWALLET_VERSION
 from piwallet.core.settings import (
     CAMERA_TYPE_OPTIONS,
     SLEEP_TIMER_OPTIONS_MS,
@@ -316,6 +317,15 @@ class SettingsScreen:
             size=14,
             color=COLOR_ACCENT,
             anchor="mm",
+        )
+        draw_text(
+            fb,
+            DISPLAY_WIDTH - 6,
+            title_h // 2,
+            f"v{PIWALLET_VERSION}",
+            size=9,
+            color=COLOR_DIM,
+            anchor="rm",
         )
 
         _CYCLER_KEYS = {"sleep_timer", "camera_type"}

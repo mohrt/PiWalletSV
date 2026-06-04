@@ -14,6 +14,7 @@ import {
   removeWallet,
   setLastScan,
   setNextReceiveIndex,
+  sortWalletRecords,
   updateLabel,
   withDefaults,
 } from "../src/lib/wallets.js";
@@ -265,5 +266,41 @@ describe("wallets store", () => {
     const filled = withDefaults(legacy);
     expect(filled.network).toBe("main");
     expect(filled.nextReceiveIndex).toBe(0);
+  });
+});
+
+describe("sortWalletRecords", () => {
+  const base = {
+    xpub: DEMO.xpub,
+    fingerprint: "aaaaaaaa",
+    path: DEMO.path,
+    addedAt: "2025-06-01T00:00:00.000Z",
+    schemaVersion: WALLET_SCHEMA_VERSION,
+  };
+
+  const wallets = [
+    { ...base, id: "1", label: "Charlie", addedAt: "2025-06-03T00:00:00.000Z", lastScan: { at: "", totalSats: 500, utxos: [], lastReceiveUsed: 0, lastChangeUsed: 0, addressesScanned: 1 } },
+    { ...base, id: "2", label: "Alpha", addedAt: "2025-06-01T00:00:00.000Z", lastScan: { at: "", totalSats: 1000, utxos: [], lastReceiveUsed: 0, lastChangeUsed: 0, addressesScanned: 1 } },
+    { ...base, id: "3", label: "Bravo", addedAt: "2025-06-02T00:00:00.000Z" },
+  ];
+
+  it("sorts by date newest first", () => {
+    expect(sortWalletRecords(wallets, "date").map((w) => w.id)).toEqual(["1", "3", "2"]);
+  });
+
+  it("sorts by date oldest first", () => {
+    expect(sortWalletRecords(wallets, "date-asc").map((w) => w.id)).toEqual(["2", "3", "1"]);
+  });
+
+  it("sorts by label A–Z", () => {
+    expect(sortWalletRecords(wallets, "label").map((w) => w.label)).toEqual([
+      "Alpha",
+      "Bravo",
+      "Charlie",
+    ]);
+  });
+
+  it("sorts by balance high to low, unscanned last", () => {
+    expect(sortWalletRecords(wallets, "balance").map((w) => w.id)).toEqual(["2", "1", "3"]);
   });
 });

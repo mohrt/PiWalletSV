@@ -5,10 +5,16 @@ import { ensureTermsAccepted } from "./app/terms-modal.js";
 import { mountWalletDetailPage } from "./app/wallet-detail.js";
 import { mountWalletsPage } from "./app/wallets-page.js";
 import { DOCS_BASE_URL } from "./lib/config.js";
+import { APP_VERSION, formatAppVersion } from "./lib/version.js";
 
 const app = document.getElementById("app");
 if (!app) {
   throw new Error("missing #app root element");
+}
+
+const footerVersion = document.getElementById("appFooterVersion");
+if (footerVersion) {
+  footerVersion.textContent = formatAppVersion(APP_VERSION);
 }
 
 type Teardown = (() => void) | void;
