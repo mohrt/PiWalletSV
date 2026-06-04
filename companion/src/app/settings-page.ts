@@ -94,6 +94,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
             <input id="sCustomRate" type="number" min="0" step="1"
               value="${customFeeRate}"
               placeholder="${DEFAULT_FEE_RATE_SATSKB}" />
+            <p id="customRateStatus" class="muted-line"></p>
           </label>
         </div>
 
@@ -284,6 +285,11 @@ export function mountSettingsPage(root: HTMLElement): () => void {
           Pair with PiWalletSV on your Pi device. The Pi shows its version
           on Settings.
         </p>
+        <p class="muted-line">
+          Cached balances and history from your last scan remain visible
+          offline. Refreshing balances, sending, pairing, and scanning
+          transfer QRs require network access.
+        </p>
       </section>
 
       <section class="card">
@@ -325,6 +331,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $clearStatus     = root.querySelector<HTMLElement>("#clearStatus")!;
   const $savedBanner     = root.querySelector<HTMLElement>("#settingsSavedBanner")!;
   const $customRateInput = root.querySelector<HTMLInputElement>("#sCustomRate")!;
+  const $customRateStatus = root.querySelector<HTMLElement>("#customRateStatus")!;
   const $exportDownload   = root.querySelector<HTMLButtonElement>("#exportDownload")!;
   const $exportCopy       = root.querySelector<HTMLButtonElement>("#exportCopy")!;
   const $exportQrToggle   = root.querySelector<HTMLButtonElement>("#exportQrToggle")!;
@@ -359,11 +366,17 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   let pendingReplaceRaw: string | null = null;
 
   // ---- saved flash ----
+  const SAVED_BANNER_DEFAULT = "✓ Settings saved";
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
-  function flashSaved(): void {
+  function flashSaved(message = SAVED_BANNER_DEFAULT): void {
+    $savedBanner.textContent = message;
     $savedBanner.hidden = false;
     if (savedTimer) clearTimeout(savedTimer);
-    savedTimer = setTimeout(() => { $savedBanner.hidden = true; savedTimer = null; }, 2000);
+    savedTimer = setTimeout(() => {
+      $savedBanner.hidden = true;
+      $savedBanner.textContent = SAVED_BANNER_DEFAULT;
+      savedTimer = null;
+    }, 2000);
   }
 
   let feeRec: FeeRecommendation | null = null;
@@ -409,17 +422,46 @@ export function mountSettingsPage(root: HTMLElement): () => void {
 
   $feeTierSelect.addEventListener("change", onSettingsFeeTierChanged);
 
+  function setCustomRateStatus(msg: string, isError = false): void {
+    $customRateStatus.textContent = msg;
+    $customRateStatus.classList.toggle("error", isError);
+  }
+
+  function parseCustomRateInput(): number | null {
+    const rate = parseInt($customRateInput.value, 10);
+    if (!Number.isInteger(rate) || rate < 0) return null;
+    return rate;
+  }
+
+  function trySaveCustomRate(): boolean {
+    const rate = parseCustomRateInput();
+    if (rate === null) {
+      if ($customRateInput.value.trim() !== "") {
+        setCustomRateStatus("Enter a whole number ≥ 0", true);
+      }
+      return false;
+    }
+    setCustomRateStatus("");
+    localStorage.setItem(KEY_CUSTOM_FEE_RATE, String(rate));
+    refreshFeeTierLabels();
+    flashSaved();
+    return true;
+  }
+
   $customRateInput.addEventListener("input", () => {
     if ($feeTierSelect.value === "custom") refreshFeeTierLabels();
+    if (parseCustomRateInput() !== null) setCustomRateStatus("");
   });
 
   $customRateInput.addEventListener("blur", () => {
-    const rate = parseInt($customRateInput.value, 10);
-    if (Number.isInteger(rate) && rate >= 0) {
-      localStorage.setItem(KEY_CUSTOM_FEE_RATE, String(rate));
-      refreshFeeTierLabels();
-      flashSaved();
-    }
+    trySaveCustomRate();
+  });
+
+  $customRateInput.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    trySaveCustomRate();
+    $customRateInput.blur();
   });
 
   // ---- load live fee rates from WoC mainnet ----
@@ -452,11 +494,9 @@ export function mountSettingsPage(root: HTMLElement): () => void {
 
   function applyImportResult(result: Awaited<ReturnType<typeof importWalletBackup>>): void {
     const summary = formatImportWalletResult(result);
-    setBackupStatus(
-      summary,
-      result.failed.length > 0 && result.imported === 0,
-    );
-    if (result.imported > 0) flashSaved();
+    const isError = result.failed.length > 0 && result.imported === 0;
+    setBackupStatus(summary, isError);
+    if (!isError) flashSaved("✓ Import complete");
   }
 
   async function loadBackupJson(): Promise<string> {
