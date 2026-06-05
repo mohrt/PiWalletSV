@@ -225,6 +225,71 @@ def test_idle_wake_on_raw_before_debounced_press() -> None:
     assert display.backlight_on is True
 
 
+def test_idle_sleep_sets_pin_locked_and_calls_on_pin_lock() -> None:
+    backend = FakeInputBackend()
+    clock = _Clock(0)
+    mgr = InputManager(backend, clock=clock, debounce_ms=0)
+    idle = IdleWakeTracker(mgr, timeout_ms=100)
+    locked: list[bool] = []
+
+    def _on_lock() -> None:
+        locked.append(True)
+
+    idle.on_pin_lock = _on_lock
+    clock.tick(200)
+    display = HeadlessDisplay()
+    assert idle_suppresses_frame_paint(
+        display, idle, [], mgr.now_ms(), input_mgr=mgr
+    ) is True
+    assert idle.asleep
+    assert idle.pin_locked
+    assert locked == [True]
+
+
+def test_run_screen_wake_runs_on_unlock_and_swallows_wake_event() -> None:
+    """After sleep, the wake button must not reach the underlying screen."""
+    backend = FakeInputBackend()
+    clock = _Clock(0)
+    mgr = InputManager(backend, clock=clock, debounce_ms=0)
+    idle = IdleWakeTracker(mgr, timeout_ms=100)
+    unlocked: list[bool] = []
+    idle.on_unlock = lambda: unlocked.append(True)
+
+    @dataclass
+    class _TapCounter:
+        taps: int = 0
+        done: bool = False
+        result: object | None = None
+
+        def on_event(self, event: Event) -> None:
+            if event.kind == EventKind.PRESS:
+                self.taps += 1
+                self.done = True
+                self.result = self.taps
+
+        def draw(self, fb: FrameBuffer) -> None:
+            fb.clear()
+
+    display = HeadlessDisplay()
+    screen = _TapCounter()
+    clock.tick(200)
+    idle_suppresses_frame_paint(display, idle, [], mgr.now_ms(), input_mgr=mgr)
+    assert idle.asleep and idle.pin_locked
+
+    backend.press(Button.A)
+    run_screen(
+        display,
+        mgr,
+        screen,
+        sleep=False,
+        idle_wake=idle,
+        max_iterations=1,
+    )
+    assert unlocked == [True]
+    assert screen.taps == 0
+    assert idle.pin_locked is False
+
+
 def test_run_screen_respects_max_iterations() -> None:
     """A screen that never sets done must not loop forever in tests."""
     backend = FakeInputBackend()

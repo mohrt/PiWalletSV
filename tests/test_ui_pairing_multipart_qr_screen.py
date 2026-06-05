@@ -73,9 +73,8 @@ def test_select_press_returns_back() -> None:
     assert s.result == "back"
 
 
-def test_b_long_returns_exit() -> None:
+def test_b_long_is_ignored() -> None:
     s = PairingMultipartQrScreen(["a", "b"])
     s.on_event(Event(button=Button.B, kind=EventKind.LONG, at_ms=0))
-    assert s.done is True
-    assert s.result == "exit"
+    assert s.done is False
 

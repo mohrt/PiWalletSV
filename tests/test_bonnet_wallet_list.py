@@ -34,58 +34,43 @@ def test_list_navigates_and_confirms() -> None:
     assert s.result == "wallet-1"
 
 
-def test_list_long_b_opens_settings() -> None:
-    """Long-press B is the gesture for the global Settings screen.
-
-    There is intentionally no "quit the bonnet app" gesture from the
-    wallet list — the device is a service, not an interactive app the
-    operator launches and quits. Repurposing long-B for Settings frees
-    up SELECT-PRESS for its natural "open the highlighted wallet" use
-    (the previous SELECT-LONG=Settings was unreachable in practice
-    because PRESS fires first and commits the row).
-    """
+def test_list_b_opens_settings() -> None:
     wallets = [_wallet("daily")]
     s = WalletListScreen(wallets=wallets)
-    s.on_event(_evt(Button.B, EventKind.LONG))
+    s.on_event(_evt(Button.B, EventKind.PRESS))
+    s.on_event(_evt(Button.B, EventKind.RELEASE))
     assert s.done is True
     assert s.result is WalletListAction.SETTINGS
 
 
-def test_list_short_b_press_is_inert() -> None:
-    """A brief tap of B at the top level does nothing.
-
-    There's nowhere to go "back" to from the wallet list, so B-press
-    must not accidentally exit or commit anything.
-    """
+def test_list_b_long_still_opens_settings_on_release() -> None:
     wallets = [_wallet("daily")]
     s = WalletListScreen(wallets=wallets)
     s.on_event(_evt(Button.B, EventKind.PRESS))
+    s.on_event(_evt(Button.B, EventKind.LONG))
+    s.on_event(_evt(Button.B, EventKind.RELEASE))
+    assert s.done is True
+    assert s.result is WalletListAction.SETTINGS
+
+
+def test_list_b_release_ignored_without_press_on_this_screen() -> None:
+    wallets = [_wallet("daily")]
+    s = WalletListScreen(wallets=wallets)
+    s.on_event(_evt(Button.B, EventKind.RELEASE))
     assert s.done is False
     assert s.result is None
 
 
-def test_list_long_select_no_longer_opens_settings() -> None:
-    """The old SELECT-long gesture is removed.
-
-    SELECT-PRESS commits the highlighted row; the input layer fires
-    PRESS *before* LONG, so the screen had already finished by the
-    time SELECT-LONG used to fire. Confirming the row is the correct
-    short-SELECT behaviour; long-SELECT is now intentionally inert.
-    """
+def test_list_select_confirms_highlighted_wallet() -> None:
     wallets = [_wallet("daily")]
     s = WalletListScreen(wallets=wallets)
-    # Simulate the natural ordering: PRESS commits, LONG arrives later.
-    s.on_event(_evt(Button.SELECT, EventKind.PRESS))
+    s.on_event(_evt(Button.SELECT))
     assert s.done is True
-    assert s.result == "wallet-0"
-    s.on_event(_evt(Button.SELECT, EventKind.LONG))
-    # Ignored once done; result must not flip to SETTINGS.
     assert s.result == "wallet-0"
 
 
 def test_list_empty_still_offers_actions() -> None:
     s = WalletListScreen(wallets=[])
-    # First row is now "+ New wallet"; A confirms it.
     s.on_event(_evt(Button.A))
     assert s.done is True
     assert s.result is WalletListAction.NEW
@@ -94,8 +79,6 @@ def test_list_empty_still_offers_actions() -> None:
 def test_list_offers_new_and_restore_at_bottom() -> None:
     wallets = [_wallet("daily", 0), _wallet("savings", 1)]
     s = WalletListScreen(wallets=wallets)
-    # 2 wallets + 2 CTA rows (new/restore) = 4 rows. Cursor 0 -> 1 -> 2
-    # lands on "+ New wallet"; settings is no longer a row.
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.DOWN))
     assert s.cursor == 2
@@ -107,7 +90,6 @@ def test_list_offers_new_and_restore_at_bottom() -> None:
 def test_list_restore_action() -> None:
     wallets = [_wallet("daily")]
     s = WalletListScreen(wallets=wallets)
-    # 1 wallet + 2 CTAs = 3 rows. Cursor 0 -> 1 -> 2 lands on "+ Restore".
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.A))
@@ -115,29 +97,17 @@ def test_list_restore_action() -> None:
 
 
 def test_list_no_settings_row_among_items() -> None:
-    """Settings is reached via gesture, not by drilling into a row."""
     wallets = [_wallet("daily"), _wallet("savings", 1)]
     s = WalletListScreen(wallets=wallets)
-    # 2 wallets + only New + Restore.
     assert len(s._list.items) == 4
     labels = [item.label for item in s._list.items]
     assert "Settings" not in labels
 
 
-def test_list_short_select_confirms_highlighted_row() -> None:
-    """Quick SELECT press confirms the highlighted row (open wallet)."""
-    wallets = [_wallet("daily")]
-    s = WalletListScreen(wallets=wallets)
-    # Highlight the first wallet by default; SELECT confirms it.
-    s.on_event(_evt(Button.SELECT, EventKind.PRESS))
-    assert s.done is True
-    assert s.result == "wallet-0"
-
-
-def test_list_long_b_works_on_empty_vault() -> None:
-    """Settings must be reachable even when there are no wallets yet."""
+def test_list_b_works_on_empty_vault() -> None:
     s = WalletListScreen(wallets=[])
-    s.on_event(_evt(Button.B, EventKind.LONG))
+    s.on_event(_evt(Button.B, EventKind.PRESS))
+    s.on_event(_evt(Button.B, EventKind.RELEASE))
     assert s.done is True
     assert s.result is WalletListAction.SETTINGS
 
@@ -152,5 +122,4 @@ def test_format_label_includes_fingerprint_hex() -> None:
     w = _wallet("daily", idx=0xAB)
     label = WalletListScreen._format_label(w)
     assert "daily" in label
-    # First 4 bytes -> 8 hex chars, first 4 of those should appear.
     assert "abacadae"[:8] in label

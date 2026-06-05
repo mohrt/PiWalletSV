@@ -528,11 +528,12 @@ Import **replaces** the entire vault. See
 
 ## `piwallet diag airgap`
 
-Verify the Pi has no live radio path. Same six checks as Settings
-&rarr; **Airgap status** on the bonnet; run from a shell for the full
-host report (including interfaces). See
+Verify the Pi has no live radio path. The bonnet **Settings → Airgap
+status** screen shows three summary rows; `piwallet diag airgap` lists
+six technical rows on the host. Run from a shell for the full host
+report (including interfaces). See
 [User manual § Airgap status](user-manual.md#airgap-status) for what
-each row means.
+each indicator means.
 
 ```bash
 piwallet diag airgap              # table on stdout; exit 1 on BREACH

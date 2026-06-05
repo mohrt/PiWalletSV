@@ -22,12 +22,15 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 from piwallet.ui.display import Display, FrameBuffer
 from piwallet.ui.input import Button, Event, InputBackend, InputManager
+
+class IdleUnlockWiped(Exception):
+    """Raised when the vault wipes during post-sleep PIN entry."""
 
 # Default bonnet idle blanking (backlight off until the next button event).
 # Five minutes matches `piwallet.core.settings.DEFAULT_SLEEP_TIMEOUT_MS`;
@@ -53,6 +56,9 @@ class IdleWakeTracker:
     timeout_ms: int = IDLE_TIMEOUT_MS
     last_activity_ms: int = field(init=False)
     asleep: bool = False
+    pin_locked: bool = False
+    on_pin_lock: Callable[[], None] | None = None
+    on_unlock: Callable[[], None] | None = None
 
     def __post_init__(self) -> None:
         self.last_activity_ms = self.input_mgr.now_ms()
@@ -105,6 +111,9 @@ def idle_suppresses_frame_paint(
     if not idle_wake.asleep:
         if now_ms - idle_wake.last_activity_ms >= idle_wake.timeout_ms:
             idle_wake.asleep = True
+            idle_wake.pin_locked = True
+            if idle_wake.on_pin_lock is not None:
+                idle_wake.on_pin_lock()
             display.set_backlight(False)
             return True
         return False
@@ -135,6 +144,7 @@ def run_screen(
     max_iterations: int | None = None,
     sleep: bool = True,
     idle_wake: IdleWakeTracker | None = None,
+    ignore_pin_lock: bool = False,
 ) -> object | None:
     """Drive ``screen`` until ``screen.done`` is True.
 
@@ -151,6 +161,11 @@ def run_screen(
     ``idle_wake`` turns the backlight off after its timeout with no input
     (see :class:`IdleWakeTracker`). The next input wakes the backlight
     before events are dispatched to ``screen``.
+
+    When ``idle_wake.pin_locked`` is set (panel blanked by the sleep
+    timer), the next wake runs ``idle_wake.on_unlock`` before the
+    underlying screen sees input. Pass ``ignore_pin_lock=True`` for
+    the unlock screen itself.
     """
     frame_budget = 1.0 / max(1, target_fps)
     fb = FrameBuffer(width=display.width, height=display.height)
@@ -161,9 +176,23 @@ def run_screen(
         iterations += 1
         events = input_mgr.poll()
         now_ms = input_mgr.now_ms()
+        was_asleep = idle_wake.asleep if idle_wake is not None else False
         suppress_paint = idle_suppresses_frame_paint(
             display, idle_wake, events, now_ms, input_mgr=input_mgr
         )
+        just_woke = (
+            idle_wake is not None
+            and was_asleep
+            and not idle_wake.asleep
+            and idle_wake.pin_locked
+        )
+        if just_woke and not ignore_pin_lock:
+            events = []
+            if idle_wake.on_unlock is not None:
+                idle_wake.on_unlock()
+                idle_wake.pin_locked = False
+            else:
+                idle_wake.pin_locked = False
         for event in events:
             screen.on_event(event)
             if screen.done:

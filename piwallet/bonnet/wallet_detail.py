@@ -43,7 +43,7 @@ from piwallet.ui.widgets import draw_text
 #: ``m/44'/236'/0'/<change>/<index>``. 0 = external, 1 = change.
 RECEIVE_BRANCH: int = 0
 
-WalletDetailResult = Literal["back", "exit"]
+WalletDetailResult = Literal["back"]
 
 
 @dataclass
@@ -163,7 +163,7 @@ class WalletDetailScreen:
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 10,
-            "L/R index   A/B exit",
+            "L/R index   A/B back",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

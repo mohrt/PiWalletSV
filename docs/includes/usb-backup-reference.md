@@ -2,7 +2,7 @@
 
 From the **wallet list**:
 
-1. **Long-press B** to open **Settings**.
+1. Press **B** to open **Settings**.
 2. Select **USB backup** → **A**.
 3. Pick **Backup to USB** or **Restore from USB**.
 

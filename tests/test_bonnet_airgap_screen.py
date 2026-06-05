@@ -63,11 +63,13 @@ def test_b_press_exits_back() -> None:
     assert s.result == "back"
 
 
-def test_b_long_exits_with_exit_signal() -> None:
+def test_b_long_is_ignored_until_back() -> None:
     s = _make_screen(CheckResult("modules", True, "ok"))
     s.on_event(_evt(Button.B, EventKind.LONG))
+    assert s.done is False
+    s.on_event(_evt(Button.B, EventKind.PRESS))
     assert s.done is True
-    assert s.result == "exit"
+    assert s.result == "back"
 
 
 @pytest.mark.parametrize("button", [Button.A, Button.SELECT])
@@ -78,8 +80,13 @@ def test_a_or_select_refreshes_report_in_place(
     refreshed_report = AirgapReport(checks=(CheckResult("modules", True, "fresh"),))
 
     s = ags.AirgapScreen(report=initial_report)
+    refreshed_rows = (CheckResult("wifi", True, "fresh"),)
     monkeypatch.setattr(
         "piwallet.bonnet.airgap_screen.check_airgap", lambda: refreshed_report
+    )
+    monkeypatch.setattr(
+        "piwallet.bonnet.airgap_screen.checks_for_bonnet_display",
+        lambda: refreshed_rows,
     )
 
     s.on_event(_evt(button))
@@ -87,6 +94,7 @@ def test_a_or_select_refreshes_report_in_place(
     assert s.done is False
     assert s.result is None
     assert s.report is refreshed_report
+    assert s._rows() is refreshed_rows
 
 
 def test_events_after_done_are_no_op() -> None:
@@ -128,3 +136,23 @@ def test_draw_does_not_raise_on_inconclusive_report() -> None:
     )
     fb = _fb()
     s.draw(fb)
+
+
+def test_rows_use_wifi_bluetooth_network_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rows = (
+        CheckResult("wifi", True, "ok"),
+        CheckResult("bluetooth", True, "ok"),
+        CheckResult("network", True, "ok"),
+    )
+    monkeypatch.setattr(
+        "piwallet.bonnet.airgap_screen.checks_for_bonnet_display",
+        lambda: rows,
+    )
+    s = _make_screen(CheckResult("modules", True, "ok"))
+    assert [c.display_name for c in s._rows()] == [
+        "Wi-Fi",
+        "Bluetooth",
+        "Network",
+    ]

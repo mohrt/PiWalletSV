@@ -1,11 +1,13 @@
 // PiWalletSV reference case — parametric OpenSCAD source.
 //
-// Two-piece press-fit clamshell, SeedSigner-style:
+// Two-piece clamshell (skirt + M2 corner screws), SeedSigner-style:
 //   back_tub  — deep half: camera + Pi standoffs, lens cone, I/O cutouts.
 //   front_lid — flat half: LCD window, joystick + button holes.
 //   button_cap — flanged pad; actuates via lid platform pocket (×2).
 //
 // Render modes: mode = "tub" | "lid" | "cap" | "caps" | "lid_caps" | "all" | "preview"
+// Loop 40: M2 × 6 mm pan-head corner screws; 4.8 × 4.8 mm square pillars at corners.
+// Loop 41: tighter button lid ports + button centres +0.5 mm Y.
 //   tub      — back tub only
 //   lid      — front lid only (flipped for print)
 //   caps     — 2× button caps (wide spacing — use brim in slicer)
@@ -85,12 +87,8 @@ pi_pcb_to_lcd_top = 14.0;
 front_slack       = 0.2;
 lid_seat_raise    = 1.0;
 
-// Lid retention — press-fit only, no screws. The back tub's top
-// edge steps inward by `lid_skirt_step` for the last `lid_skirt_h`
-// mm; the front lid carries a matching skirt that presses into that
-// step and is held by friction alone. The user confirmed in Loop 1
-// ("the lid and tub fit together very nice and tight") that the
-// existing clearance value gives a snug press-fit.
+// Lid retention — registration skirt for alignment + four M2 corner
+// screws (Loop 40). Skirt registers the lid; screws clamp it.
 lid_skirt_h    = 4.0;
 lid_skirt_step = 1.2;
 
@@ -203,7 +201,8 @@ button_cap_pad_proud           = 1.0;   // above lid outer face — was 0.5
 button_cap_flange_dia          = 7.5;   // retention flange — independent of lid hole
 button_cap_seat_h            = wall + button_cap_pad_proud - button_cap_pad_h;
 button_cap_lid_float           = wall - button_cap_seat_h;  // in-wall gap above flange when flush
-button_lid_recess_dia          = button_cap_flange_dia + 0.4;
+button_lid_recess_extra        = 0.25;   // Loop 41: was 0.4 — tighter flange seat
+button_lid_recess_dia          = button_cap_flange_dia + button_lid_recess_extra;
 button_lid_recess_depth          = button_cap_seat_h + button_cap_lid_float;  // = wall
 button_cap_total_h             = button_cap_seat_h + button_cap_pad_h;
 button_cap_print_gap           = 15;    // bed spacing between caps when printing ×2 alone
@@ -211,7 +210,8 @@ button_cap_nest_gap            = 3;     // cap spacing when nested in lid LCD wi
 // Lid cutouts — skirt platform + flange seat + pad port + outer well.
 // Sharp Ø steps bridged badly when the lid prints face-down; chamfer_h
 // tapers wide↔narrow instead. Extra port clearance absorbs blobbing.
-button_lid_port_clearance     = 0.45;
+button_lid_port_clearance     = 0.25;   // Loop 41: was 0.45 — tighter pad port
+button_lid_y_offset           = 0.25;   // Loop 41: net +Y 0.25 from STEP (+0.5 then −0.25)
 button_lid_step_chamfer_h       = 0.8;    // taper at flange→port transition
 button_lid_pad_port_dia        = button_cap_pad_dia + button_lid_port_clearance;
 button_lid_pad_well_dia        = button_cap_pad_dia + 0.6;
@@ -318,6 +318,16 @@ camera_post_height       = 3.0;
 camera_post_outer        = 5.0;   // Ø 5 mm column (1.65 mm wall around pilot)
 camera_post_pilot        = 1.7;   // M2 self-tap pilot in PLA
 camera_post_pilot_depth  = min(4.5, camera_post_height - 0.5);
+
+// Corner lid screws — M2 × 6 mm pan-head self-tappers. Square pillars
+// at each outer corner (footprint = 2× wall); hole centre inset = wall.
+lid_screw_enabled      = true;
+corner_screw_inset     = wall;              // 2.4 mm — screw centre from outer corner
+corner_pillar_size     = 2 * wall;          // 4.8 mm square pillar side
+lid_screw_pilot_d      = camera_post_pilot; // 1.7 mm — M2 self-tap
+lid_screw_pilot_depth  = 2.5;
+lid_screw_clearance_d  = camera_mount_dia;  // 2.2 mm — M2 shank clearance
+lid_corner_pocket_pad  = clearance;         // FDM slack around tub corner pillars
 
 // Pi standoffs (back tub). Four posts; Pi PCB rests on flat tops.
 // M2.5 × 6 mm pan-head self-tapping screws through Pi holes into pilots.
@@ -470,8 +480,6 @@ usb_jack_z = wall + pi_standoff_height + pi_pcb_thickness
 // tub; the lid's skirt drops into the tub's stepped lip below.
 tub_top = case_z - wall;             // = 32.74 (case_z 35.14 − wall 2.4)
 
-// (No screw boss positions — press-fit only.)
-
 // Camera anchor — lens axis stays on case midline (ignores bonnet_x_shift).
 //   lens_in_case = _bonnet_origin_x_base + lcd_active_centre
 //                = camera_anchor + camera_lens_centre
@@ -531,6 +539,86 @@ function camera_post_positions() = [
     [camera_anchor_x + camera_mount_inset.x + camera_mount_pitch.x,
      camera_anchor_y + camera_mount_inset.y + camera_mount_pitch.y],
 ];
+
+function pi_pcb_keepout() = [
+    bonnet_origin_x - clearance,
+    bonnet_origin_y - clearance,
+    bonnet_origin_x + bonnet_pcb_x + clearance,
+    bonnet_origin_y + bonnet_pcb_y + clearance,
+];
+
+function _rect_outside_rect(ax0, ay0, ax1, ay1, bx0, by0, bx1, by1) =
+    (ax1 <= bx0) || (ax0 >= bx1) || (ay1 <= by0) || (ay0 >= by1);
+
+function corner_pillar_positions() = [
+    [corner_screw_inset, corner_screw_inset],
+    [case_x - corner_screw_inset, corner_screw_inset],
+    [corner_screw_inset, case_y - corner_screw_inset],
+    [case_x - corner_screw_inset, case_y - corner_screw_inset],
+];
+
+// [x0, y0, x1, y1] axis-aligned footprint for corner index 0..3 (FL..BR).
+function corner_pillar_footprint(i) =
+    i == 0 ? [0, 0, corner_pillar_size, corner_pillar_size] :
+    i == 1 ? [case_x - corner_pillar_size, 0, case_x, corner_pillar_size] :
+    i == 2 ? [0, case_y - corner_pillar_size, corner_pillar_size, case_y] :
+             [case_x - corner_pillar_size, case_y - corner_pillar_size,
+              case_x, case_y];
+
+function _corner_pillar_clear_pi(i) =
+    let (
+        fp = corner_pillar_footprint(i),
+        pk = pi_pcb_keepout()
+    )
+    _rect_outside_rect(
+        fp[0], fp[1], fp[2], fp[3],
+        pk[0], pk[1], pk[2], pk[3]
+    );
+
+if (lid_screw_enabled) {
+    assert(_corner_pillar_clear_pi(0), "FL corner pillar overlaps Pi keepout");
+    assert(_corner_pillar_clear_pi(1), "FR corner pillar overlaps Pi keepout");
+    assert(_corner_pillar_clear_pi(2), "BL corner pillar overlaps Pi keepout");
+    assert(_corner_pillar_clear_pi(3), "BR corner pillar overlaps Pi keepout");
+}
+
+module corner_pillars() {
+    if (lid_screw_enabled) {
+        for (i = [0:3]) {
+            _fp = corner_pillar_footprint(i);
+            translate([_fp[0], _fp[1], 0])
+                cube([corner_pillar_size, corner_pillar_size, tub_top]);
+        }
+    }
+}
+
+// Underside corner pockets + screw bores in the front lid. The tub
+// pillars share the outer corner footprint; the lid skirt also wraps
+// that XY region, so we relieve the skirt (and bore through slab).
+module lid_corner_screw_cutouts() {
+    if (lid_screw_enabled) {
+        _pocket_h = lid_skirt_h + lid_corner_pocket_pad + 0.001;
+        for (i = [0:3]) {
+            _fp = corner_pillar_footprint(i);
+            translate([
+                _fp[0] - lid_corner_pocket_pad,
+                _fp[1] - lid_corner_pocket_pad,
+                -0.001
+            ])
+                cube([
+                    corner_pillar_size + 2 * lid_corner_pocket_pad,
+                    corner_pillar_size + 2 * lid_corner_pocket_pad,
+                    _pocket_h
+                ]);
+        }
+        for (p = corner_pillar_positions())
+            translate([p.x, p.y, -0.001])
+                cylinder(
+                    h=lid_skirt_h + wall + 0.002,
+                    d=lid_screw_clearance_d
+                );
+    }
+}
 
 
 // Pocket depth unchanged — only material above pocket grows (seat + pad).
@@ -658,6 +746,9 @@ module back_tub() {
             for (p = pi_standoff_positions())
                 translate([p.x, p.y, wall])
                     cylinder(h=pi_standoff_height, d=pi_standoff_outer);
+
+            // ---- Corner lid-screw pillars — full height at outer corners ----
+            corner_pillars();
         }
 
         // ---- Post bores — blind from post TOP only ----
@@ -685,6 +776,19 @@ module back_tub() {
                     h=camera_post_pilot_depth + 0.01,
                     d=camera_post_pilot
                 );
+
+        // Corner lid screws: M2 × 6 mm pan-head self-tap pilots.
+        if (lid_screw_enabled) {
+            for (p = corner_pillar_positions())
+                translate([
+                    p.x, p.y,
+                    tub_top - lid_screw_pilot_depth - 0.001
+                ])
+                    cylinder(
+                        h=lid_screw_pilot_depth + 0.01,
+                        d=lid_screw_pilot_d
+                    );
+        }
 
         // Lens through-hole.
         translate([lens_x, lens_y, -1])
@@ -817,7 +921,7 @@ module lcd_glass_clearance_relie() {
 
 module button_lid_cutouts(centre, pocket_into_skirt) {
     _cx = bonnet_origin_x + centre.x;
-    _cy = bonnet_origin_y + centre.y;
+    _cy = bonnet_origin_y + centre.y + button_lid_y_offset;
     _z_skirt = lid_skirt_h - pocket_into_skirt;
     _z_seat_top = lid_skirt_h + button_cap_seat_h;
     _z_well_floor = lid_skirt_h + wall - button_lid_pad_well_depth;
@@ -829,7 +933,7 @@ module button_lid_cutouts(centre, pocket_into_skirt) {
             d=button_lid_recess_dia
         );
 
-    // Tapered transition (7.9 → 6.3) — replaces sharp step for FDM.
+    // Tapered transition (recess → pad port) — replaces sharp step for FDM.
     translate([_cx, _cy, _z_seat_top - button_lid_step_chamfer_h - 0.001])
         cylinder(
             h=button_lid_step_chamfer_h + 0.002,
@@ -947,6 +1051,9 @@ module front_lid() {
         // Button cutouts — stepped bore retains flange; pad passes narrow port.
         button_lid_cutouts(button_a_centre, button_pocket_into_skirt);
         button_lid_cutouts(button_b_centre, button_b_pocket_into_skirt);
+
+        // Corner tub pillars — skirt pockets + M2 through-holes (full stack).
+        lid_corner_screw_cutouts();
 
         // Outer top-face chamfer — bevel where the rounded slab
         // meets the front face. Built by subtracting the difference

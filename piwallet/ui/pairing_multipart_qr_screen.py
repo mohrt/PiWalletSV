@@ -39,7 +39,7 @@ from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.qr_render import paste_qr, render_qr
 from piwallet.ui.widgets import draw_text
 
-PairingMultipartQrResult = Literal["back", "exit"]
+PairingMultipartQrResult = Literal["back"]
 
 
 def _wall_mono_ms() -> int:
@@ -98,10 +98,7 @@ class PairingMultipartQrScreen:
             return
         b = event.button
         k = event.kind
-        if b == Button.B and k == EventKind.LONG:
-            self.done = True
-            self.result = "exit"
-        elif (b == Button.B and k == EventKind.PRESS) or (
+        if (b == Button.B and k == EventKind.PRESS) or (
             b in (Button.A, Button.SELECT) and k == EventKind.PRESS
         ):
             self.done = True
@@ -170,7 +167,7 @@ class PairingMultipartQrScreen:
             fb,
             DISPLAY_WIDTH // 2,
             y_footer,
-            "A/B exit",
+            "A/B back",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

@@ -3,12 +3,16 @@
 This is the entry point the systemd unit / SD-card image runs on
 startup. It performs, in order:
 
-1. **Disclaimer.** If the operator hasn't accepted the current
+1. **Boot splash.** Logo screen; hold **B** for five seconds to enter
+   factory diagnostics before any setup. Otherwise continue after a
+   short timeout or **A**.
+
+2. **Disclaimer.** If the operator hasn't accepted the current
    disclaimer version, walk them through the three-page
    :class:`piwallet.firstboot.DisclaimerScreen`. Persist acceptance
    on success; exit on cancel.
 
-2. **Vault setup or unlock.** If no vault exists on disk, run
+3. **Vault setup or unlock.** If no vault exists on disk, run
    :func:`piwallet.bonnet.vault_setup.run_vault_setup` to walk the
    operator through picking a PIN twice and create the empty vault
    on the spot — first-boot devices never see the legacy "use the
@@ -20,11 +24,11 @@ startup. It performs, in order:
    wallet is added). Wrong PINs surface the attempts-remaining
    counter; the 10th wrong PIN wipes the vault.
 
-3. **Wallet list -> manage menu.** After unlock, the operator browses
+4. **Wallet list -> manage menu.** After unlock, the operator browses
    the list of wallets and drills into one. Selecting a wallet opens
    its **manage menu** (show deposit address, show xpub QR, rename,
-   erase). Long **B** backs out of the bonnet loop from the wallet
-   list only.
+   erase). The bonnet loop runs until the process is stopped externally
+   (power-off, systemd restart, etc.).
 
 This loop is *meant* to be the main process on the Pi. It does not
 fork, daemonize, or open any network sockets.
@@ -77,6 +81,7 @@ from piwallet.bonnet.usb_backup import (
     run_usb_backup_menu,
     run_usb_restore,
 )
+from piwallet.bonnet.about import build_about_screen
 from piwallet.bonnet.change_pin import run_change_pin
 from piwallet.bonnet.companion_pairing import (
     OfferCompanionPairingScreen,
@@ -85,6 +90,9 @@ from piwallet.bonnet.companion_pairing import (
 from piwallet.bonnet.create_wallet import CreateWalletOutcome, run_create_wallet
 from piwallet.bonnet.restore_wallet import RestoreWalletOutcome, run_restore_wallet
 from piwallet.bonnet.unlock import UnlockOutcome, UnlockScreen, VerifyFn
+from piwallet.bonnet.splash import run_boot_splash
+from piwallet.bonnet.system_reset import run_system_reset
+from piwallet.bonnet.utility import run_diagnostics_flow
 from piwallet.bonnet.vault_setup import run_vault_setup
 from piwallet.bonnet.wallet_list import WalletListAction, WalletListScreen
 from piwallet.bonnet.wallet_manage import run_wallet_manage
@@ -104,7 +112,12 @@ from piwallet.core.vault import (
 )
 from piwallet.firstboot.disclaimer import DisclaimerScreen
 from piwallet.firstboot.terms import mark_accepted, requires_acceptance
-from piwallet.ui.app import IdleWakeTracker, make_input_manager, run_screen
+from piwallet.ui.app import (
+    IdleUnlockWiped,
+    IdleWakeTracker,
+    make_input_manager,
+    run_screen,
+)
 from piwallet.ui.display import (
     COLOR_DANGER,
     COLOR_DIM,
@@ -151,6 +164,68 @@ def _make_verify_fn(vault: Vault) -> VerifyFn:
             return ("wrong", vault.attempts_remaining)
         return ("ok", None)
     return verify
+
+
+def _run_unlock_screen(
+    display: Display,
+    input_mgr: InputManager,
+    vault: Vault,
+    *,
+    terms_path: Path | None,
+    target_fps: int,
+    idle_wake: IdleWakeTracker | None = None,
+    ignore_pin_lock: bool = False,
+) -> UnlockOutcome | None:
+    """Run unlock until success, wipe, or bail-out."""
+    verify = _make_verify_fn(vault)
+    unlock = UnlockScreen(
+        verify=verify,
+        attempts_remaining=vault.attempts_remaining,
+    )
+    return run_screen(
+        display,
+        input_mgr,
+        unlock,
+        target_fps=target_fps,
+        idle_wake=idle_wake,
+        ignore_pin_lock=ignore_pin_lock,
+    )
+
+
+def _wire_idle_pin_lock(
+    *,
+    display: Display,
+    input_mgr: InputManager,
+    vault: Vault,
+    idle_wake: IdleWakeTracker,
+    target_fps: int,
+    pin_holder: list[str],
+    terms_path: Path | None,
+) -> None:
+    """Require PIN re-entry after the sleep timer blanks the panel."""
+
+    def _on_pin_lock() -> None:
+        pin_holder.clear()
+
+    def _on_unlock() -> None:
+        outcome = _run_unlock_screen(
+            display,
+            input_mgr,
+            vault,
+            terms_path=terms_path,
+            target_fps=target_fps,
+            idle_wake=idle_wake,
+            ignore_pin_lock=True,
+        )
+        if outcome is None:
+            return
+        if outcome.kind == "wiped":
+            raise IdleUnlockWiped()
+        assert outcome.kind == "ok" and outcome.pin is not None
+        pin_holder[:] = [outcome.pin]
+
+    idle_wake.on_pin_lock = _on_pin_lock
+    idle_wake.on_unlock = _on_unlock
 
 
 def _make_derive_address_fn(
@@ -230,12 +305,8 @@ def _offer_companion_pairing_after_wallet_save(
     *,
     idle_wake: IdleWakeTracker,
     target_fps: int,
-) -> bool:
-    """Optional xpub_export multipart QR for the PiWalletSV companion.
-
-    Returns ``True`` when the user long-pressed B inside the QR screen
-    and wants to exit the bonnet app; ``False`` otherwise.
-    """
+) -> None:
+    """Optional xpub_export multipart QR for the PiWalletSV companion."""
     prompt = OfferCompanionPairingScreen(wallet.label or wallet.id)
     run_screen(
         display,
@@ -245,7 +316,7 @@ def _offer_companion_pairing_after_wallet_save(
         idle_wake=idle_wake,
     )
     if prompt.result is not True:
-        return False
+        return
     try:
         lines = pairing_pw1_lines(vault, pin, wallet)
     except (VaultError, VaultWipedError) as exc:
@@ -256,7 +327,7 @@ def _offer_companion_pairing_after_wallet_save(
             accent=COLOR_DANGER,
         )
         time.sleep(2.0)
-        return False
+        return
     qr_screen = PairingMultipartQrScreen(lines)
     run_screen(
         display,
@@ -265,7 +336,6 @@ def _offer_companion_pairing_after_wallet_save(
         target_fps=target_fps,
         idle_wake=idle_wake,
     )
-    return qr_screen.result == "exit"
 
 
 def _show_status(display: Display, lines: list[str]) -> None:
@@ -291,6 +361,7 @@ def _run_settings_loop(
     vault: Vault,
     pin: str,
     settings_path: Path | None,
+    terms_path: Path | None,
     target_fps: int,
     idle_wake: IdleWakeTracker,
 ) -> tuple[BonnetSettings, str, bool, str]:
@@ -305,7 +376,6 @@ def _run_settings_loop(
 
         - ``"saved"``     value-row edits were saved.
         - ``"back"``      operator cancelled.
-        - ``"exit"``      operator long-pressed B (caller must quit).
         - ``"changed_pin"`` PIN was rotated; ``pin`` reflects the new
           value and the caller must reuse it for subsequent
           vault-gated operations.
@@ -313,8 +383,9 @@ def _run_settings_loop(
           PIN; caller must propagate as exit code 3.
         - ``"restored_usb"`` vault replaced from USB; caller must
           re-unlock with the backup PIN.
-    * ``exit_requested`` is the legacy long-B flag, retained for
-      callers that still treat it specially.
+        - ``"factory_reset"`` operator erased all device state from
+          Settings; caller must restart the lifecycle loop.
+    * ``exit_requested`` is always ``False`` (kept for call-site compat).
     * ``pin`` is the active PIN to use after this call returns.
 
     Live brightness preview is wired to ``display.set_brightness`` so
@@ -336,8 +407,6 @@ def _run_settings_loop(
             save_settings(screen.settings, settings_path)
             display.set_brightness(screen.settings.brightness)
             return screen.settings, "saved", False, pin
-        if screen.result == "exit":
-            return settings, "exit", True, pin
         if screen.result == "change_pin":
             # The screen saved any value-row drafts on its own (A on an
             # action row commits the draft so a half-adjusted brightness
@@ -364,8 +433,7 @@ def _run_settings_loop(
             # any in-flight tweaks before opening the airgap diag, so an
             # operator who fiddled with brightness and then tapped the
             # airgap row doesn't lose their slider change. The airgap
-            # screen itself is read-only — it can return only "back" or
-            # "exit".
+            # screen itself is read-only — it returns only "back".
             save_settings(screen.settings, settings_path)
             display.set_brightness(screen.settings.brightness)
             airgap = AirgapScreen()
@@ -376,9 +444,19 @@ def _run_settings_loop(
                 target_fps=target_fps,
                 idle_wake=idle_wake,
             )
-            if airgap.result == "exit":
-                return screen.settings, "exit", True, pin
-            return screen.settings, "saved", False, pin
+            continue
+        if screen.result == "about":
+            save_settings(screen.settings, settings_path)
+            display.set_brightness(screen.settings.brightness)
+            about = build_about_screen(wallet_count=len(vault.list_wallets()))
+            run_screen(
+                display,
+                input_mgr,
+                about,
+                target_fps=target_fps,
+                idle_wake=idle_wake,
+            )
+            continue
         if screen.result == "usb_backup":
             save_settings(screen.settings, settings_path)
             display.set_brightness(screen.settings.brightness)
@@ -414,6 +492,24 @@ def _run_settings_loop(
                     if flow == "ok":
                         return screen.settings, "restored_usb", False, pin
             continue
+        if screen.result == "system_reset":
+            save_settings(screen.settings, settings_path)
+            display.set_brightness(screen.settings.brightness)
+            reset_result = run_system_reset(
+                display,
+                input_mgr,
+                vault,
+                vault_path=vault.path,
+                settings_path=settings_path,
+                terms_path=terms_path,
+                target_fps=target_fps,
+                idle_wake=idle_wake,
+            )
+            if reset_result == "wiped":
+                return screen.settings, "wiped", False, pin
+            if reset_result == "completed":
+                return screen.settings, "factory_reset", False, pin
+            continue
         # "back": SettingsScreen has already reverted the live preview.
         return settings, "back", False, pin
 
@@ -431,7 +527,6 @@ def run_bonnet(
 
     Returns a Unix-style exit code. Useful exits:
 
-    * 0   -- normal exit (operator long-pressed B from wallet list).
     * 1   -- in-bonnet vault setup itself failed (rare: an on-disk
              race between ``vault.exists`` at boot and the
              ``vault.create`` call inside the setup flow). The
@@ -497,313 +592,337 @@ def run_bonnet(
     idle_wake = IdleWakeTracker(input_mgr, timeout_ms=settings.sleep_timeout_ms)
 
     try:
-        # ---- 0. Splash ------------------------------------------
-        # Draw the logo once, sleep, then move on. Running the full
-        # animation loop (60 SPI transfers at 24 MHz) leaves the ST7789
-        # in a corrupted state that makes all subsequent frames appear
-        # black, so we use a single flip + sleep instead.
-        from piwallet.bonnet.splash import show_splash_once
-
-        show_splash_once(display)
-
-        # ---- 1. Disclaimer --------------------------------------
-        if requires_acceptance(terms_path):
-            screen = DisclaimerScreen()
-            accepted = run_screen(
-                display, input_mgr, screen, target_fps=target_fps, idle_wake=idle_wake
-            )
-            if accepted is not True:
-                return 2
-            mark_accepted(terms_path)
-
-        # ---- 2. Vault setup (first boot) or Unlock --------------
-        vault = Vault(vault_path)
-        if not vault.exists or not vault.is_initialized:
-            @dataclass
-            class _FirstBootChooser:
-                done: bool = False
-                result: str | None = None
-                _list: ListView = field(init=False)
-
-                def __post_init__(self) -> None:
-                    self._list = ListView(
-                        items=[
-                            ListItem(label="New vault (set PIN)", value="new"),
-                            ListItem(label="Restore from USB", value="usb"),
-                        ],
-                        title="First setup",
-                    )
-
-                def on_event(self, event: Event) -> None:
-                    if self.done:
-                        return
-                    if event.button == Button.B and event.kind in (
-                        EventKind.PRESS,
-                        EventKind.LONG,
-                    ):
-                        self.done = True
-                        return
-                    self._list.on_event(event)
-                    if self._list.confirmed is not None:
-                        self.done = True
-                        self.result = str(self._list.confirmed)
-
-                def draw(self, fb: FrameBuffer) -> None:
-                    self._list.draw(fb)
-
-            chooser = _FirstBootChooser()
-            run_screen(
+        # ---- 0. Splash / diagnostics entry ----------------------
+        splash_outcome = run_boot_splash(
+            display, input_mgr, target_fps=target_fps, idle_wake=idle_wake
+        )
+        if splash_outcome == "diagnostics":
+            diag_outcome = run_diagnostics_flow(
                 display,
                 input_mgr,
-                chooser,
+                Vault(vault_path),
+                terms_path=terms_path,
                 target_fps=target_fps,
                 idle_wake=idle_wake,
             )
-            if chooser.result == "usb":
-                flow = run_usb_restore(
-                    display,
-                    input_mgr,
-                    vault_path=vault_path,
-                    settings_path=settings_path,
-                    target_fps=target_fps,
-                    idle_wake=idle_wake,
-                )
-                vault = Vault(vault_path)
-                if flow == "ok" and vault.is_initialized:
-                    verify = _make_verify_fn(vault)
-                    unlock = UnlockScreen(
-                        verify=verify,
-                        attempts_remaining=vault.attempts_remaining,
-                    )
-                    outcome: UnlockOutcome | None = run_screen(
-                        display,
-                        input_mgr,
-                        unlock,
-                        target_fps=target_fps,
-                        idle_wake=idle_wake,
-                    )
-                    if outcome is None:
-                        return 2
-                    if outcome.kind == "wiped":
-                        return 3
-                    assert outcome.kind == "ok" and outcome.pin is not None
-                    pin = outcome.pin
-                elif flow == "cancelled":
-                    chooser = _FirstBootChooser()
-                    run_screen(
-                        display,
-                        input_mgr,
-                        chooser,
-                        target_fps=target_fps,
-                        idle_wake=idle_wake,
-                    )
-                    if chooser.result != "new":
-                        return 2
-                    setup_result = run_vault_setup(
-                        display,
-                        input_mgr,
-                        vault_path,
-                        target_fps=target_fps,
-                        idle_wake=idle_wake,
-                    )
-                    if setup_result is None:
-                        _show_message(
-                            display,
-                            title="No vault",
-                            body=(
-                                "Vault setup failed. Try `piwallet vault init` "
-                                "from the CLI."
-                            ),
-                        )
-                        return 1
-                    vault, pin = setup_result
-                elif flow != "ok":
-                    return 2
-                else:
-                    setup_result = run_vault_setup(
-                        display,
-                        input_mgr,
-                        vault_path,
-                        target_fps=target_fps,
-                        idle_wake=idle_wake,
-                    )
-                    if setup_result is None:
-                        _show_message(
-                            display,
-                            title="No vault",
-                            body=(
-                                "Vault setup failed. Try `piwallet vault init` "
-                                "from the CLI."
-                            ),
-                        )
-                        return 1
-                    vault, pin = setup_result
-            elif chooser.result == "new":
-                setup_result = run_vault_setup(
-                    display,
-                    input_mgr,
-                    vault_path,
-                    target_fps=target_fps,
-                    idle_wake=idle_wake,
-                )
-                if setup_result is None:
-                    _show_message(
-                        display,
-                        title="No vault",
-                        body=(
-                            "Vault setup failed. Try `piwallet vault init` "
-                            "from the CLI."
-                        ),
-                    )
-                    return 1
-                vault, pin = setup_result
-            else:
-                return 2
-        else:
-            verify = _make_verify_fn(vault)
-            unlock = UnlockScreen(
-                verify=verify,
-                attempts_remaining=vault.attempts_remaining,
-            )
-            outcome: UnlockOutcome | None = run_screen(
-                display, input_mgr, unlock, target_fps=target_fps, idle_wake=idle_wake
-            )
-            if outcome is None:
-                return 2
-            if outcome.kind == "wiped":
-                return 3
-            assert outcome.kind == "ok" and outcome.pin is not None
-            pin = outcome.pin
+            if diag_outcome == "restart":
+                return 0
 
-        # ---- 3. List + detail loop ------------------------------
-        while True:
-            wallets = vault.list_wallets()
-            wlist = WalletListScreen(wallets=wallets)
-            chosen = run_screen(
-                display, input_mgr, wlist, target_fps=target_fps, idle_wake=idle_wake
-            )
-            if chosen is None:
-                # WalletListScreen never sets ``result=None`` in normal
-                # operation (there is no "quit the app" gesture from the
-                # top level — operators just power off). Treat it as a
-                # defensive no-op and re-show the list.
-                continue
-            if chosen is WalletListAction.NEW:
-                outcome3 = run_create_wallet(
+        while True:  # disclaimer → unlock → wallets; repeats after system reset
+            lifecycle_reset: list[bool] = [False]
+            # ---- 1. Disclaimer --------------------------------------
+            if requires_acceptance(terms_path):
+                screen = DisclaimerScreen()
+                accepted = run_screen(
+                    display, input_mgr, screen, target_fps=target_fps, idle_wake=idle_wake
+                )
+                if accepted is not True:
+                    return 2
+                mark_accepted(terms_path)
+    
+            # ---- 2. Vault setup (first boot) or Unlock --------------
+            vault = Vault(vault_path)
+            if not vault.exists or not vault.is_initialized:
+                @dataclass
+                class _FirstBootChooser:
+                    done: bool = False
+                    result: str | None = None
+                    _list: ListView = field(init=False)
+    
+                    def __post_init__(self) -> None:
+                        self._list = ListView(
+                            items=[
+                                ListItem(label="New vault (set PIN)", value="new"),
+                                ListItem(label="Restore from USB", value="usb"),
+                            ],
+                            title="First setup",
+                        )
+    
+                    def on_event(self, event: Event) -> None:
+                        if self.done:
+                            return
+                        if event.button == Button.B and event.kind in (
+                            EventKind.PRESS,
+                            EventKind.LONG,
+                        ):
+                            self.done = True
+                            return
+                        self._list.on_event(event)
+                        if self._list.confirmed is not None:
+                            self.done = True
+                            self.result = str(self._list.confirmed)
+    
+                    def draw(self, fb: FrameBuffer) -> None:
+                        self._list.draw(fb)
+    
+                chooser = _FirstBootChooser()
+                run_screen(
                     display,
                     input_mgr,
-                    vault,
-                    pin,
+                    chooser,
                     target_fps=target_fps,
                     idle_wake=idle_wake,
-                    settings=settings,
                 )
-                _surface_wallet_outcome(display, outcome3)
-                if outcome3.wallet is not None:
-                    quit_requested = _offer_companion_pairing_after_wallet_save(
+                if chooser.result == "usb":
+                    flow = run_usb_restore(
                         display,
                         input_mgr,
-                        vault,
-                        pin,
-                        outcome3.wallet,
-                        idle_wake=idle_wake,
+                        vault_path=vault_path,
+                        settings_path=settings_path,
                         target_fps=target_fps,
-                    )
-                    if quit_requested:
-                        return 0
-                continue
-            if chosen is WalletListAction.RESTORE:
-                outcome4 = run_restore_wallet(
-                    display,
-                    input_mgr,
-                    vault,
-                    pin,
-                    target_fps=target_fps,
-                    idle_wake=idle_wake,
-                )
-                _surface_wallet_outcome(display, outcome4)
-                if outcome4.wallet is not None:
-                    quit_requested = _offer_companion_pairing_after_wallet_save(
-                        display,
-                        input_mgr,
-                        vault,
-                        pin,
-                        outcome4.wallet,
                         idle_wake=idle_wake,
-                        target_fps=target_fps,
                     )
-                    if quit_requested:
-                        return 0
-                continue
-            if chosen is WalletListAction.SETTINGS:
-                settings, status, exit_requested, pin = _run_settings_loop(
-                    display,
-                    input_mgr,
-                    settings,
-                    vault=vault,
-                    pin=pin,
-                    settings_path=settings_path,
-                    target_fps=target_fps,
-                    idle_wake=idle_wake,
-                )
-                # Apply the (possibly edited) sleep timeout immediately
-                # so the next idle window honours the operator's choice
-                # without needing a bonnet restart.
-                idle_wake.timeout_ms = settings.sleep_timeout_ms
-                if status == "wiped":
-                    return 3
-                if status == "restored_usb":
                     vault = Vault(vault_path)
-                    verify = _make_verify_fn(vault)
-                    unlock = UnlockScreen(
-                        verify=verify,
-                        attempts_remaining=vault.attempts_remaining,
-                    )
-                    outcome = run_screen(
+                    if flow == "ok" and vault.is_initialized:
+                        outcome = _run_unlock_screen(
+                            display,
+                            input_mgr,
+                            vault,
+                            terms_path=terms_path,
+                            target_fps=target_fps,
+                            idle_wake=idle_wake,
+                        )
+                        if outcome is None:
+                            return 2
+                        if outcome.kind == "wiped":
+                            return 3
+                        assert outcome.kind == "ok" and outcome.pin is not None
+                        pin = outcome.pin
+                    elif flow == "cancelled":
+                        chooser = _FirstBootChooser()
+                        run_screen(
+                            display,
+                            input_mgr,
+                            chooser,
+                            target_fps=target_fps,
+                            idle_wake=idle_wake,
+                        )
+                        if chooser.result != "new":
+                            return 2
+                        setup_result = run_vault_setup(
+                            display,
+                            input_mgr,
+                            vault_path,
+                            target_fps=target_fps,
+                            idle_wake=idle_wake,
+                        )
+                        if setup_result is None:
+                            _show_message(
+                                display,
+                                title="No vault",
+                                body=(
+                                    "Vault setup failed. Try `piwallet vault init` "
+                                    "from the CLI."
+                                ),
+                            )
+                            return 1
+                        vault, pin = setup_result
+                    elif flow != "ok":
+                        return 2
+                    else:
+                        setup_result = run_vault_setup(
+                            display,
+                            input_mgr,
+                            vault_path,
+                            target_fps=target_fps,
+                            idle_wake=idle_wake,
+                        )
+                        if setup_result is None:
+                            _show_message(
+                                display,
+                                title="No vault",
+                                body=(
+                                    "Vault setup failed. Try `piwallet vault init` "
+                                    "from the CLI."
+                                ),
+                            )
+                            return 1
+                        vault, pin = setup_result
+                elif chooser.result == "new":
+                    setup_result = run_vault_setup(
                         display,
                         input_mgr,
-                        unlock,
+                        vault_path,
                         target_fps=target_fps,
                         idle_wake=idle_wake,
                     )
-                    if outcome is None:
-                        return 2
-                    if outcome.kind == "wiped":
-                        return 3
-                    assert outcome.kind == "ok" and outcome.pin is not None
-                    pin = outcome.pin
-                    settings = load_settings(settings_path)
-                    display.set_brightness(settings.brightness)
-                    idle_wake.timeout_ms = settings.sleep_timeout_ms
-                if exit_requested:
-                    return 0
-                continue
-            wallet = next((w for w in wallets if w.id == chosen), None)
-            if wallet is None:
-                continue
-            active = wallet
-            while True:
-                mg = run_wallet_manage(
+                    if setup_result is None:
+                        _show_message(
+                            display,
+                            title="No vault",
+                            body=(
+                                "Vault setup failed. Try `piwallet vault init` "
+                                "from the CLI."
+                            ),
+                        )
+                        return 1
+                    vault, pin = setup_result
+                else:
+                    return 2
+            else:
+                outcome = _run_unlock_screen(
                     display,
                     input_mgr,
                     vault,
-                    pin,
-                    active,
+                    terms_path=terms_path,
                     target_fps=target_fps,
                     idle_wake=idle_wake,
-                    settings=settings,
                 )
-                if mg == "exit":
-                    return 0
-                if mg in ("deleted", "back"):
-                    break
-                if mg == "renamed":
-                    refreshed = vault.list_wallets()
-                    nw = next((w for w in refreshed if w.id == active.id), None)
-                    if nw is None:
-                        break
-                    active = nw
-                # "stay" or "renamed" → loop back to redraw the manage menu.
+                if outcome is None:
+                    return 2
+                if outcome.kind == "wiped":
+                    return 3
+                assert outcome.kind == "ok" and outcome.pin is not None
+                pin = outcome.pin
+
+            settings = load_settings(settings_path)
+            display.set_brightness(settings.brightness)
+            idle_wake.timeout_ms = settings.sleep_timeout_ms
+
+            pin_holder: list[str] = [pin]
+            _wire_idle_pin_lock(
+                display=display,
+                input_mgr=input_mgr,
+                vault=vault,
+                idle_wake=idle_wake,
+                target_fps=target_fps,
+                pin_holder=pin_holder,
+                terms_path=terms_path,
+            )
+    
+            # ---- 3. List + detail loop ------------------------------
+            try:
+                while True:
+                    pin = pin_holder[0]
+                    wallets = vault.list_wallets()
+                    wlist = WalletListScreen(wallets=wallets)
+                    chosen = run_screen(
+                        display, input_mgr, wlist, target_fps=target_fps, idle_wake=idle_wake
+                    )
+                    if chosen is None:
+                        # WalletListScreen never sets ``result=None`` in normal
+                        # operation (there is no "quit the app" gesture from the
+                        # top level — operators just power off). Treat it as a
+                        # defensive no-op and re-show the list.
+                        continue
+                    if chosen is WalletListAction.NEW:
+                        outcome3 = run_create_wallet(
+                            display,
+                            input_mgr,
+                            vault,
+                            pin,
+                            target_fps=target_fps,
+                            idle_wake=idle_wake,
+                            settings=settings,
+                        )
+                        _surface_wallet_outcome(display, outcome3)
+                        if outcome3.wallet is not None:
+                            _offer_companion_pairing_after_wallet_save(
+                                display,
+                                input_mgr,
+                                vault,
+                                pin,
+                                outcome3.wallet,
+                                idle_wake=idle_wake,
+                                target_fps=target_fps,
+                            )
+                        continue
+                    if chosen is WalletListAction.RESTORE:
+                        outcome4 = run_restore_wallet(
+                            display,
+                            input_mgr,
+                            vault,
+                            pin,
+                            target_fps=target_fps,
+                            idle_wake=idle_wake,
+                        )
+                        _surface_wallet_outcome(display, outcome4)
+                        if outcome4.wallet is not None:
+                            _offer_companion_pairing_after_wallet_save(
+                                display,
+                                input_mgr,
+                                vault,
+                                pin,
+                                outcome4.wallet,
+                                idle_wake=idle_wake,
+                                target_fps=target_fps,
+                            )
+                        continue
+                    if chosen is WalletListAction.SETTINGS:
+                        settings, status, _exit_requested, pin = _run_settings_loop(
+                            display,
+                            input_mgr,
+                            settings,
+                            vault=vault,
+                            pin=pin_holder[0],
+                            settings_path=settings_path,
+                            terms_path=terms_path,
+                            target_fps=target_fps,
+                            idle_wake=idle_wake,
+                        )
+                        pin_holder[:] = [pin]
+                        # Apply the (possibly edited) sleep timeout immediately
+                        # so the next idle window honours the operator's choice
+                        # without needing a bonnet restart.
+                        idle_wake.timeout_ms = settings.sleep_timeout_ms
+                        if status == "wiped":
+                            return 3
+                        if status == "restored_usb":
+                            vault = Vault(vault_path)
+                            outcome = _run_unlock_screen(
+                                display,
+                                input_mgr,
+                                vault,
+                                terms_path=terms_path,
+                                target_fps=target_fps,
+                                idle_wake=idle_wake,
+                            )
+                            if outcome is None:
+                                return 2
+                            if outcome.kind == "wiped":
+                                return 3
+                            assert outcome.kind == "ok" and outcome.pin is not None
+                            pin_holder[:] = [outcome.pin]
+                            settings = load_settings(settings_path)
+                            display.set_brightness(settings.brightness)
+                            idle_wake.timeout_ms = settings.sleep_timeout_ms
+                        if status == "factory_reset":
+                            lifecycle_reset[0] = True
+                            break
+                        continue
+                    wallet = next((w for w in wallets if w.id == chosen), None)
+                    if wallet is None:
+                        continue
+                    active = wallet
+                    while True:
+                        mg = run_wallet_manage(
+                            display,
+                            input_mgr,
+                            vault,
+                            pin,
+                            active,
+                            target_fps=target_fps,
+                            idle_wake=idle_wake,
+                            settings=settings,
+                        )
+                        if mg in ("deleted", "back"):
+                            break
+                        if mg == "renamed":
+                            refreshed = vault.list_wallets()
+                            nw = next((w for w in refreshed if w.id == active.id), None)
+                            if nw is None:
+                                break
+                            active = nw
+                        # "stay" or "renamed" → loop back to redraw the manage menu.
+            except IdleUnlockWiped:
+                return 3
+            if lifecycle_reset[0]:
+                settings = load_settings(settings_path)
+                display.set_brightness(settings.brightness)
+                idle_wake.timeout_ms = settings.sleep_timeout_ms
+                release_usb_session()
+                continue
+            break
     finally:
         # Blank the panel whenever the bonnet loop ends (CLI passes display in,
         # so own_display is false — we still must turn the backlight off).

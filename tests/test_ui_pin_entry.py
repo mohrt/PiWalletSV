@@ -185,6 +185,7 @@ def test_select_acts_as_a() -> None:
     assert s.result == "5555"
 
 
+
 def test_b_press_clears_current_then_moves_left() -> None:
     s = PinEntryScreen(length=4, digits=[1, 2, 3, None])
     s.cursor = 3

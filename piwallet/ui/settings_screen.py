@@ -1,49 +1,20 @@
 """Bonnet global settings screen.
 
 A minimal value-editor for :class:`piwallet.core.settings.BonnetSettings`.
-Two value rows today — Brightness (continuous slider) and Sleep timer
-(discrete cycle: 1 min / 5 min / off) — and one action row, "Change
-PIN…", which exits the screen with ``result = "change_pin"`` so the
-caller can drive the change-PIN sub-flow and then re-open Settings.
-The screen is structured as a small row table so future toggles
-(panel rotation, target FPS, etc.) drop in without redesign.
+Value rows (brightness, sleep timer, camera) cycle with L/R; action rows
+open sub-flows on ``A``. The caller persists on save and re-opens this
+screen after read-only sub-screens (e.g. airgap status) return.
 
 Controls
 --------
 ==================  ==================================================
 UP/DOWN             Move the cursor between settings rows.
-LEFT/RIGHT          Adjust the highlighted *value* row (live preview
-                    for brightness; cycles the discrete value for
-                    sleep timer). No effect on action rows.
+LEFT/RIGHT          Cycle the highlighted *value* row. No effect on
+                    action rows.
 A / SEL on a value  Save the draft and return ``"saved"``.
-A / SEL on action   Save the value-row drafts (just like a normal save)
-                    AND return the action key (today only
-                    ``"change_pin"``) so the caller dispatches.
-B PRESS             Discard the draft and return ``"back"``; the
-                    caller restores the original brightness on exit.
-B LONG              Exit the bonnet app entirely (``"exit"``).
+A / SEL on action   Save value-row drafts and return the action key.
+B (short)           Discard draft and return ``"back"``.
 ==================  ==================================================
-
-Design notes
-------------
-- The screen accepts an optional ``apply_brightness`` callback so
-  changes can be previewed live on the panel as the user adjusts the
-  slider. Tests pass a stub recorder; production wires it to
-  ``display.set_brightness``.
-- The brightness step (5 percentage points) is small enough to feel
-  responsive and large enough that ten or so left/rights span the full
-  legal range. Holding the joystick triggers ``REPEAT`` events which
-  step at the bonnet's repeat cadence.
-- The sleep timer cycles through a discrete preset list rather than a
-  free-form slider so operators can't end up with a 17-second timeout
-  by accident, and so a future migration can enumerate legal values.
-- The screen never persists settings on its own — that's the
-  caller's job, so the same flow can be reused when the bonnet boots
-  to a settings re-prompt or runs an inline brightness tweak.
-- Action rows save the in-progress value drafts on ``A`` so an
-  operator who tweaks brightness, then taps "Change PIN…", doesn't
-  lose their slider change just because the change-PIN flow happens
-  to be a separate sub-screen.
 """
 
 from __future__ import annotations
@@ -54,6 +25,7 @@ from typing import Literal
 
 from piwallet import __version__ as PIWALLET_VERSION
 from piwallet.core.settings import (
+    BRIGHTNESS_OPTIONS,
     CAMERA_TYPE_OPTIONS,
     SLEEP_TIMER_OPTIONS_MS,
     BonnetSettings,
@@ -65,41 +37,24 @@ from piwallet.ui.display import (
     COLOR_FG,
     DISPLAY_HEIGHT,
     DISPLAY_WIDTH,
-    MAX_BRIGHTNESS,
-    MIN_BRIGHTNESS,
     FrameBuffer,
-    clamp_brightness,
 )
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.widgets import draw_text
 
 SettingsScreenResult = Literal[
-    "saved", "back", "exit", "change_pin", "airgap", "usb_backup"
+    "saved", "back", "change_pin", "airgap", "usb_backup", "about", "system_reset"
 ]
 
-#: Step size used by left/right and repeat-events when adjusting brightness.
-BRIGHTNESS_STEP: float = 0.05
+_CYCLER_KEYS = frozenset({"brightness", "sleep_timer", "camera_type"})
 
 
 @dataclass
 class SettingsRow:
-    """Visual + interaction metadata for a single settings row.
-
-    Two flavours, discriminated by :attr:`is_action`:
-
-    * ``is_action=False`` (default) — a *value* row whose right-hand
-      column is the editable value. L/R adjusts the draft; ``A`` on
-      this row saves and exits with ``"saved"``.
-    * ``is_action=True`` — an *action* row that opens a sub-flow
-      when ``A`` is pressed. L/R is a no-op. The screen exits with
-      ``result = key`` so the caller can dispatch on the row's key
-      (e.g. ``"change_pin"``). Pending value-row drafts are saved
-      first so the operator's slider/cycle changes aren't dropped.
-    """
+    """Visual + interaction metadata for a single settings row."""
 
     key: str
     label: str
-    #: Renderer for the right-hand value column.
     value_text: Callable[[BonnetSettings], str]
     is_action: bool = False
 
@@ -109,11 +64,6 @@ def _brightness_value_text(s: BonnetSettings) -> str:
 
 
 def _format_sleep_timeout_ms(ms: int) -> str:
-    """Operator-readable sleep-timer label.
-
-    ``0`` is the "Off" preset — never blank; positive values render
-    in minutes (the only granularity the preset list ships with).
-    """
     if ms <= 0:
         return "Off"
     minutes = ms // 60_000
@@ -136,7 +86,6 @@ def _camera_type_value_text(s: BonnetSettings) -> str:
 
 
 def _action_arrow(_s: BonnetSettings) -> str:
-    """Right-column glyph for action rows — visual cue that A opens a sub-flow."""
     return ">"
 
 
@@ -162,10 +111,6 @@ SETTINGS_ROWS: tuple[SettingsRow, ...] = (
         value_text=_action_arrow,
         is_action=True,
     ),
-    # Surfaces piwallet.diag.airgap as a one-tap "is this device
-    # actually quiet on the airwaves right now?" check. Anchored
-    # below Change PIN because both are action rows; ordering them
-    # together keeps value rows and action rows visually separate.
     SettingsRow(
         key="airgap",
         label="Airgap status",
@@ -178,11 +123,23 @@ SETTINGS_ROWS: tuple[SettingsRow, ...] = (
         value_text=_action_arrow,
         is_action=True,
     ),
+    SettingsRow(
+        key="about",
+        label="About",
+        value_text=_action_arrow,
+        is_action=True,
+    ),
+    SettingsRow(
+        key="system_reset",
+        label="System reset",
+        value_text=_action_arrow,
+        is_action=True,
+    ),
 )
 
-
-#: Vertical space reserved for the two-line footer hint strip.
-_FOOTER_RESERVE_PX: int = 36
+_FOOTER_HINT_TOP_Y = DISPLAY_HEIGHT - 26
+_FOOTER_HINT_BOTTOM_Y = DISPLAY_HEIGHT - 12
+_LIST_BOTTOM_Y = DISPLAY_HEIGHT - 36
 
 
 @dataclass
@@ -195,9 +152,9 @@ class SettingsScreen:
     cursor: int = 0
     done: bool = False
     result: SettingsScreenResult | None = None
-    #: Working copy mutated by left/right; saved into ``settings`` on A.
     _draft: BonnetSettings = field(init=False)
     _original: BonnetSettings = field(init=False)
+    _b_pressed_here: bool = field(default=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.rows:
@@ -207,33 +164,26 @@ class SettingsScreen:
 
     @property
     def draft(self) -> BonnetSettings:
-        """Read-only view of the in-progress edits (for tests + caller)."""
         return self._draft
-
-    # -- input -------------------------------------------------------
 
     def on_event(self, event: Event) -> None:
         if self.done:
             return
         b = event.button
         k = event.kind
-        if b == Button.B and k == EventKind.LONG:
-            self._restore_preview()
-            self.done = True
-            self.result = "exit"
-            return
-        if b == Button.B and k == EventKind.PRESS:
-            self._restore_preview()
-            self.done = True
-            self.result = "back"
-            return
+        if b == Button.B:
+            if k == EventKind.PRESS:
+                self._b_pressed_here = True
+                return
+            if k == EventKind.RELEASE:
+                if self._b_pressed_here:
+                    self._restore_preview()
+                    self.done = True
+                    self.result = "back"
+                self._b_pressed_here = False
+                return
         if b in (Button.A, Button.SELECT) and k == EventKind.PRESS:
             row = self.rows[self.cursor]
-            # Save pending value-row drafts on either path. For
-            # action rows this means a tweak made just before
-            # tapping the action isn't lost while the sub-flow
-            # runs; for value rows it's the long-standing
-            # save-and-exit behaviour.
             self.settings = self._draft
             self.done = True
             self.result = row.key if row.is_action else "saved"
@@ -245,46 +195,44 @@ class SettingsScreen:
             self.cursor = (self.cursor + 1) % len(self.rows)
             return
         if b == Button.LEFT and k in (EventKind.PRESS, EventKind.REPEAT):
-            self._adjust(-BRIGHTNESS_STEP)
+            self._adjust(-1)
             return
         if b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
-            self._adjust(+BRIGHTNESS_STEP)
+            self._adjust(+1)
             return
 
-    def _adjust(self, delta: float) -> None:
+    def _adjust(self, step: int) -> None:
         row = self.rows[self.cursor]
         if row.key == "brightness":
-            new_brightness = clamp_brightness(self._draft.brightness + delta)
-            if new_brightness == self._draft.brightness:
-                return
-            self._draft = replace(self._draft, brightness=new_brightness)
-            if self.apply_brightness is not None:
-                self.apply_brightness(new_brightness)
+            self._cycle_brightness(step=step)
+        elif row.key == "sleep_timer":
+            self._cycle_sleep_timer(step=step)
+        elif row.key == "camera_type":
+            self._cycle_camera_type(step=step)
+
+    def _cycle_brightness(self, *, step: int) -> None:
+        options = BRIGHTNESS_OPTIONS
+        if not options:
             return
-        if row.key == "sleep_timer":
-            self._cycle_sleep_timer(step=1 if delta > 0 else -1)
+        try:
+            idx = options.index(self._draft.brightness)
+        except ValueError:
+            idx = 0
+        new_idx = (idx + step) % len(options)
+        new_value = options[new_idx]
+        if new_value == self._draft.brightness:
             return
-        if row.key == "camera_type":
-            self._cycle_camera_type(step=1 if delta > 0 else -1)
-            return
+        self._draft = replace(self._draft, brightness=new_value)
+        if self.apply_brightness is not None:
+            self.apply_brightness(new_value)
 
     def _cycle_sleep_timer(self, *, step: int) -> None:
-        """Advance the sleep-timer preset by one slot in either direction.
-
-        Wraps at the ends so L/R cycles indefinitely. ``step`` is +1
-        for RIGHT, -1 for LEFT. The ``replace`` is unconditional even
-        when there's only one preset (currently three) — it keeps the
-        ``_draft`` identity stable for callers that diff state.
-        """
         options = SLEEP_TIMER_OPTIONS_MS
         if not options:
             return
         try:
             idx = options.index(self._draft.sleep_timeout_ms)
         except ValueError:
-            # Drafted value drifted off the preset list (e.g. a hand-
-            # edited file that load_settings let through). Snap back
-            # to the default index 0 before stepping.
             idx = 0
         new_idx = (idx + step) % len(options)
         new_value = options[new_idx]
@@ -293,7 +241,6 @@ class SettingsScreen:
         self._draft = replace(self._draft, sleep_timeout_ms=new_value)
 
     def _cycle_camera_type(self, *, step: int) -> None:
-        """Advance the camera-type preset by one slot in either direction."""
         options = CAMERA_TYPE_OPTIONS
         if not options:
             return
@@ -314,8 +261,6 @@ class SettingsScreen:
         ):
             self.apply_brightness(self._original.brightness)
         self._draft = self._original
-
-    # -- render ------------------------------------------------------
 
     def draw(self, fb: FrameBuffer) -> None:
         fb.clear(COLOR_BG)
@@ -340,50 +285,42 @@ class SettingsScreen:
             anchor="rm",
         )
 
-        _CYCLER_KEYS = {"sleep_timer", "camera_type"}
-
         row_y = title_h + 2
-        list_bottom = DISPLAY_HEIGHT - _FOOTER_RESERVE_PX
-        row_h = min(32, (list_bottom - row_y) // max(1, len(self.rows)))
-        row_h = max(row_h, 24)
+        row_h = min(
+            28,
+            max(22, (_LIST_BOTTOM_Y - row_y) // max(1, len(self.rows))),
+        )
         for idx, row in enumerate(self.rows):
             is_cursor = idx == self.cursor
             top = row_y + idx * row_h
+            bottom = min(top + row_h, _LIST_BOTTOM_Y)
             if is_cursor:
                 fb.draw.rectangle(
-                    (0, top, DISPLAY_WIDTH, top + row_h),
+                    (0, top, DISPLAY_WIDTH, bottom),
                     fill=(48, 64, 96),
                 )
             draw_text(
                 fb,
                 12,
-                top + row_h // 2,
+                top + (bottom - top) // 2,
                 row.label,
                 size=14,
                 color=COLOR_FG,
                 anchor="lm",
             )
             val = row.value_text(self._draft)
-            # Wrap left/right cycler values in < > brackets when selected
-            # so the operator sees that LEFT/RIGHT scrolls through options.
             if is_cursor and row.key in _CYCLER_KEYS:
                 val = f"< {val} >"
             draw_text(
                 fb,
                 DISPLAY_WIDTH - 12,
-                top + row_h // 2,
+                top + (bottom - top) // 2,
                 val,
                 size=14,
                 color=COLOR_FG if is_cursor else COLOR_DIM,
                 anchor="rm",
             )
 
-        # Brightness slider lives in the footer gutter below the row list.
-        if self.rows[self.cursor].key == "brightness":
-            track_top = list_bottom + 4
-            self._draw_slider(fb, self._draft.brightness, track_top=track_top)
-
-        # Footer hints — vary by row type.
         cur_row = self.rows[self.cursor]
         on_action = cur_row.is_action
         on_cycler = cur_row.key in _CYCLER_KEYS
@@ -393,11 +330,11 @@ class SettingsScreen:
             upper_hint = "< / > cycle   U/D row"
         else:
             upper_hint = "L/R adjust   U/D row"
-        a_verb = "open" if on_action else "save"
+        a_verb = "select" if on_action else "save"
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 24,
+            _FOOTER_HINT_TOP_Y,
             upper_hint,
             size=10,
             color=COLOR_DIM,
@@ -406,29 +343,9 @@ class SettingsScreen:
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 10,
-            f"A {a_verb}   B back   hold B quit",
+            _FOOTER_HINT_BOTTOM_Y,
+            f"A {a_verb}   B back",
             size=10,
             color=COLOR_DIM,
             anchor="mm",
         )
-
-    def _draw_slider(self, fb: FrameBuffer, brightness: float, *, track_top: int) -> None:
-        margin = 24
-        track_height = 6
-        track_bottom = track_top + track_height
-        # Track.
-        fb.draw.rectangle(
-            (margin, track_top, DISPLAY_WIDTH - margin, track_bottom),
-            fill=(40, 40, 48),
-            outline=COLOR_DIM,
-        )
-        # Fill, mapped to the legal [MIN_BRIGHTNESS, MAX_BRIGHTNESS] band.
-        denom = max(1e-6, MAX_BRIGHTNESS - MIN_BRIGHTNESS)
-        frac = max(0.0, min(1.0, (brightness - MIN_BRIGHTNESS) / denom))
-        fill_w = round((DISPLAY_WIDTH - 2 * margin) * frac)
-        if fill_w > 0:
-            fb.draw.rectangle(
-                (margin, track_top, margin + fill_w, track_bottom),
-                fill=COLOR_ACCENT,
-            )

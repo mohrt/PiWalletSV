@@ -16,8 +16,9 @@ phone) provides the same workflows.
 
 ## 1. First boot
 
-When you first boot the Pi with PiWalletSV installed, the bonnet
-will (Phase 2 onwards) walk you through a three-page disclaimer:
+When you first boot the Pi with PiWalletSV installed, the bonnet shows
+the **PiWalletSV logo** briefly, then walks you through a three-page
+disclaimer:
 
 1. **Alpha software.** A short statement that this is pre-release
    code with no warranty.
@@ -31,6 +32,9 @@ acknowledgement is persisted (with the disclaimer version and
 timestamp) into the vault file's metadata so the device doesn't
 re-prompt on every boot. A version bump in the disclaimer text
 re-prompts on next boot.
+
+Hold **B** for five seconds on the boot logo to open
+[factory diagnostics](#factory-diagnostics) instead of continuing setup.
 
 Until Phase 2 ships, the equivalent acknowledgement happens in the
 companion's first-load modal (see §3 below).
@@ -265,8 +269,8 @@ at the QR canvas.
     - **frame N / M** — fragments are arriving; the count climbs
       until N == M and the proposal is fully assembled.
 
-    Press **B** at any time to abort the scan; long-press **B**
-    to quit the bonnet entirely.
+    Press **B** at any time to abort the scan and return to the wallet
+    manage menu.
 
     Once assembly completes, the bonnet shows a **Verifying SPV**
     screen with a progress bar and a live status line as each input's
@@ -407,6 +411,10 @@ To wipe the vault entirely, delete the vault file:
 rm ~/.piwallet/vault.bin
 ```
 
+Or use **Settings → System reset** on the bonnet to securely overwrite
+the vault and clear settings and disclaimer state before handing the
+device to someone else — see [§15 Settings](#settings).
+
 The Pi will treat that as "no vault yet" on next launch. **This is
 irreversible** without your mnemonic — the encrypted xprv and any
 on-device-only state are gone.
@@ -465,7 +473,7 @@ On the **current** firmware, before you re-flash:
 
 1. Insert a **FAT32 or exFAT** USB stick into the Pi's **data** micro-USB
    port (the one closer to the SD slot; power stays on **PWR IN**).
-2. **Long-press B** → Settings → **USB backup** → **Backup to USB**.
+2. **Press B** → Settings → **USB backup** → **Backup to USB**.
 3. Pick the drive from the list, confirm your **PIN**, and wait for
    *Backup saved*. Press **A** or **B** to dismiss, then **B** to
    return to Settings.
@@ -543,7 +551,7 @@ Pick **one** path below. Import **replaces all wallets** on the device
 1. Power on the flashed Pi, accept the **disclaimer** (always shown
    after a firmware upgrade).
 2. On **First setup**, choose **Restore from USB** (or, if you already
-   have a vault, **long-press B** → Settings → **USB backup** →
+   have a vault, **press B** → Settings → **USB backup** →
    **Restore from USB**).
 3. Insert the backup stick, pick the drive, then pick the backup
    timestamp.
@@ -601,7 +609,7 @@ again, replace `vault.bin` with your backup, and boot once more.
 Treat the upgraded device like a new install until you have evidence
 it is still sealed:
 
-1. **Long-press B** → Settings → **Airgap status** → **A**. Every row
+1. **Press B** → Settings → **Airgap status** → **A**. Every row
    should read `OK` and the header should say **Air-gapped**. See
    [§14 Airgap status](#airgap-status) if anything shows `!!`.
 2. Run a **TESTNET** send round-trip ([Flash and first run § Step 9](build-image.md#step-9-sign-your-first-transaction))
@@ -720,13 +728,13 @@ signed.**
 ## 14. Airgap status { #airgap-status }
 
 PiWalletSV's security model depends on the signing device having no
-network path. The **Airgap status** screen in Settings runs six
-independent checks so you can verify that claim on demand — at first
-setup, after a reflash, or any time before signing something sensitive.
+network path. The **Airgap status** screen in Settings runs live checks
+so you can verify that claim on demand — at first setup, after a
+reflash, or any time before signing something sensitive.
 
 From the wallet list:
 
-1. **Long-press B** to open Settings.
+1. **Press B** to open Settings.
 2. Joystick down to **&ldquo;Airgap status&rdquo;**.
 3. Press **A**.
 
@@ -735,6 +743,26 @@ From the wallet list:
 For the shell equivalent (recommended periodically, and required for
 full host interface verification), see
 [Operate — Airgap diagnostic](operate.md#airgap-diagnostic).
+
+## 15. Settings { #settings }
+
+Global device options and maintenance live under **Settings** on the
+bonnet. Open it with a short **B** press from the wallet list.
+
+--8<-- "docs/includes/settings-reference.md"
+
+For operator-facing USB steps, see [§12 USB backup](#usb-backup). For
+airgap interpretation, see [§14 Airgap status](#airgap-status).
+
+## 16. Factory diagnostics { #factory-diagnostics }
+
+Support and factory workflows can open the **Diagnostics** menu from the
+boot splash without unlocking the vault.
+
+--8<-- "docs/includes/diagnostics-reference.md"
+
+For day-to-day service restarts from SSH, see
+[Operate § Reading the bonnet log](operate.md#reading-the-bonnet-log).
 
 ## Help & support
 

@@ -9,42 +9,44 @@ The title band at the top is the overall verdict:
 
 ### Status column
 
-Each row shows a short slug on the left and a three-letter status on
+Each row shows a friendly label on the left and a three-letter status on
 the right:
 
 | Glyph | Meaning |
 |-------|---------|
-| `OK` | Pass — this check ran and the device looks quiet. |
-| `!!` | Fail — this check found a concrete leak. Treat as **BREACH**. |
-| `--` | Inconclusive — the check could not run (missing sysfs node, wrong OS, etc.). Unusual on a real Pi; re-run from a shell (below). |
+| `OK` | Pass — this area looks quiet. |
+| `!!` | Fail — a concrete leak was found. Treat as **BREACH**. |
+| `--` | Inconclusive — the check could not run (missing sysfs node, wrong OS, etc.). Unusual on a real Pi. |
 
-### Check indicators
+### Check rows (bonnet UI)
 
-| Check | What it proves |
-|-------|----------------|
-| `modules` | No Wi-Fi or Bluetooth driver modules are loaded into the kernel. |
-| `rfkill` | Every radio the kernel knows about is soft- or hard-blocked. |
-| `interfaces` | Only the loopback (`lo`) network interface is present. |
-| `services` | `wpa_supplicant`, NetworkManager, `hciuart`, and `bluetooth` are all inactive. |
-| `boot_config` | Firmware-level overlays disable Wi-Fi and Bluetooth at boot (`disable-wifi`, `disable-bt` in `config.txt`). |
-| `blacklist` | The radio kernel modules are blacklisted in modprobe so they cannot reload on next boot. |
+The Settings screen shows **three summary rows**. Each rolls up several
+technical checks so you do not need to read kernel module names:
 
-### `interfaces` and the bonnet sandbox
+| Row | What it covers |
+|-----|----------------|
+| **Wi-Fi** | No Wi-Fi driver loaded; radios blocked; Wi-Fi services off; firmware disables Wi-Fi at boot; modules blacklisted. |
+| **Bluetooth** | Same checks for Bluetooth (`hciuart`, `bluetooth`, etc.). |
+| **Network** | Only the loopback interface is present **inside the bonnet app's network sandbox** (`PrivateNetwork=yes`). |
 
-The bonnet app runs with a network sandbox (`PrivateNetwork=yes`), so
-the **`interfaces` row only sees loopback inside the app** — even if
-the host Pi had other interfaces. That is still useful: it confirms the
-sandbox is intact. The other five rows inspect the host directly.
+A green **Network** row confirms the bonnet sandbox is intact. It does
+**not** by itself prove the host Pi has no other interfaces — for that,
+run the full six-check report from a shell (below).
 
-For a full host-level interface check, run from an SSH or serial shell
-(not from inside the bonnet UI):
+### Full report from a shell
+
+`piwallet diag airgap` lists six technical rows (`modules`, `rfkill`,
+`interfaces`, `services`, `boot_config`, `blacklist`) and sees the host
+directly. Use it periodically and whenever the on-screen result looks
+wrong:
 
 ```bash
-piwallet diag airgap
+piwallet diag airgap              # table; exit 1 on BREACH
+piwallet diag airgap --json       # machine-readable
 ```
 
-The screen footer reminds you of this when all checks are conclusive
-(`shell: piwallet diag airgap`).
+See [Operate § Airgap diagnostic](operate.md#airgap-diagnostic) and
+[CLI § `piwallet diag airgap`](cli.md#piwallet-diag-airgap).
 
 ### Controls
 
@@ -52,18 +54,18 @@ The screen footer reminds you of this when all checks are conclusive
 |--------|--------|
 | **A** | Refresh — re-run all checks. |
 | **B** | Back to Settings. |
-| **Hold B** | Exit the bonnet app. |
 
 ### If you see BREACH
 
 1. **Stop.** Do not sign transactions on this device until the report
    is all-green.
-2. Note which rows show `!!` — each maps to a specific leak (loaded
-   driver, unblocked radio, active service, missing boot overlay, etc.).
+2. Note which rows show `!!` — **Wi-Fi** or **Bluetooth** failures map
+   to drivers, radios, services, boot overlays, or blacklists;
+   **Network** failures usually mean the bonnet sandbox is broken.
 3. If you flashed a prebuilt image, re-verify the download signature
    and re-flash. If the second flash still fails, contact
    [@PiWalletSV on X](https://x.com/PiWalletSV) or file an issue on
    [GitHub](https://github.com/mohrt/PiWalletSV/issues) with the
-   failing rows.
+   failing rows (or `piwallet diag airgap --json` output).
 4. Re-check after any SD-card reflash, config edit, or software update,
    and before signing anything you would regret.
