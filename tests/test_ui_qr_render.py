@@ -8,6 +8,7 @@ from piwallet.ui import qr_render
 from piwallet.ui.qr_render import (
     clear_qr_cache,
     paste_qr,
+    paste_qr_matte,
     qr_cache_size,
     render_qr,
 )
@@ -49,6 +50,18 @@ def test_render_qr_handles_long_payload() -> None:
     address = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
     img = render_qr(address, target_px=180)
     assert img.size == (180, 180)
+
+
+def test_paste_qr_matte_paints_plate_before_qr() -> None:
+    from PIL import Image
+
+    canvas = Image.new("RGB", (240, 240), (0, 0, 0))
+    qr = render_qr("abc", target_px=100)
+    paste_qr_matte(canvas, qr, x=70, y=70, matte_pad=10, matte_color=(100, 100, 100))
+    # Corner of the matte plate (outside the QR but inside the pad).
+    assert canvas.getpixel((65, 65)) == (100, 100, 100)
+    # QR interior should still have modules.
+    assert canvas.getpixel((75, 75)) in {(0, 0, 0), (100, 100, 100), (62, 62, 62)}
 
 
 def test_paste_qr_composites_at_offset() -> None:

@@ -120,6 +120,9 @@ export function mountScannerPage(root: HTMLElement): () => void {
         void showPairCard(validation.result.envelope);
       }
     },
+    onStopped: () => {
+      $pairCameraHost.hidden = true;
+    },
   });
 
   function focusableIn(container: HTMLElement): HTMLElement[] {
@@ -134,6 +137,8 @@ export function mountScannerPage(root: HTMLElement): () => void {
     pairXpub = null;
     $pairOverlay.hidden = true;
     document.body.classList.remove("pair-locked");
+    $pairCameraHost.hidden = false;
+    cameraScanner.reveal();
     pairFocusBefore?.focus();
     pairFocusBefore = null;
     $pairStatus.classList.remove("error");

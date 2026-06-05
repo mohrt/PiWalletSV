@@ -20,10 +20,12 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Literal
 
 from piwallet.bonnet.companion_pairing import pairing_pw1_lines
 from piwallet.bonnet.sign_scan import run_sign_flow
+from piwallet.bonnet.qr_settings import qr_brightness_screen_kwargs
 from piwallet.core.settings import BonnetSettings
 from piwallet.bonnet.wallet_detail import WalletDetailScreen
 from piwallet.bonnet.wallet_info import WalletInfoScreen
@@ -150,6 +152,8 @@ def run_wallet_manage(
     toast_seconds: float = 2.0,
     idle_wake: IdleWakeTracker | None = None,
     settings: BonnetSettings | None = None,
+    settings_path: Path | None = None,
+    on_settings_changed: Callable[[BonnetSettings], None] | None = None,
 ) -> WalletManageResult:
     """Show manage menu and run the chosen sub-flow.
 
@@ -179,7 +183,15 @@ def run_wallet_manage(
             )
             time.sleep(toast_seconds)
             return "stay"
-        detail = WalletDetailScreen(wallet=wallet, derive_address=derive)
+        detail = WalletDetailScreen(
+            wallet=wallet,
+            derive_address=derive,
+            **qr_brightness_screen_kwargs(
+                settings,
+                settings_path=settings_path,
+                on_settings_changed=on_settings_changed,
+            ),
+        )
         run_screen(
             display, input_mgr, detail, target_fps=target_fps, idle_wake=idle_wake
         )
@@ -193,7 +205,14 @@ def run_wallet_manage(
             _brief_modal(display, title="QR failed", body=str(exc)[:96], accent=COLOR_DANGER)
             time.sleep(toast_seconds)
             return "stay"
-        qr = PairingMultipartQrScreen(lines)
+        qr = PairingMultipartQrScreen(
+            lines,
+            **qr_brightness_screen_kwargs(
+                settings,
+                settings_path=settings_path,
+                on_settings_changed=on_settings_changed,
+            ),
+        )
         run_screen(display, input_mgr, qr, target_fps=target_fps, idle_wake=idle_wake)
         return "stay"
 
@@ -209,6 +228,8 @@ def run_wallet_manage(
                 toast_seconds=toast_seconds,
                 idle_wake=idle_wake,
                 settings=settings,
+                settings_path=settings_path,
+                on_settings_changed=on_settings_changed,
             )
         except (VaultError, VaultWipedError) as exc:
             log.exception("run_sign_flow vault error")

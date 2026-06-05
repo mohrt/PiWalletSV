@@ -10,16 +10,14 @@ from piwallet.ui.pairing_multipart_qr_screen import (
     PairingMultipartQrScreen,
     _max_qr_px_for_footer,
 )
+from piwallet.ui.qr_brightness_ui import qr_footer_y
+from piwallet.ui.qr_render import QR_LIGHT_BG
 
 
 def test_max_qr_px_reserves_footer_gap() -> None:
-    # Matches the current PairingMultipartQrScreen layout: 18-px title +
-    # 4-px gap (qr_y=22), single 10-px-tall footer hint centered at y=230,
-    # 6-px breathing room between QR bottom and footer center. The
-    # resulting 196-px QR area is what gives v6 frames their 4 px/module
-    # rendering — the threshold below which phone cameras struggle to
-    # autofocus on the TFT.
-    assert _max_qr_px_for_footer(qr_top_y=22, first_footer_center_y=230, gap_px=6) == 196
+    # Bottom bar is 22 px; footer text is centered at qr_footer_y() (~230).
+    footer_y = qr_footer_y()
+    assert _max_qr_px_for_footer(qr_top_y=22, first_footer_center_y=footer_y, gap_px=6) == 196
 
 
 def test_pairing_multipart_qr_requires_non_empty() -> None:
@@ -77,4 +75,27 @@ def test_b_long_is_ignored() -> None:
     s = PairingMultipartQrScreen(["a", "b"])
     s.on_event(Event(button=Button.B, kind=EventKind.LONG, at_ms=0))
     assert s.done is False
+
+
+def test_draw_fills_grey_panel_behind_qr() -> None:
+    fb = FrameBuffer()
+    PairingMultipartQrScreen(["line-a"]).draw(fb)
+    assert fb.image.getpixel((8, 24)) == QR_LIGHT_BG
+
+
+def test_up_down_adjusts_qr_background_and_restarts_sequence() -> None:
+    t = {"ms": [1000]}
+
+    def clock() -> int:
+        return t["ms"][0]
+
+    s = PairingMultipartQrScreen(
+        ["line-a", "line-b"],
+        clock_ms=clock,
+        auto_advance_ms=500,
+    )
+    s.idx = 1
+    s.on_event(Event(button=Button.DOWN, kind=EventKind.PRESS, at_ms=0))
+    assert s.qr_background == 31
+    assert s.idx == 0
 

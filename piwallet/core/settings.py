@@ -34,11 +34,12 @@ from piwallet.ui.display import (
     MIN_BRIGHTNESS,
     clamp_brightness,
 )
+from piwallet.ui.qr_brightness import DEFAULT_QR_BACKGROUND, clamp_qr_background
 
 #: Version of the on-disk settings schema. Bump when adding required
 #: fields; load_settings will migrate older files forward by filling
 #: defaults.
-SETTINGS_SCHEMA_VERSION: int = 3
+SETTINGS_SCHEMA_VERSION: int = 4
 
 #: Sleep-timer presets surfaced in the Settings screen. Order is the
 #: cycle order under L/R input: 1 min -> 5 min -> off -> 1 min -> ...
@@ -107,6 +108,9 @@ class BonnetSettings:
     #: a harmless error, but skipping it is cleaner). See
     #: ``CAMERA_TYPE_OPTIONS`` for the valid values.
     camera_type: str = DEFAULT_CAMERA_TYPE
+    #: QR quiet-zone grey level (31–255, step 31). Modules stay black;
+    #: only the light pixels change. Adjust live with UP/DOWN on QR screens.
+    qr_background: int = DEFAULT_QR_BACKGROUND
 
     def with_brightness(self, level: float) -> BonnetSettings:
         """Return a copy with ``brightness`` clamped into the legal range."""
@@ -115,6 +119,10 @@ class BonnetSettings:
     def with_sleep_timeout_ms(self, ms: int) -> BonnetSettings:
         """Return a copy with ``sleep_timeout_ms`` snapped to a preset."""
         return replace(self, sleep_timeout_ms=_normalize_sleep_timeout_ms(ms))
+
+    def with_qr_background(self, level: int) -> BonnetSettings:
+        """Return a copy with ``qr_background`` clamped to a legal step."""
+        return replace(self, qr_background=clamp_qr_background(level))
 
 
 def default_settings_path() -> Path:
@@ -160,6 +168,9 @@ def load_settings(path: Path | None = None) -> BonnetSettings:
         ),
         camera_type=_normalize_camera_type(
             str(data.get("camera_type", DEFAULT_CAMERA_TYPE)),
+        ),
+        qr_background=clamp_qr_background(
+            int(data.get("qr_background", DEFAULT_QR_BACKGROUND)),
         ),
     )
 
