@@ -82,6 +82,12 @@ def test_b_long_is_inert() -> None:
     assert s.result is None
 
 
+def test_up_down_adjusts_qr_background() -> None:
+    s = WalletDetailScreen(wallet=_wallet(), derive_address=_derive_stub)
+    s.on_event(_evt(Button.UP))
+    assert s.qr_background == 93
+
+
 def test_address_is_cached_per_index() -> None:
     calls: list[tuple[int, int]] = []
 
@@ -106,12 +112,8 @@ def test_draw_renders_qr_without_exception() -> None:
     fb = FrameBuffer()
     s = WalletDetailScreen(wallet=_wallet(), derive_address=_derive_stub)
     s.draw(fb)
-    # The QR background is `QR_LIGHT_BG` rather than pure white so the
-    # ST7789's full-bright backlight doesn't saturate phone cameras
-    # (see the constant's docstring). The test pins that contract:
-    # if someone "fixes" the QR background back to pure white the
-    # bloom regression returns silently, so we assert against the
-    # named constant.
+    # Full grey panel behind the QR (not just the QR quiet zone).
+    assert fb.image.getpixel((8, 40)) == QR_LIGHT_BG
     saw_light_bg = any(
         fb.image.getpixel((x, y)) == QR_LIGHT_BG
         for x in range(40, 200, 8)

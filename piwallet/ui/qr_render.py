@@ -33,6 +33,8 @@ from collections.abc import Iterable
 import segno
 from PIL import Image
 
+from piwallet.ui.display import DISPLAY_HEIGHT, DISPLAY_WIDTH, FrameBuffer
+
 #: Maximum number of cached QR renders. PW1 multipart sequences for an
 #: xpub_export envelope are typically <= 16 frames; address screens
 #: keep one per index. 64 leaves comfortable headroom while bounding
@@ -56,17 +58,43 @@ _QR_CACHE_MAX: int = 64
 #:   the xpub_export pairing QR.
 #: * ``(170, 170, 170)`` — ~67% luminance, fixed *most* laptop
 #:   webcams; some still saturated.
-#: * ``(140, 140, 140)`` — ~55% luminance (current). Tuned for the
-#:   companion's typical environment: a laptop webcam scanning the
-#:   signed_tx multipart sequence (~6-12 frames at v6 density,
-#:   ~4 px/module). Contrast vs pure black is 5.5:1, still well
-#:   above the QR spec's 3:1 floor, and phones reading the
-#:   deposit-address QR still resolve cleanly because their wider
-#:   dynamic range absorbs the lower light level easily.
+#: * ``(140, 140, 140)`` — ~55% luminance; fixed laptop webcams but
+#:   many phone cameras still clipped the quiet zone when the QR sat
+#:   on an otherwise black screen (AE boosts gain → grey reads white).
+#: * ``(100, 100, 100)`` — ~39% luminance; matte plate helped phones but
+#:   still hot for some panels.
+#: * **62** — SeedSigner default (~24% luminance). Live UP/DOWN on QR
+#:   screens adjusts ``BonnetSettings.qr_background`` in steps of 31.
 #:
 #: Tune downward if a particular panel still blooms; tune *up* and
 #: things get worse, never better.
-QR_LIGHT_BG: tuple[int, int, int] = (140, 140, 140)
+from piwallet.ui.qr_brightness import DEFAULT_QR_BACKGROUND, qr_background_rgb
+
+QR_LIGHT_BG: tuple[int, int, int] = qr_background_rgb(DEFAULT_QR_BACKGROUND)
+
+#: Default outward padding for :func:`paste_qr_matte` — wide enough
+#: that a phone framing the QR also sees mostly grey, not black UI.
+QR_MATTE_PAD: int = 20
+
+#: Height of the bottom control bar on QR screens (footer hints).
+QR_PANEL_FOOTER_H: int = 22
+
+
+def qr_panel_content_bottom_y() -> int:
+    """Y coordinate where the grey QR panel ends (above the footer bar)."""
+    return DISPLAY_HEIGHT - QR_PANEL_FOOTER_H
+
+
+def fill_qr_panel_background(
+    fb: FrameBuffer,
+    *,
+    top_y: int,
+    matte_color: tuple[int, int, int],
+    bottom_y: int | None = None,
+) -> None:
+    """Fill the main content band with the scan-friendly QR grey background."""
+    y1 = bottom_y if bottom_y is not None else qr_panel_content_bottom_y()
+    fb.draw.rectangle((0, top_y, DISPLAY_WIDTH, y1), fill=matte_color)
 
 #: Module-private LRU cache keyed on ``(data, target_px, border, fg, bg, error)``.
 #: ``OrderedDict`` gives O(1) insertion + ``move_to_end`` for cache hits.
@@ -193,3 +221,30 @@ def paste_qr(
 ) -> None:
     """Composite ``qr_image`` onto ``fb_image`` at the given top-left."""
     fb_image.paste(qr_image, (x, y))
+
+
+def paste_qr_matte(
+    fb_image: Image.Image,
+    qr_image: Image.Image,
+    *,
+    x: int,
+    y: int,
+    matte_pad: int = QR_MATTE_PAD,
+    matte_color: tuple[int, int, int] = QR_LIGHT_BG,
+) -> None:
+    """Paint a grey scan plate, then composite the QR on top.
+
+    Phone cameras auto-expose for the whole frame. A grey QR on a black
+    bonnet screen reads as a bright blob and the quiet zone clips to
+    white. Extending :data:`QR_LIGHT_BG` outward gives AE a mid-tone
+    field so black modules stay separable from the background.
+    """
+    w, h = qr_image.size
+    x0 = max(0, x - matte_pad)
+    y0 = max(0, y - matte_pad)
+    x1 = min(fb_image.width, x + w + matte_pad)
+    y1 = min(fb_image.height, y + h + matte_pad)
+    from PIL import ImageDraw
+
+    ImageDraw.Draw(fb_image).rectangle((x0, y0, x1, y1), fill=matte_color)
+    paste_qr(fb_image, qr_image, x=x, y=y)

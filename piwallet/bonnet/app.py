@@ -87,6 +87,7 @@ from piwallet.bonnet.companion_pairing import (
     OfferCompanionPairingScreen,
     pairing_pw1_lines,
 )
+from piwallet.bonnet.qr_settings import qr_brightness_screen_kwargs
 from piwallet.bonnet.create_wallet import CreateWalletOutcome, run_create_wallet
 from piwallet.bonnet.restore_wallet import RestoreWalletOutcome, run_restore_wallet
 from piwallet.bonnet.unlock import UnlockOutcome, UnlockScreen, VerifyFn
@@ -305,6 +306,9 @@ def _offer_companion_pairing_after_wallet_save(
     *,
     idle_wake: IdleWakeTracker,
     target_fps: int,
+    settings: BonnetSettings,
+    settings_path: Path | None,
+    on_settings_changed: Callable[[BonnetSettings], None] | None,
 ) -> None:
     """Optional xpub_export multipart QR for the PiWalletSV companion."""
     prompt = OfferCompanionPairingScreen(wallet.label or wallet.id)
@@ -328,7 +332,14 @@ def _offer_companion_pairing_after_wallet_save(
         )
         time.sleep(2.0)
         return
-    qr_screen = PairingMultipartQrScreen(lines)
+    qr_screen = PairingMultipartQrScreen(
+        lines,
+        **qr_brightness_screen_kwargs(
+            settings,
+            settings_path=settings_path,
+            on_settings_changed=on_settings_changed,
+        ),
+    )
     run_screen(
         display,
         input_mgr,
@@ -779,6 +790,10 @@ def run_bonnet(
             display.set_brightness(settings.brightness)
             idle_wake.timeout_ms = settings.sleep_timeout_ms
 
+            def _on_qr_settings_changed(updated: BonnetSettings) -> None:
+                nonlocal settings
+                settings = updated
+
             pin_holder: list[str] = [pin]
             _wire_idle_pin_lock(
                 display=display,
@@ -825,6 +840,9 @@ def run_bonnet(
                                 outcome3.wallet,
                                 idle_wake=idle_wake,
                                 target_fps=target_fps,
+                                settings=settings,
+                                settings_path=settings_path,
+                                on_settings_changed=_on_qr_settings_changed,
                             )
                         continue
                     if chosen is WalletListAction.RESTORE:
@@ -846,6 +864,9 @@ def run_bonnet(
                                 outcome4.wallet,
                                 idle_wake=idle_wake,
                                 target_fps=target_fps,
+                                settings=settings,
+                                settings_path=settings_path,
+                                on_settings_changed=_on_qr_settings_changed,
                             )
                         continue
                     if chosen is WalletListAction.SETTINGS:
@@ -904,6 +925,8 @@ def run_bonnet(
                             target_fps=target_fps,
                             idle_wake=idle_wake,
                             settings=settings,
+                            settings_path=settings_path,
+                            on_settings_changed=_on_qr_settings_changed,
                         )
                         if mg in ("deleted", "back"):
                             break

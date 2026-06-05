@@ -184,3 +184,18 @@ def test_with_sleep_timeout_ms_snaps_to_preset_and_returns_new_instance() -> Non
     assert s.with_sleep_timeout_ms(17_000).sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS
     # Original is untouched.
     assert s.sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS
+
+
+def test_default_qr_background_is_62() -> None:
+    assert BonnetSettings().qr_background == 62
+
+
+def test_save_then_load_roundtrips_qr_background(tmp_path: Path) -> None:
+    p = tmp_path / "settings.json"
+    save_settings(BonnetSettings().with_qr_background(93), p)
+    assert load_settings(p).qr_background == 93
+
+
+def test_with_qr_background_clamps() -> None:
+    assert BonnetSettings().with_qr_background(999).qr_background == 255
+    assert BonnetSettings().with_qr_background(0).qr_background == 31

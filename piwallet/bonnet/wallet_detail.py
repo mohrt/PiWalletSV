@@ -14,6 +14,7 @@ Controls
 =========  ==================================================
 LEFT       Previous receive index (clamped at 0).
 RIGHT      Next receive index.
+UP / DOWN  Brighter / dimmer QR background (saved for next time).
 A / B      Back to the manage menu.
 SELECT     Same as A / B.
 =========  ==================================================
@@ -36,7 +37,17 @@ from piwallet.ui.display import (
     FrameBuffer,
 )
 from piwallet.ui.input import Button, Event, EventKind
-from piwallet.ui.qr_render import paste_qr, render_qr
+from piwallet.ui.qr_brightness import (
+    DEFAULT_QR_BACKGROUND,
+    qr_background_rgb,
+    try_qr_brightness_event,
+)
+from piwallet.ui.qr_brightness_ui import (
+    QrBrightnessHint,
+    draw_qr_brightness_toast,
+    draw_qr_screen_footer,
+)
+from piwallet.ui.qr_render import fill_qr_panel_background, paste_qr_matte, render_qr
 from piwallet.ui.widgets import draw_text
 
 #: Branch index for the external (receive) chain under
@@ -55,8 +66,11 @@ class WalletDetailScreen:
     index: int = 0
     done: bool = False
     result: WalletDetailResult | None = None
-    qr_target_px: int = 132
+    qr_target_px: int = 148
+    qr_background: int = DEFAULT_QR_BACKGROUND
+    on_qr_background_changed: Callable[[int], None] | None = None
     _addr_cache: dict[int, str] = field(default_factory=dict)
+    _brightness_hint: QrBrightnessHint = field(default_factory=QrBrightnessHint)
 
     # -- input handling ----------------------------------------------
 
@@ -70,7 +84,17 @@ class WalletDetailScreen:
                 self.index -= 1
         elif b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
             self.index += 1
-        elif (b == Button.B and k == EventKind.PRESS) or (
+        else:
+            new_level = try_qr_brightness_event(
+                event,
+                self.qr_background,
+                on_changed=self.on_qr_background_changed,
+            )
+            if new_level is not None:
+                self.qr_background = new_level
+                self._brightness_hint.refresh()
+                return
+        if (b == Button.B and k == EventKind.PRESS) or (
             b in (Button.A, Button.SELECT) and k == EventKind.PRESS
         ):
             self.done = True
@@ -103,6 +127,9 @@ class WalletDetailScreen:
             anchor="mm",
         )
 
+        matte_rgb = qr_background_rgb(self.qr_background)
+        fill_qr_panel_background(fb, top_y=title_h, matte_color=matte_rgb)
+
         # Receive index subtitle.
         draw_text(
             fb,
@@ -129,10 +156,24 @@ class WalletDetailScreen:
             )
             return
 
-        qr_img = render_qr(address, target_px=self.qr_target_px, border=2)
+        qr_img = render_qr(
+            address,
+            target_px=self.qr_target_px,
+            border=2,
+            bg=qr_background_rgb(self.qr_background),
+        )
         qr_x = (DISPLAY_WIDTH - self.qr_target_px) // 2
         qr_y = title_h + 22
-        paste_qr(fb.image, qr_img, x=qr_x, y=qr_y)
+        paste_qr_matte(
+            fb.image,
+            qr_img,
+            x=qr_x,
+            y=qr_y,
+            matte_color=matte_rgb,
+        )
+
+        if self._brightness_hint.visible():
+            draw_qr_brightness_toast(fb, bottom_y=qr_y + self.qr_target_px + 36)
 
         # Address text below the QR — wrap into two short lines if needed.
         addr_y = qr_y + self.qr_target_px + 6
@@ -158,13 +199,4 @@ class WalletDetailScreen:
             anchor="mm",
         )
 
-        # Footer hint.
-        draw_text(
-            fb,
-            DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 10,
-            "L/R index   A/B back",
-            size=10,
-            color=COLOR_DIM,
-            anchor="mm",
-        )
+        draw_qr_screen_footer(fb, back_label="L/R index   A/B back")

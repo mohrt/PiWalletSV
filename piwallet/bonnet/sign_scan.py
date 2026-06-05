@@ -28,7 +28,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
 from PIL import Image
@@ -57,6 +59,7 @@ from piwallet.ui.display import (
     FrameBuffer,
 )
 from piwallet.ui.input import Button, Event, EventKind, InputManager
+from piwallet.bonnet.qr_settings import qr_brightness_screen_kwargs
 from piwallet.ui.pairing_multipart_qr_screen import PairingMultipartQrScreen
 from piwallet.ui.widgets import Modal, ProgressBar, draw_text
 
@@ -795,6 +798,8 @@ def run_sign_flow(
     start_verify_worker=None,  # test seam (SPV verify)
     max_fee_rate_satskb: int = 10_000,
     settings: BonnetSettings | None = None,
+    settings_path: Path | None = None,
+    on_settings_changed: Callable[[BonnetSettings], None] | None = None,
 ) -> SignFlowResult:
     """Drive scan → confirm → sign → animate signed_tx.
 
@@ -951,7 +956,15 @@ def run_sign_flow(
     # lock on.  (120-char chunks pushed frames to version 10 at 3 px/module
     # which was the root cause of companion scanning failures.)
     pw1_lines = split_envelope_to_lines(signed_blob, max_encoded_chunk_chars=100)
-    qr = PairingMultipartQrScreen(pw1_lines, title="Signed tx")
+    qr = PairingMultipartQrScreen(
+        pw1_lines,
+        title="Signed tx",
+        **qr_brightness_screen_kwargs(
+            settings,
+            settings_path=settings_path,
+            on_settings_changed=on_settings_changed,
+        ),
+    )
     run_screen(display, input_mgr, qr, target_fps=target_fps, idle_wake=idle_wake)
     return "stay"
 

@@ -34,6 +34,8 @@ export interface CameraScannerOptions {
   labels?: CameraScannerLabels;
   /** When true, start() is called automatically on mount (Send inline scans). */
   autoStart?: boolean;
+  /** When true (default), hide the scanner UI after a successful scan. */
+  hideOnAccept?: boolean;
   onAccept: (validation: Extract<ScanValidation, { ok: true }>) => void;
   onStopped?: () => void;
 }
@@ -42,6 +44,8 @@ export interface CameraScannerHandle {
   start(): Promise<void>;
   stop(): void;
   reset(): void;
+  /** Show the scanner shell again after a successful scan dismissed it. */
+  reveal(): void;
   destroy(): void;
 }
 
@@ -93,6 +97,7 @@ export function mountCameraScanner(
   `;
 
   const $video = host.querySelector<HTMLVideoElement>(".camera-scanner-video")!;
+  const $root = host.querySelector<HTMLElement>(".camera-scanner")!;
   const $status = host.querySelector<HTMLElement>(".camera-scanner-status")!;
   const $progress = host.querySelector<HTMLElement>(".camera-scanner-progress")!;
   const $missing = host.querySelector<HTMLElement>(".camera-scanner-missing")!;
@@ -139,6 +144,18 @@ export function mountCameraScanner(
     if ($cancel) $cancel.hidden = !running;
   }
 
+  function hideScannerUi(): void {
+    $video.hidden = true;
+    if (options.hideOnAccept !== false) {
+      $root.hidden = true;
+    }
+  }
+
+  function showScannerUi(): void {
+    $root.hidden = false;
+    $video.hidden = false;
+  }
+
   function stopInternal(notify = true): void {
     pw1Handle?.stop();
     pw1Handle = null;
@@ -148,10 +165,24 @@ export function mountCameraScanner(
     syncControls(false);
     setProgress("");
     setMissing([], null, 0);
+    $video.hidden = true;
     if (!destroyed) {
       setStatus(labels.idle);
     }
     if (notify) options.onStopped?.();
+  }
+
+  function completeScan(): void {
+    pw1Handle?.stop();
+    pw1Handle = null;
+    singleHandle?.stop();
+    singleHandle = null;
+    active = false;
+    syncControls(false);
+    setProgress("");
+    setMissing([], null, 0);
+    hideScannerUi();
+    options.onStopped?.();
   }
 
   async function validateAndAcceptPw1(bytes: Uint8Array): Promise<boolean> {
@@ -161,12 +192,13 @@ export function mountCameraScanner(
       return false;
     }
     options.onAccept(validation);
-    stopInternal(false);
+    completeScan();
     return true;
   }
 
   async function startInternal(): Promise<void> {
     if (destroyed || active) return;
+    showScannerUi();
     active = true;
     syncControls(true);
     setStatus(labels.scanning);
@@ -210,7 +242,7 @@ export function mountCameraScanner(
           return false;
         }
         options.onAccept(validation);
-        stopInternal(false);
+        completeScan();
         return true;
       },
       (err) => {
@@ -246,6 +278,13 @@ export function mountCameraScanner(
       setProgress("");
       setMissing([], null, 0);
       setStatus(active ? labels.scanning : labels.idle);
+    },
+    reveal: () => {
+      if (destroyed) return;
+      showScannerUi();
+      if (!active) {
+        setStatus(labels.idle);
+      }
     },
     destroy: () => {
       destroyed = true;

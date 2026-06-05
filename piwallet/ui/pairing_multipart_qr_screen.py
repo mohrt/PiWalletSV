@@ -15,6 +15,7 @@ camera needs to autofocus through the TFT's backlight glow.
 Controls
 --------
 =========  ==================================================
+UP / DOWN  Brighter / dimmer QR background (saved for next time).
 A / B      Back to the parent screen.
 SELECT     Same as A / B.
 =========  ==================================================
@@ -36,7 +37,23 @@ from piwallet.ui.display import (
     FrameBuffer,
 )
 from piwallet.ui.input import Button, Event, EventKind
-from piwallet.ui.qr_render import paste_qr, render_qr
+from piwallet.ui.qr_brightness import (
+    DEFAULT_QR_BACKGROUND,
+    qr_background_rgb,
+    try_qr_brightness_event,
+)
+from piwallet.ui.qr_brightness_ui import (
+    QrBrightnessHint,
+    draw_qr_brightness_toast,
+    draw_qr_screen_footer,
+    qr_footer_y,
+)
+from piwallet.ui.qr_render import (
+    fill_qr_panel_background,
+    paste_qr_matte,
+    qr_panel_content_bottom_y,
+    render_qr,
+)
 from piwallet.ui.widgets import draw_text
 
 PairingMultipartQrResult = Literal["back"]
@@ -77,12 +94,15 @@ class PairingMultipartQrScreen:
     # cycles too fast for arm's-length scanning under indoor light.
     auto_advance_ms: int = 700
     qr_target_px: int = 200
+    qr_background: int = DEFAULT_QR_BACKGROUND
+    on_qr_background_changed: Callable[[int], None] | None = None
     idx: int = 0
     done: bool = False
     result: PairingMultipartQrResult | None = None
     clock_ms: Callable[[], int] | None = None
     _next_advance_after_ms: int = field(init=False, repr=False)
     _mono: Callable[[], int] = field(init=False, repr=False)
+    _brightness_hint: QrBrightnessHint = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.pw1_frames:
@@ -90,6 +110,7 @@ class PairingMultipartQrScreen:
         self._mono = self.clock_ms if self.clock_ms is not None else _wall_mono_ms
         now = self._mono()
         self._next_advance_after_ms = now + self.auto_advance_ms
+        self._brightness_hint = QrBrightnessHint(clock_ms=self._mono)
 
     # -- Input -------------------------------------------------------
 
@@ -98,6 +119,19 @@ class PairingMultipartQrScreen:
             return
         b = event.button
         k = event.kind
+        new_level = try_qr_brightness_event(
+            event,
+            self.qr_background,
+            on_changed=self.on_qr_background_changed,
+        )
+        if new_level is not None:
+            self.qr_background = new_level
+            self._brightness_hint.refresh()
+            # Restart the sequence so the phone gets fresh frames at the
+            # new contrast (SeedSigner does the same on brightness change).
+            self.idx = 0
+            self._next_advance_after_ms = self._mono() + self.auto_advance_ms
+            return
         if (b == Button.B and k == EventKind.PRESS) or (
             b in (Button.A, Button.SELECT) and k == EventKind.PRESS
         ):
@@ -109,7 +143,8 @@ class PairingMultipartQrScreen:
     def draw(self, fb: FrameBuffer) -> None:
         now = self._mono()
         n = len(self.pw1_frames)
-        if n > 1 and now >= self._next_advance_after_ms:
+        hint_visible = self._brightness_hint.visible()
+        if n > 1 and not hint_visible and now >= self._next_advance_after_ms:
             self.idx = (self.idx + 1) % n
             self._next_advance_after_ms = now + self.auto_advance_ms
 
@@ -128,17 +163,14 @@ class PairingMultipartQrScreen:
             anchor="mm",
         )
         qr_y = title_h + 4
-        # Single, compact footer line. Three lines used to live here but
-        # they ate enough vertical space that the QR could only render at
-        # 3 px per module on a 240 x 240 panel; phones struggled to lock
-        # autofocus through the TFT glow at that density. One line at
-        # size=10 yields ~196 px for the QR (4 px per module on a v7).
-        y_footer = DISPLAY_HEIGHT - 10
+        footer_y = qr_footer_y()
+        matte_rgb = qr_background_rgb(self.qr_background)
+        fill_qr_panel_background(fb, top_y=title_h, matte_color=matte_rgb)
         eff_px = min(
             self.qr_target_px,
             _max_qr_px_for_footer(
                 qr_top_y=qr_y,
-                first_footer_center_y=y_footer,
+                first_footer_center_y=footer_y,
                 gap_px=6,
             ),
         )
@@ -149,9 +181,17 @@ class PairingMultipartQrScreen:
                 target_px=eff_px,
                 border=2,
                 error="L",
+                bg=matte_rgb,
             )
             qr_x = (DISPLAY_WIDTH - eff_px) // 2
-            paste_qr(fb.image, qr_img, x=qr_x, y=qr_y)
+            paste_qr_matte(
+                fb.image,
+                qr_img,
+                x=qr_x,
+                y=qr_y,
+                matte_pad=8,
+                matte_color=matte_rgb,
+            )
         except Exception as exc:  # pragma: no cover (segno edge)
             draw_text(
                 fb,
@@ -163,12 +203,7 @@ class PairingMultipartQrScreen:
                 anchor="mm",
             )
 
-        draw_text(
-            fb,
-            DISPLAY_WIDTH // 2,
-            y_footer,
-            "A/B back",
-            size=10,
-            color=COLOR_DIM,
-            anchor="mm",
-        )
+        if hint_visible:
+            draw_qr_brightness_toast(fb, bottom_y=qr_panel_content_bottom_y())
+
+        draw_qr_screen_footer(fb)
