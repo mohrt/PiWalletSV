@@ -40,7 +40,6 @@ def test_chooser_a_press_returns_main() -> None:
     s.on_event(_evt(Button.A))
     assert s.done
     assert s.result == "main"
-    assert s.exit_requested is False
 
 
 def test_chooser_select_testnet() -> None:
@@ -56,15 +55,13 @@ def test_chooser_b_press_returns_none_no_exit() -> None:
     s.on_event(_evt(Button.B))
     assert s.done
     assert s.result is None
-    assert s.exit_requested is False
 
 
-def test_chooser_b_long_requests_app_exit() -> None:
+def test_chooser_b_long_cancels_like_b_press() -> None:
     s = NetworkChooserScreen()
     s.on_event(_evt(Button.B, EventKind.LONG))
     assert s.done
     assert s.result is None
-    assert s.exit_requested is True
 
 
 def test_chooser_select_with_select_button() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from piwallet.core.settings import (
+    BRIGHTNESS_OPTIONS,
     DEFAULT_SLEEP_TIMEOUT_MS,
     SLEEP_TIMER_OPTIONS_MS,
     BonnetSettings,
@@ -16,7 +17,6 @@ from piwallet.ui.display import (
 )
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.settings_screen import (
-    BRIGHTNESS_STEP,
     SETTINGS_ROWS,
     SettingsScreen,
     _format_sleep_timeout_ms,
@@ -63,58 +63,56 @@ def test_requires_at_least_one_row() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_right_increases_brightness_by_step_and_emits_preview() -> None:
+def test_right_cycles_brightness_to_next_preset() -> None:
     rec: list[float] = []
-    s = _make_screen(brightness=0.5, apply_recorder=rec)
+    s = _make_screen(brightness=0.4, apply_recorder=rec)
 
     s.on_event(_evt(Button.RIGHT))
 
-    assert s.draft.brightness == pytest.approx(0.5 + BRIGHTNESS_STEP)
-    assert rec == [pytest.approx(0.5 + BRIGHTNESS_STEP)]
+    assert s.draft.brightness == pytest.approx(0.6)
+    assert rec == [pytest.approx(0.6)]
 
 
-def test_left_decreases_brightness_by_step() -> None:
+def test_left_cycles_brightness_to_previous_preset() -> None:
     rec: list[float] = []
-    s = _make_screen(brightness=0.5, apply_recorder=rec)
+    s = _make_screen(brightness=0.6, apply_recorder=rec)
 
     s.on_event(_evt(Button.LEFT))
 
-    assert s.draft.brightness == pytest.approx(0.5 - BRIGHTNESS_STEP)
-    assert rec == [pytest.approx(0.5 - BRIGHTNESS_STEP)]
+    assert s.draft.brightness == pytest.approx(0.4)
+    assert rec == [pytest.approx(0.4)]
 
 
-def test_repeat_events_continue_adjusting() -> None:
+def test_repeat_events_continue_brightness_cycle() -> None:
     rec: list[float] = []
-    s = _make_screen(brightness=0.5, apply_recorder=rec)
+    s = _make_screen(brightness=0.2, apply_recorder=rec)
 
     s.on_event(_evt(Button.RIGHT, EventKind.PRESS))
     s.on_event(_evt(Button.RIGHT, EventKind.REPEAT))
     s.on_event(_evt(Button.RIGHT, EventKind.REPEAT))
 
-    assert s.draft.brightness == pytest.approx(0.5 + 3 * BRIGHTNESS_STEP)
+    assert s.draft.brightness == pytest.approx(0.8)
     assert len(rec) == 3
 
 
-def test_right_clamps_at_maximum() -> None:
+def test_brightness_cycle_wraps_at_maximum() -> None:
     rec: list[float] = []
     s = _make_screen(brightness=MAX_BRIGHTNESS, apply_recorder=rec)
 
     s.on_event(_evt(Button.RIGHT))
-    s.on_event(_evt(Button.RIGHT))
 
-    assert s.draft.brightness == MAX_BRIGHTNESS
-    # No preview events fired because the value never changed.
-    assert rec == []
+    assert s.draft.brightness == pytest.approx(BRIGHTNESS_OPTIONS[0])
+    assert rec == [pytest.approx(BRIGHTNESS_OPTIONS[0])]
 
 
-def test_left_clamps_at_minimum() -> None:
+def test_brightness_cycle_wraps_at_minimum() -> None:
     rec: list[float] = []
     s = _make_screen(brightness=MIN_BRIGHTNESS, apply_recorder=rec)
 
     s.on_event(_evt(Button.LEFT))
 
-    assert s.draft.brightness == MIN_BRIGHTNESS
-    assert rec == []
+    assert s.draft.brightness == pytest.approx(MAX_BRIGHTNESS)
+    assert rec == [pytest.approx(MAX_BRIGHTNESS)]
 
 
 # ---------------------------------------------------------------------------
@@ -124,14 +122,14 @@ def test_left_clamps_at_minimum() -> None:
 
 def test_a_press_saves_draft_and_marks_done() -> None:
     rec: list[float] = []
-    s = _make_screen(brightness=0.5, apply_recorder=rec)
+    s = _make_screen(brightness=0.6, apply_recorder=rec)
     s.on_event(_evt(Button.RIGHT))
 
     s.on_event(_evt(Button.A))
 
     assert s.done
     assert s.result == "saved"
-    assert s.settings.brightness == pytest.approx(0.5 + BRIGHTNESS_STEP)
+    assert s.settings.brightness == pytest.approx(0.8)
 
 
 def test_select_press_also_saves() -> None:
@@ -146,7 +144,8 @@ def test_b_press_cancels_and_restores_preview() -> None:
     s.on_event(_evt(Button.RIGHT))
     s.on_event(_evt(Button.RIGHT))
 
-    s.on_event(_evt(Button.B))
+    s.on_event(_evt(Button.B, EventKind.PRESS))
+    s.on_event(_evt(Button.B, EventKind.RELEASE))
 
     assert s.done
     assert s.result == "back"
@@ -156,21 +155,14 @@ def test_b_press_cancels_and_restores_preview() -> None:
     assert rec[-1] == pytest.approx(0.5)
 
 
-def test_b_long_returns_exit() -> None:
+def test_b_long_is_ignored_on_settings() -> None:
     s = _make_screen(brightness=0.5)
+    s.on_event(_evt(Button.B, EventKind.PRESS))
     s.on_event(_evt(Button.B, EventKind.LONG))
-    assert s.done
-    assert s.result == "exit"
-
-
-def test_b_long_restores_preview_before_exit() -> None:
-    rec: list[float] = []
-    s = _make_screen(brightness=0.5, apply_recorder=rec)
-    s.on_event(_evt(Button.RIGHT))
-
-    s.on_event(_evt(Button.B, EventKind.LONG))
-
-    assert rec[-1] == pytest.approx(0.5)
+    assert s.done is False
+    s.on_event(_evt(Button.B, EventKind.RELEASE))
+    assert s.done is True
+    assert s.result == "back"
 
 
 def test_no_events_after_done() -> None:
@@ -226,6 +218,8 @@ def test_settings_rows_include_brightness_then_sleep_timer_then_camera_then_acti
         "change_pin",
         "airgap",
         "usb_backup",
+        "about",
+        "system_reset",
     ]
 
 
@@ -234,6 +228,8 @@ def test_change_pin_airgap_and_usb_backup_are_action_rows() -> None:
     assert rows_by_key["change_pin"].is_action is True
     assert rows_by_key["airgap"].is_action is True
     assert rows_by_key["usb_backup"].is_action is True
+    assert rows_by_key["about"].is_action is True
+    assert rows_by_key["system_reset"].is_action is True
     # Value rows must explicitly stay non-action so a future
     # refactor that flips defaults can't accidentally promote them.
     assert rows_by_key["brightness"].is_action is False
@@ -248,6 +244,26 @@ def test_a_on_usb_backup_row_returns_usb_backup_result() -> None:
     s.on_event(_evt(Button.A))
     assert s.done is True
     assert s.result == "usb_backup"
+
+
+def test_a_on_about_row_returns_about_result() -> None:
+    s = _make_screen(brightness=0.5)
+    target = next(i for i, r in enumerate(SETTINGS_ROWS) if r.key == "about")
+    while s.cursor != target:
+        s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.A))
+    assert s.done is True
+    assert s.result == "about"
+
+
+def test_a_on_system_reset_row_returns_system_reset_result() -> None:
+    s = _make_screen(brightness=0.5)
+    target = next(i for i, r in enumerate(SETTINGS_ROWS) if r.key == "system_reset")
+    while s.cursor != target:
+        s.on_event(_evt(Button.DOWN))
+    s.on_event(_evt(Button.A))
+    assert s.done is True
+    assert s.result == "system_reset"
 
 
 def test_a_on_airgap_row_returns_airgap_result() -> None:
@@ -328,7 +344,8 @@ def test_cancel_reverts_sleep_timer_change() -> None:
     s = _make_screen(brightness=0.5)
     s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.RIGHT))  # draft moves to "off"
-    s.on_event(_evt(Button.B))
+    s.on_event(_evt(Button.B, EventKind.PRESS))
+    s.on_event(_evt(Button.B, EventKind.RELEASE))
     # Persisted value is unchanged.
     assert s.settings.sleep_timeout_ms == DEFAULT_SLEEP_TIMEOUT_MS
 
@@ -382,12 +399,10 @@ def test_select_on_change_pin_row_returns_change_pin_result() -> None:
 
 
 def test_a_on_change_pin_row_persists_pending_value_drafts() -> None:
-    """Operator tweaks brightness, then taps Change PIN — the slider
-    change must be saved (mirrored into ``settings``) before the
-    sub-flow runs so it isn't lost while the change-PIN modal stack
-    takes over the display."""
-    s = _make_screen(brightness=0.5)
-    s.on_event(_evt(Button.RIGHT))  # bump brightness on the brightness row
+    """Operator tweaks brightness, then taps Change PIN — the draft
+    change must be saved before the sub-flow runs."""
+    s = _make_screen(brightness=0.6)
+    s.on_event(_evt(Button.RIGHT))  # 60% -> 80%
     bumped = s.draft.brightness
     _move_to_change_pin_row(s)
     s.on_event(_evt(Button.A))
@@ -408,7 +423,8 @@ def test_b_press_on_change_pin_row_still_cancels() -> None:
     """B is the universal back gesture — must work on action rows too."""
     s = _make_screen(brightness=0.5)
     _move_to_change_pin_row(s)
-    s.on_event(_evt(Button.B))
+    s.on_event(_evt(Button.B, EventKind.PRESS))
+    s.on_event(_evt(Button.B, EventKind.RELEASE))
     assert s.result == "back"
 
 

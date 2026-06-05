@@ -1,8 +1,10 @@
 """Bonnet "Airgap status" diagnostic screen.
 
 Presents the result of :func:`piwallet.diag.airgap.check_airgap` as a
-green-or-red headline plus a six-row check table. Reachable from the
-Settings menu's ``Airgap status`` action row.
+green-or-red headline plus three summary rows (**Wi-Fi**, **Bluetooth**,
+**Network**). Reachable from the Settings menu's ``Airgap status`` action
+row. Each row rolls up several technical checks (drivers, switches, apps,
+startup config) so the operator only sees familiar labels.
 
 Why this exists
 ---------------
@@ -29,8 +31,7 @@ Controls
 --------
 =========  ==================================================
 A / SEL    Refresh — re-run all checks.
-B PRESS    Back to Settings.
-B LONG     Exit the bonnet app entirely.
+B          Back to Settings.
 =========  ==================================================
 """
 
@@ -39,9 +40,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from piwallet.diag.airgap import AirgapReport, check_airgap
+from piwallet.diag.airgap import (
+    AirgapReport,
+    CheckResult,
+    check_airgap,
+    checks_for_bonnet_display,
+)
 from piwallet.ui.display import (
-    COLOR_ACCENT,
     COLOR_BG,
     COLOR_DIM,
     COLOR_FG,
@@ -52,7 +57,7 @@ from piwallet.ui.display import (
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.widgets import draw_text
 
-AirgapScreenResult = Literal["back", "exit"]
+AirgapScreenResult = Literal["back"]
 
 # Reserve dedicated colours for the airgap verdict — they need to read
 # at a glance, distinct from accent (used for titles in other screens).
@@ -65,8 +70,20 @@ class AirgapScreen:
     """Read-only diagnostic screen showing the live airgap report."""
 
     report: AirgapReport = field(default_factory=check_airgap)
+    _display_checks: tuple[CheckResult, ...] | None = field(
+        default=None, repr=False
+    )
     done: bool = False
     result: AirgapScreenResult | None = None
+
+    def _refresh(self) -> None:
+        self.report = check_airgap()
+        self._display_checks = checks_for_bonnet_display()
+
+    def _rows(self) -> tuple[CheckResult, ...]:
+        if self._display_checks is None:
+            self._display_checks = checks_for_bonnet_display()
+        return self._display_checks
 
     # -- input -------------------------------------------------------
 
@@ -75,10 +92,6 @@ class AirgapScreen:
             return
         b = event.button
         k = event.kind
-        if b == Button.B and k == EventKind.LONG:
-            self.done = True
-            self.result = "exit"
-            return
         if b == Button.B and k == EventKind.PRESS:
             self.done = True
             self.result = "back"
@@ -87,7 +100,7 @@ class AirgapScreen:
             # Refresh in place. The next draw() reflects the new report.
             # Cheap (subprocess + a few sysfs reads) so we don't need a
             # spinner.
-            self.report = check_airgap()
+            self._refresh()
 
     # -- render ------------------------------------------------------
 
@@ -115,12 +128,10 @@ class AirgapScreen:
             anchor="mm",
         )
 
-        # Six rows, one per check. Status glyph on the right, coloured
-        # to match the row's verdict — cursor highlight isn't needed,
-        # this is a read-only screen.
-        y = title_h + 14
-        row_step = 22
-        for c in self.report.checks:
+        # Wi-Fi, Bluetooth, and Network — one row each.
+        y = title_h + 28
+        row_step = 32
+        for c in self._rows():
             row_color = (
                 COLOR_OK
                 if c.ok is True
@@ -129,7 +140,7 @@ class AirgapScreen:
                 else COLOR_DIM
             )
             draw_text(
-                fb, 12, y, c.name, size=12, color=COLOR_FG, anchor="lm"
+                fb, 12, y, c.display_name, size=12, color=COLOR_FG, anchor="lm"
             )
             draw_text(
                 fb,
@@ -142,30 +153,24 @@ class AirgapScreen:
             )
             y += row_step
 
-        # Footer: refresh hint + sandbox note. The sandbox note is the
-        # operator's reminder that the interfaces row is sandbox-only;
-        # they should also run ``piwallet diag airgap`` from a shell to
-        # verify the host.
+        # Footer: refresh hint; inconclusive count when some checks could
+        # not run (no shell/CLI reference — keep the LCD self-contained).
+        footer_y = DISPLAY_HEIGHT - 10
         if self.report.inconclusive:
-            note = f"{len(self.report.inconclusive)} check(s) n/a"
-            note_color = COLOR_DIM
-        else:
-            note = "shell: piwallet diag airgap"
-            note_color = COLOR_ACCENT
+            draw_text(
+                fb,
+                DISPLAY_WIDTH // 2,
+                DISPLAY_HEIGHT - 24,
+                f"{len(self.report.inconclusive)} check(s) n/a",
+                size=10,
+                color=COLOR_DIM,
+                anchor="mm",
+            )
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 24,
-            note,
-            size=10,
-            color=note_color,
-            anchor="mm",
-        )
-        draw_text(
-            fb,
-            DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 10,
-            "A refresh   B back   hold B quit",
+            footer_y,
+            "A refresh   B back",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

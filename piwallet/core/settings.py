@@ -46,6 +46,10 @@ SETTINGS_SCHEMA_VERSION: int = 3
 #: idle duration in milliseconds before the backlight goes off.
 SLEEP_TIMER_OPTIONS_MS: tuple[int, ...] = (60_000, 300_000, 0)
 
+#: Brightness presets surfaced in the Settings cycle row (L/R).
+#: Order is the cycle order: dimmest -> brightest -> wrap.
+BRIGHTNESS_OPTIONS: tuple[float, ...] = (0.2, 0.4, 0.6, 0.8, 1.0)
+
 #: Camera-type presets for the Settings cycle row.
 #: ``"ov5647"``  — Arducam OV5647 Mini, fixed-focus. Requires
 #:                 ``camera_auto_detect=0`` + ``dtoverlay=ov5647`` in
@@ -180,6 +184,7 @@ def save_settings(settings: BonnetSettings, path: Path | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 __all__ = [
+    "BRIGHTNESS_OPTIONS",
     "CAMERA_TYPE_OPTIONS",
     "DEFAULT_CAMERA_TYPE",
     "DEFAULT_SLEEP_TIMEOUT_MS",

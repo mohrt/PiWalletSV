@@ -63,7 +63,7 @@ from piwallet.ui.widgets import Modal, ProgressBar, draw_text
 log = logging.getLogger(__name__)
 
 #: Outcomes from :func:`run_sign_flow` — mirrors :data:`WalletManageResult`.
-SignFlowResult = Literal["stay", "exit"]
+SignFlowResult = Literal["stay"]
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ class ScanProposalScreen:
     title: str = "Scan to sign"
     state: _ScanState = field(default_factory=_ScanState)
     done: bool = False
-    result: bytes | str | None = None  # bytes when assembled; "cancel" / "exit" otherwise
+    result: bytes | str | None = None  # bytes when assembled; "cancel" otherwise
     _started: bool = field(init=False, default=False)
     # Test seam: the bonnet wires this to a thread that calls
     # :func:`scan_multipart_from_camera`. Tests inject a no-op or
@@ -261,7 +261,7 @@ class ScanProposalScreen:
             fb,
             DISPLAY_WIDTH // 2,
             _FOOTER_Y,
-            "A/B exit",
+            "A/B back",
             size=10,
             color=COLOR_DIM,
             anchor="mm",
@@ -423,7 +423,7 @@ class VerifyProposalScreen:
             anchor="mm",
         )
 
-        footer = "B cancel" if error else "A/B exit"
+        footer = "B cancel" if error else "A/B back"
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
@@ -499,7 +499,7 @@ def _make_default_verify_worker(
 
 
 # Returned via ``ConfirmProposalScreen.result``.
-ConfirmResult = Literal["sign", "cancel", "exit"]
+ConfirmResult = Literal["sign", "cancel"]
 
 
 @dataclass
@@ -798,10 +798,9 @@ def run_sign_flow(
 ) -> SignFlowResult:
     """Drive scan → confirm → sign → animate signed_tx.
 
-    Returns ``"exit"`` when a sub-screen requests bonnet exit (rare);
-    ``"stay"`` for every other terminal state (cancel, error toast,
-    or successful sign). The caller (``run_wallet_manage``) treats
-    ``"stay"`` as "redraw the manage menu".
+    Returns ``"stay"`` for every terminal state (cancel, error toast,
+    or successful sign). The caller (``run_wallet_manage``) redraws
+    the manage menu.
     """
 
     # ---- 1. Scan the unsigned_proposal ---------------------------------
@@ -824,8 +823,6 @@ def run_sign_flow(
     scan = ScanProposalScreen(start_worker=start_worker)
     run_screen(display, input_mgr, scan, target_fps=target_fps, idle_wake=idle_wake)
 
-    if scan.result == "exit":
-        return "exit"
     if not isinstance(scan.result, (bytes, bytearray)):
         # B-press, error, or anything other than a complete blob.
         # If the worker reported an error, surface it briefly.
@@ -956,8 +953,6 @@ def run_sign_flow(
     pw1_lines = split_envelope_to_lines(signed_blob, max_encoded_chunk_chars=100)
     qr = PairingMultipartQrScreen(pw1_lines, title="Signed tx")
     run_screen(display, input_mgr, qr, target_fps=target_fps, idle_wake=idle_wake)
-    if qr.result == "exit":
-        return "exit"
     return "stay"
 
 

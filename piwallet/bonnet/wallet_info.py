@@ -17,7 +17,6 @@ Controls
 --------
 =========  ==================================================
 B PRESS    Back to the manage menu.
-B LONG     Exit the bonnet app entirely.
 A / SEL    Same as B PRESS — back.
 =========  ==================================================
 """
@@ -40,7 +39,7 @@ from piwallet.ui.display import (
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.widgets import draw_text
 
-WalletInfoResult = Literal["back", "exit"]
+WalletInfoResult = Literal["back"]
 
 
 @dataclass
@@ -58,10 +57,6 @@ class WalletInfoScreen:
             return
         b = event.button
         k = event.kind
-        if b == Button.B and k == EventKind.LONG:
-            self.done = True
-            self.result = "exit"
-            return
         if (b == Button.B and k == EventKind.PRESS) or (
             b in (Button.A, Button.SELECT) and k == EventKind.PRESS
         ):
@@ -117,7 +112,7 @@ class WalletInfoScreen:
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 10,
-            "A/B exit",
+            "A/B back",
             size=10,
             color=COLOR_DIM,
             anchor="mm",

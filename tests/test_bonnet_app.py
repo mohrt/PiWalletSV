@@ -257,3 +257,54 @@ def test_settings_save_writes_both_fields(tmp_path: Path) -> None:
     payload = json.loads(p.read_text())
     assert payload["brightness"] == pytest.approx(0.55)
     assert payload["sleep_timeout_ms"] == 60_000
+
+
+def test_airgap_back_reopens_settings_not_wallet_list(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """B on the airgap screen must return to Settings, not the wallet list."""
+    from piwallet.bonnet import app as bonnet_app
+    from piwallet.bonnet.airgap_screen import AirgapScreen
+    from piwallet.core.settings import BonnetSettings
+    from piwallet.core.vault import Vault
+    from piwallet.ui.app import IdleWakeTracker
+    from piwallet.ui.display import HeadlessDisplay
+    from piwallet.ui.input import FakeInputBackend, InputManager
+    from piwallet.ui.settings_screen import SettingsScreen
+
+    settings_opens = 0
+
+    def fake_run_screen(display, input_mgr, screen, **kwargs) -> object:
+        nonlocal settings_opens
+        if isinstance(screen, SettingsScreen):
+            settings_opens += 1
+            screen.done = True
+            screen.result = "airgap" if settings_opens == 1 else "back"
+        elif isinstance(screen, AirgapScreen):
+            screen.done = True
+            screen.result = "back"
+        return screen.result
+
+    monkeypatch.setattr(bonnet_app, "run_screen", fake_run_screen)
+    monkeypatch.setattr(bonnet_app, "save_settings", lambda *a, **k: None)
+
+    display = HeadlessDisplay()
+    mgr = InputManager(FakeInputBackend())
+    idle = IdleWakeTracker(mgr)
+    vault = Vault(tmp_path / "vault.bin")
+
+    _settings, status, exit_requested, _pin = bonnet_app._run_settings_loop(
+        display,
+        mgr,
+        BonnetSettings(),
+        vault=vault,
+        pin="123456",
+        settings_path=tmp_path / "settings.json",
+        terms_path=tmp_path / "terms.json",
+        target_fps=1000,
+        idle_wake=idle,
+    )
+
+    assert settings_opens == 2
+    assert status == "back"
+    assert exit_requested is False

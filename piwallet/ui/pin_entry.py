@@ -21,9 +21,8 @@ LEFT   Move active slot left (clamped at slot 0).
 RIGHT  Move active slot right (clamped at last slot).
 A      Confirm. If any slot is empty, advance to the next
        empty slot instead.
-B PRESS Backspace: clear the current slot and move left.
-       (Long presses on ``B`` are ignored so accidental holds do not quit.)
-SELECT Same as A.
+B PRESS  Backspace: clear the current slot and move left.
+         (Long presses on ``B`` are ignored so accidental holds do not quit.)
 ====== ======================================================
 
 Empty slots render as ``_``. Filled slots render their digit while
@@ -65,12 +64,7 @@ _CELL_WIDTH = 30
 _CELL_HEIGHT = 44
 _CELL_GAP = 6
 
-#: Minimum interval between digit cycles when UP/DOWN is held. The
-#: input layer fires REPEAT events at ~120 ms cadence (8/sec); at that
-#: rate a 0..9 digit reel blurs past faster than operators can react.
-#: 320 ms (~3/sec) gives each digit a clearly-readable beat without
-#: making intentional cycling tedious. PRESS bypasses this throttle so
-#: single taps still feel instantaneous.
+#: Minimum interval between digit cycles when UP/DOWN is held.
 _DIGIT_REPEAT_THROTTLE_MS: int = 320
 
 
@@ -125,7 +119,9 @@ class PinEntryScreen:
             self._move_cursor(-1)
         elif b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
             self._move_cursor(+1)
-        elif b in (Button.A, Button.SELECT) and k == EventKind.PRESS:
+        elif b == Button.A and k == EventKind.PRESS:
+            self._confirm_or_advance()
+        elif b == Button.SELECT and k == EventKind.PRESS:
             self._confirm_or_advance()
         elif b == Button.B and k == EventKind.PRESS:
             self._backspace()

@@ -146,8 +146,11 @@ The display should:
 9. The **wallet detail** screen shows a crisp QR code for the
    m/0/0 receive address plus the address text in two lines.
    LEFT/RIGHT step the receive index; A advances.
-10. Single-press B returns to the wallet list. Long-press B from
-    the wallet list exits the bonnet app (back to the shell).
+10. Single-press **B** returns to the wallet list. Short **B** from the
+    wallet list opens **Settings** (see `piwallet/ui/settings_screen.py`).
+    Hold **B** for five seconds on the **boot splash** to open factory
+    diagnostics (`piwallet/bonnet/splash.py`, `piwallet/bonnet/utility.py`).
+    There is no UI gesture to exit the bonnet app — power off externally.
 
 ## 6. Things to write down
 

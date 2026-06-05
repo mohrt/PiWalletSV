@@ -61,6 +61,19 @@ def test_report_to_dict_round_trips_check_fields() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_wifi_modules_pass_when_none_loaded() -> None:
+    res = ag.check_no_wifi_modules(loaded=["snd_bcm2835", "bluetooth"])
+    assert res.ok is True
+    assert res.name == "wifi"
+
+
+def test_bluetooth_modules_fail_lists_loaded() -> None:
+    res = ag.check_no_bluetooth_modules(loaded=["btusb", "spi_bcm2835"])
+    assert res.ok is False
+    assert res.name == "bluetooth"
+    assert "btusb" in res.detail
+
+
 def test_modules_pass_when_no_radio_modules_loaded() -> None:
     res = ag.check_no_radio_modules(loaded=["snd_bcm2835", "spi_bcm2835"])
     assert res.ok is True
@@ -382,3 +395,76 @@ def test_check_airgap_returns_six_rows(
         "boot_config",
         "blacklist",
     ]
+
+
+def test_checks_for_bonnet_display_returns_three_user_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ag,
+        "check_no_wifi_modules",
+        lambda: ag.CheckResult("wifi", True, "none loaded"),
+    )
+    monkeypatch.setattr(
+        ag,
+        "check_no_bluetooth_modules",
+        lambda: ag.CheckResult("bluetooth", True, "none loaded"),
+    )
+    monkeypatch.setattr(
+        ag,
+        "_split_rfkill_checks",
+        lambda: (
+            ag.CheckResult("rfkill", True, "blocked"),
+            ag.CheckResult("rfkill", True, "blocked"),
+        ),
+    )
+    monkeypatch.setattr(
+        ag,
+        "check_no_network_interfaces",
+        lambda: ag.CheckResult("interfaces", True, "only loopback present"),
+    )
+    monkeypatch.setattr(
+        ag,
+        "_split_service_checks",
+        lambda: (
+            ag.CheckResult("services", True, "no apps running"),
+            ag.CheckResult("services", True, "no apps running"),
+        ),
+    )
+    monkeypatch.setattr(
+        ag,
+        "_split_boot_config_checks",
+        lambda: (
+            ag.CheckResult("boot_config", True, "disable-wifi set"),
+            ag.CheckResult("boot_config", True, "disable-bt set"),
+        ),
+    )
+    monkeypatch.setattr(
+        ag,
+        "_split_blacklist_checks",
+        lambda: (
+            ag.CheckResult("blacklist", True, "blocked from reloading"),
+            ag.CheckResult("blacklist", True, "blocked from reloading"),
+        ),
+    )
+
+    rows = ag.checks_for_bonnet_display()
+    assert [c.name for c in rows] == ["wifi", "bluetooth", "network"]
+    assert [c.display_name for c in rows] == ["Wi-Fi", "Bluetooth", "Network"]
+
+
+def test_aggregate_radio_check_fails_when_any_part_fails() -> None:
+    wifi = ag._aggregate_radio_check(
+        "wifi",
+        ag.CheckResult("wifi", True, "ok"),
+        ag.CheckResult("rfkill", False, "unblocked: phy0"),
+    )
+    assert wifi.ok is False
+    assert "phy0" in wifi.detail
+
+
+def test_check_display_names_use_plain_vocabulary() -> None:
+    assert ag.CheckResult("wifi", True, "x").display_name == "Wi-Fi"
+    assert ag.CheckResult("bluetooth", True, "x").display_name == "Bluetooth"
+    assert ag.CheckResult("network", True, "x").display_name == "Network"
+    assert ag.CheckResult("interfaces", True, "x").display_name == "Network"

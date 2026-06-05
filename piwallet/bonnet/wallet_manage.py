@@ -57,11 +57,9 @@ class WalletManageAction(Enum):
 #: * ``"stay"``     - non-destructive action finished; redraw the menu.
 #: * ``"renamed"``  - rename succeeded; caller should refresh ``WalletRecord``.
 #: * ``"deleted"``  - wallet erased; caller should drop back to the wallet list.
-#: * ``"back"``     - operator chose Back / long-pressed B from the menu;
+#: * ``"back"``     - operator chose Back from the menu;
 #:                    caller should drop back to the wallet list.
-#: * ``"exit"``     - operator long-pressed B inside a sub-screen to quit
-#:                    the bonnet app entirely.
-WalletManageResult = Literal["stay", "renamed", "deleted", "back", "exit"]
+WalletManageResult = Literal["stay", "renamed", "deleted", "back"]
 
 
 @dataclass
@@ -161,10 +159,8 @@ def run_wallet_manage(
     Erase: two-step confirmation → ``vault.remove_wallet``.
 
     Returns one of :data:`WalletManageResult`. The caller is expected to
-    loop, calling this function until the wallet is deleted, the user
-    backs out to the wallet list, or the user long-presses B inside a
-    sub-screen to exit the bonnet app (only where that screen still
-    handles long B, e.g. sign flow).
+    loop, calling this function until the wallet is deleted or the user
+    backs out to the wallet list.
     """
     menu = WalletManageMenuScreen(wallet=wallet)
     run_screen(display, input_mgr, menu, target_fps=target_fps, idle_wake=idle_wake)
@@ -187,9 +183,6 @@ def run_wallet_manage(
         run_screen(
             display, input_mgr, detail, target_fps=target_fps, idle_wake=idle_wake
         )
-        if detail.result == "exit":
-            return "exit"
-        # "back" or "manage" both drop back to the manage menu.
         return "stay"
 
     if choice == WalletManageAction.COMPANION_QR:
@@ -202,8 +195,6 @@ def run_wallet_manage(
             return "stay"
         qr = PairingMultipartQrScreen(lines)
         run_screen(display, input_mgr, qr, target_fps=target_fps, idle_wake=idle_wake)
-        if qr.result == "exit":
-            return "exit"
         return "stay"
 
     if choice == WalletManageAction.SIGN:
@@ -224,15 +215,11 @@ def run_wallet_manage(
             _brief_modal(display, title="Sign failed", body=str(exc)[:96], accent=COLOR_DANGER)
             time.sleep(toast_seconds)
             return "stay"
-        if outcome == "exit":
-            return "exit"
         return "stay"
 
     if choice == WalletManageAction.INFO:
         info = WalletInfoScreen(wallet=wallet)
         run_screen(display, input_mgr, info, target_fps=target_fps, idle_wake=idle_wake)
-        if info.result == "exit":
-            return "exit"
         return "stay"
 
     if choice == WalletManageAction.RENAME:

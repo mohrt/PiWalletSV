@@ -1,8 +1,8 @@
 # Operate
 
 Day-to-day operation of a deployed PiWalletSV signer: where logs live,
-what each exit code means, how to wipe and restore the vault, and how
-to recover when something doesn't behave.
+what each exit code means, factory diagnostics and reset, how to wipe
+and restore the vault, and how to recover when something doesn't behave.
 
 This chapter assumes the device is installed per [Build & deploy](build.md).
 For the user-facing journey (pairing, sending, receiving) see the
@@ -79,7 +79,7 @@ do something." The values match the docstring on `run_bonnet()` in
 
 | Code | Meaning | Typical systemd response |
 |------|---------|--------------------------|
-| `0` | Normal exit. Operator long-pressed B from the wallet list. | Restart by `Restart=always`; bonnet comes back up to the unlock screen. |
+| `0` | Normal exit. The process finished cleanly — for example after **Restart app** in factory diagnostics, or `systemctl stop piwallet-bonnet`. There is no operator gesture to quit the bonnet from the UI. | Restart by `Restart=always`; bonnet comes back up (splash → unlock or setup). |
 | `1` | Vault is missing or empty. The operator hasn't run `piwallet vault init` yet. | Same as 0 — the bonnet shows a "No vault" message before exiting; the next start hits the same state. Fix it from the CLI. |
 | `2` | Disclaimer cancelled. | Same as 0. The bonnet will re-show the disclaimer on next start. |
 | `3` | The vault wiped itself during unlock (consecutive PIN failures exceeded the threshold). | Same as 0. The next start finds an empty vault and reports code 1. Restore from mnemonic. |
@@ -124,7 +124,7 @@ example) and emits one line per wallet: `<id> <label>`.
 ### USB vault backup { #usb-vault-backup }
 
 The recommended backup path for sealed devices is the bonnet:
-**long-press B** → Settings → **USB backup**. Full operator steps,
+**press B** → Settings → **USB backup**. Full operator steps,
 stick layout, and hot-plug notes are in
 [User manual § USB backup and restore](user-manual.md#usb-backup).
 
@@ -187,12 +187,22 @@ The bonnet will then report "No vault" (exit code 1) until you run
 
 ### Factory reset
 
-A "factory reset" is wipe + remove the disclaimer state + reinitialise:
+A "factory reset" wipes the vault, removes disclaimer acceptance, and
+returns the device to first-setup condition.
+
+#### Bonnet (sealed device)
+
+**Settings → System reset** → double confirm → vault **PIN**. The vault
+file is securely overwritten; `settings.json` and `terms.json` are
+removed. The bonnet then shows *Device reset* and loops into disclaimer
+and new PIN setup. See [User manual § Settings](user-manual.md#settings).
+
+#### CLI (dev Pi or automation)
 
 ```bash
 sudo systemctl stop piwallet-bonnet
 shred -uz ~/.piwallet/vault.bin
-rm -f ~/.piwallet/terms.json
+rm -f ~/.piwallet/terms.json ~/.piwallet/settings.json
 piwallet vault --vault-path ~/.piwallet/vault.bin init
 piwallet firstboot run --headless
 sudo systemctl start piwallet-bonnet
@@ -284,11 +294,12 @@ once. Then disable it before unplugging from Wi-Fi.
 
 ## Airgap diagnostic { #airgap-diagnostic }
 
-The bonnet Settings screen runs the same checks as
-`piwallet diag airgap`, with one caveat: inside the bonnet app the
-`interfaces` row only sees the app's network sandbox. From a shell on
-the Pi you get the full host report — use this periodically and
-whenever the on-screen check looks wrong.
+The bonnet **Settings → Airgap status** screen shows three summary rows
+(**Wi-Fi**, **Bluetooth**, **Network**) that roll up the same underlying
+checks as `piwallet diag airgap`. Inside the bonnet app the **Network**
+row only sees the app's network sandbox (`PrivateNetwork=yes`). From a
+shell on the Pi you get the full six-row host report — use this
+periodically and whenever the on-screen check looks wrong.
 
 ```bash
 # Human-readable table; exits non-zero on conclusive failure:
@@ -298,10 +309,17 @@ piwallet diag airgap
 piwallet diag airgap --json
 ```
 
-What each row means (`modules`, `rfkill`, `interfaces`, `services`,
-`boot_config`, `blacklist`) and how to read `OK` / `!!` / `--` is
-documented in
+What each bonnet row and shell row means, and how to read `OK` / `!!` /
+`--`, is documented in
 [User manual § Airgap status](user-manual.md#airgap-status).
+
+## Factory diagnostics { #factory-diagnostics }
+
+Operators and support can open the diagnostics menu from the boot splash
+(hold **B** for ~5 seconds on the logo). Menu items, hardware tests,
+and **Restart app** (systemd service restart, not a full Pi reboot) are
+documented in
+[User manual § Factory diagnostics](user-manual.md#factory-diagnostics).
 
 ## Troubleshooting
 

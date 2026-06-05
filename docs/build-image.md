@@ -248,12 +248,12 @@ Before you trust this device with anything sensitive, prove to
 yourself that it's actually quiet on the airwaves. From the wallet
 list:
 
-1. **Long-press B** to open Settings.
+1. **Press B** to open Settings.
 2. Joystick down to **&ldquo;Airgap status&rdquo;**.
 3. Press **A**.
 
-You should see a green **&ldquo;Air-gapped&rdquo;** header and six rows
-reading `OK`. The full reference for the header, status glyphs (`OK` /
+You should see a green **&ldquo;Air-gapped&rdquo;** header and three
+summary rows (**Wi-Fi**, **Bluetooth**, **Network**) reading `OK`. The full reference for the header, status glyphs (`OK` /
 `!!` / `--`), and each check row lives in the
 [User manual § Airgap status](user-manual.md#airgap-status); it is
 included here for convenience:

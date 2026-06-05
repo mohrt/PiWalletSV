@@ -127,6 +127,26 @@ DEFAULT_NET_DIR = Path("/sys/class/net")
 DEFAULT_BOOT_CONFIG = Path("/boot/firmware/config.txt")
 DEFAULT_MODPROBE_DIR = Path("/etc/modprobe.d")
 
+# Bonnet LCD labels — internal slugs (``name``) stay stable for CLI/JSON;
+# ``display_name`` is what the operator sees on Settings → Airgap status.
+CHECK_DISPLAY_NAMES: dict[str, str] = {
+    "wifi": "Wi-Fi",
+    "bluetooth": "Bluetooth",
+    "network": "Network",
+    # CLI / JSON slugs fall back to ``name.replace("_", " ")``.
+    "modules": "Wi-Fi & Bluetooth",
+    "rfkill": "Wi-Fi & Bluetooth",
+    "interfaces": "Network",
+    "services": "Wi-Fi & Bluetooth",
+    "boot_config": "Startup",
+    "blacklist": "After reboot",
+}
+
+
+def check_display_name(name: str) -> str:
+    """Plain-English row label for a check slug."""
+    return CHECK_DISPLAY_NAMES.get(name, name.replace("_", " "))
+
 
 @dataclass(frozen=True)
 class CheckResult:
@@ -144,6 +164,11 @@ class CheckResult:
     name: str
     ok: bool | None
     detail: str
+
+    @property
+    def display_name(self) -> str:
+        """Operator-facing row label for bonnet screens."""
+        return check_display_name(self.name)
 
     @property
     def status(self) -> str:
@@ -189,6 +214,40 @@ class AirgapReport:
 # ---------------------------------------------------------------------------
 # Individual checks
 # ---------------------------------------------------------------------------
+
+
+def _check_no_module_subset(
+    name: str,
+    module_set: frozenset[str],
+    *,
+    loaded: Iterable[str] | None = None,
+    unavailable_detail: str = "/proc/modules unavailable",
+) -> CheckResult:
+    """Fail if any module in ``module_set`` appears in the loaded set."""
+    if loaded is None:
+        observed = _read_loaded_modules()
+        if observed is None:
+            return CheckResult(name, None, unavailable_detail)
+    else:
+        observed = set(loaded)
+    bad = sorted(observed & module_set)
+    if bad:
+        return CheckResult(name, False, f"loaded: {', '.join(bad)}")
+    return CheckResult(name, True, "none loaded")
+
+
+def check_no_wifi_modules(
+    loaded: Iterable[str] | None = None,
+) -> CheckResult:
+    """Fail if any known Wi-Fi driver module is loaded."""
+    return _check_no_module_subset("wifi", WIFI_MODULES, loaded=loaded)
+
+
+def check_no_bluetooth_modules(
+    loaded: Iterable[str] | None = None,
+) -> CheckResult:
+    """Fail if any known Bluetooth driver module is loaded."""
+    return _check_no_module_subset("bluetooth", BLUETOOTH_MODULES, loaded=loaded)
 
 
 def check_no_radio_modules(
@@ -365,6 +424,176 @@ def check_airgap() -> AirgapReport:
             check_modules_blacklisted(),
         )
     )
+
+
+def checks_for_bonnet_display() -> tuple[CheckResult, ...]:
+    """Three-row Wi-Fi / Bluetooth / Network summary for the Settings LCD."""
+    wifi_mod = check_no_wifi_modules()
+    bt_mod = check_no_bluetooth_modules()
+    wifi_rfkill, bt_rfkill = _split_rfkill_checks()
+    network = check_no_network_interfaces()
+    wifi_svc, bt_svc = _split_service_checks()
+    wifi_boot, bt_boot = _split_boot_config_checks()
+    wifi_bl, bt_bl = _split_blacklist_checks()
+    return (
+        _aggregate_radio_check("wifi", wifi_mod, wifi_rfkill, wifi_svc, wifi_boot, wifi_bl),
+        _aggregate_radio_check(
+            "bluetooth", bt_mod, bt_rfkill, bt_svc, bt_boot, bt_bl
+        ),
+        CheckResult("network", network.ok, network.detail),
+    )
+
+
+def _aggregate_radio_check(name: str, *parts: CheckResult) -> CheckResult:
+    if any(c.ok is False for c in parts):
+        ok: bool | None = False
+        detail = next(c.detail for c in parts if c.ok is False)
+    elif all(c.ok is True for c in parts):
+        ok = True
+        detail = "ok"
+    else:
+        ok = None
+        detail = next((c.detail for c in parts if c.ok is None), "unavailable")
+    return CheckResult(name, ok, detail)
+
+
+def _split_rfkill_checks() -> tuple[CheckResult, CheckResult]:
+    observed = _read_rfkill()
+    if observed is None:
+        missing = CheckResult("rfkill", None, "/sys/class/rfkill unavailable")
+        return missing, missing
+    if not observed:
+        ok = CheckResult("rfkill", True, "no rfkill devices registered")
+        return ok, ok
+    return (
+        _rfkill_for_kind("wifi", observed),
+        _rfkill_for_kind("bluetooth", observed),
+    )
+
+
+def _rfkill_for_kind(
+    kind: str, observed: list[tuple[str, bool, bool]]
+) -> CheckResult:
+    relevant = [
+        (name, soft, hard)
+        for name, soft, hard in observed
+        if _rfkill_kind(name) == kind
+    ]
+    unknown = [
+        name
+        for name, soft, hard in observed
+        if _rfkill_kind(name) == "unknown" and not (soft or hard)
+    ]
+    unblocked = [name for name, soft, hard in relevant if not (soft or hard)]
+    if unblocked or unknown:
+        bad = unblocked + unknown
+        return CheckResult("rfkill", False, f"unblocked: {', '.join(bad)}")
+    if relevant:
+        return CheckResult("rfkill", True, f"{len(relevant)} blocked")
+    return CheckResult("rfkill", True, "no device registered")
+
+
+def _rfkill_kind(name: str) -> str:
+    low = name.lower()
+    if any(token in low for token in ("bluetooth", "bt", "hci")):
+        return "bluetooth"
+    if any(token in low for token in ("wifi", "wlan", "phy")):
+        return "wifi"
+    return "unknown"
+
+
+WIFI_SERVICES: tuple[str, ...] = (
+    "wpa_supplicant.service",
+    "NetworkManager.service",
+)
+BLUETOOTH_SERVICES: tuple[str, ...] = (
+    "hciuart.service",
+    "bluetooth.service",
+)
+WIFI_BOOT_OVERLAY = "disable-wifi"
+BLUETOOTH_BOOT_OVERLAY = "disable-bt"
+WIFI_BLACKLIST_REQUIRED: frozenset[str] = frozenset({"brcmfmac"})
+BLUETOOTH_BLACKLIST_REQUIRED: frozenset[str] = frozenset({"btusb", "bluetooth"})
+
+
+def _split_service_checks() -> tuple[CheckResult, CheckResult]:
+    return (
+        _services_for_units(WIFI_SERVICES),
+        _services_for_units(BLUETOOTH_SERVICES),
+    )
+
+
+def _services_for_units(units: tuple[str, ...]) -> CheckResult:
+    observations = [(unit, _systemctl_is_active(unit)) for unit in units]
+    if all(state is None for _, state in observations):
+        return CheckResult("services", None, "systemctl unavailable")
+    active = [unit for unit, state in observations if state == "active"]
+    if active:
+        short = [unit.removesuffix(".service") for unit in active]
+        return CheckResult("services", False, f"active: {', '.join(short)}")
+    return CheckResult("services", True, "no apps running")
+
+
+def _split_boot_config_checks() -> tuple[CheckResult, CheckResult]:
+    try:
+        config_text = DEFAULT_BOOT_CONFIG.read_text()
+    except OSError:
+        missing = CheckResult(
+            "boot_config", None, f"{DEFAULT_BOOT_CONFIG} not readable"
+        )
+        return missing, missing
+    return (
+        _boot_overlay_present(WIFI_BOOT_OVERLAY, config_text),
+        _boot_overlay_present(BLUETOOTH_BOOT_OVERLAY, config_text),
+    )
+
+
+def _boot_overlay_present(overlay: str, config_text: str) -> CheckResult:
+    token = f"dtoverlay={overlay}"
+    for line in config_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if token in stripped:
+            return CheckResult("boot_config", True, f"{overlay} set")
+    return CheckResult("boot_config", False, f"missing {overlay}")
+
+
+def _split_blacklist_checks() -> tuple[CheckResult, CheckResult]:
+    observed = _read_modprobe_blacklists()
+    if observed is None:
+        missing = CheckResult(
+            "blacklist", None, f"{DEFAULT_MODPROBE_DIR} unavailable"
+        )
+        return missing, missing
+    blacklisted = _parse_blacklisted_modules(observed)
+    return (
+        _blacklist_for_required(WIFI_BLACKLIST_REQUIRED, blacklisted),
+        _blacklist_for_required(BLUETOOTH_BLACKLIST_REQUIRED, blacklisted),
+    )
+
+
+def _parse_blacklisted_modules(lines: Iterable[str]) -> set[str]:
+    blacklisted: set[str] = set()
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split(maxsplit=1)
+        if len(parts) == 2 and parts[0] == "blacklist":
+            blacklisted.add(parts[1].strip())
+    return blacklisted
+
+
+def _blacklist_for_required(
+    required: frozenset[str], blacklisted: set[str]
+) -> CheckResult:
+    missing = sorted(required - blacklisted)
+    if missing:
+        return CheckResult(
+            "blacklist", False, f"not blocked: {', '.join(missing)}"
+        )
+    return CheckResult("blacklist", True, "blocked from reloading")
 
 
 # ---------------------------------------------------------------------------

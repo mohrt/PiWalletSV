@@ -120,3 +120,16 @@ def test_unlock_drawable() -> None:
     fb = FrameBuffer()
     screen = UnlockScreen(verify=verify, length=4, attempts_remaining=2)
     screen.draw(fb)  # no exception
+
+
+def test_unlock_select_press_does_not_confirm() -> None:
+    """Joystick press alone must not submit a partial PIN on unlock."""
+    screen = UnlockScreen(
+        verify=lambda pin: ("ok", None),
+        length=4,
+        attempts_remaining=10,
+    )
+    _type_pin(screen, "123")
+    screen.on_event(_evt(Button.SELECT, EventKind.PRESS))
+    assert screen.done is False
+    assert screen.pin_entry.result is None

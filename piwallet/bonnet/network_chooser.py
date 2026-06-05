@@ -10,8 +10,7 @@ Returns:
 
 - ``"main"``  — operator confirmed the mainnet preset.
 - ``"test"``  — operator confirmed the testnet option.
-- ``None``    — operator pressed B (back) or held B (exit) to
-  cancel and abort the create flow.
+- ``None``    — operator pressed B to cancel and abort the create flow.
 
 The screen uses the same :class:`ListView` widget the HD path and
 entropy-source choosers use, so the UX stays consistent. A short
@@ -45,18 +44,13 @@ class NetworkChooserScreen:
     Output is exposed via :attr:`result`:
 
     - ``"main"`` / ``"test"``: operator picked + confirmed.
-    - ``None``: operator backed out (``B`` press or long-press) —
-      caller treats this as a cancellation of the whole create flow.
-
-    A long-press of ``B`` requests app exit; this is signalled to
-    the caller via :attr:`exit_requested` so the create-wallet
-    driver can propagate it back to the bonnet boot loop.
+    - ``None``: operator backed out (``B``) — caller treats this as
+      a cancellation of the whole create flow.
     """
 
     title: str = "Network"
     done: bool = False
     result: Network | None = None
-    exit_requested: bool = False
     _list: ListView = field(init=False)
 
     def __post_init__(self) -> None:
@@ -77,16 +71,13 @@ class NetworkChooserScreen:
     def on_event(self, event: Event) -> None:
         if self.done:
             return
-        if event.button == Button.B:
-            if event.kind == EventKind.LONG:
-                self.done = True
-                self.exit_requested = True
-                self.result = None
-                return
-            if event.kind == EventKind.PRESS:
-                self.done = True
-                self.result = None
-                return
+        if event.button == Button.B and event.kind in (
+            EventKind.PRESS,
+            EventKind.LONG,
+        ):
+            self.done = True
+            self.result = None
+            return
         self._list.on_event(event)
         chosen = self._list.confirmed
         if chosen in ("main", "test"):
@@ -129,10 +120,7 @@ def run_network_chooser(
     """Drive :class:`NetworkChooserScreen` until the operator picks or backs out.
 
     Returns the chosen :data:`piwallet.core.derivation.Network` or
-    ``None`` if the operator backed out (B press) or requested app
-    exit (B long-press). The caller distinguishes these two cases
-    via :attr:`NetworkChooserScreen.exit_requested` if needed; for
-    the wallet-create flow both outcomes mean "abort".
+    ``None`` if the operator backed out (``B``).
 
     ``run_screen_fn`` exists for tests to bypass the real frame loop;
     production callers leave it at the default. Mirrors the same

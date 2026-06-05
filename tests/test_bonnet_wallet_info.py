@@ -63,11 +63,13 @@ def test_select_press_returns_back() -> None:
     assert s.result == "back"
 
 
-def test_b_long_returns_exit() -> None:
+def test_b_long_is_ignored() -> None:
     s = WalletInfoScreen(wallet=_wallet())
     s.on_event(_evt(Button.B, EventKind.LONG))
+    assert s.done is False
+    s.on_event(_evt(Button.B, EventKind.PRESS))
     assert s.done
-    assert s.result == "exit"
+    assert s.result == "back"
 
 
 def test_no_events_after_done() -> None:

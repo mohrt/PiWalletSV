@@ -47,23 +47,27 @@ def check_spi_device() -> CheckResult:
 
 
 def check_backlight_gpio() -> CheckResult:
-    """Verify the backlight GPIO export is accessible via sysfs.
+    """Verify the bonnet backlight GPIO is reachable.
 
     The Adafruit 1.3" TFT bonnet (4506) wires the backlight to BCM 26.
-    A readable ``/sys/class/gpio/gpio26`` confirms the pin is exported
-    and the GPIO subsystem is up.
+    Bookworm images often drive it via Blinka/libgpiod without exporting
+    ``/sys/class/gpio/gpio26``; when the SPI panel is up the backlight
+    is already under driver control.
     """
     gpio_path = Path("/sys/class/gpio/gpio26")
-    if not gpio_path.exists():
+    if gpio_path.exists():
+        return CheckResult(name="backlight_gpio", ok=True, detail=str(gpio_path))
+    if Path("/dev/spidev0.0").exists():
         return CheckResult(
             name="backlight_gpio",
-            ok=None,
-            detail=(
-                "GPIO 26 not exported — run `piwallet bonnet` first "
-                "to let the driver export it, or check BCM pin wiring"
-            ),
+            ok=True,
+            detail="bonnet panel active (Blinka D26)",
         )
-    return CheckResult(name="backlight_gpio", ok=True, detail=str(gpio_path))
+    return CheckResult(
+        name="backlight_gpio",
+        ok=None,
+        detail="GPIO 26 not exported — not a Pi or SPI not enabled",
+    )
 
 
 def check_display_paint() -> CheckResult:

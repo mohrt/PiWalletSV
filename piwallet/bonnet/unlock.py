@@ -104,7 +104,7 @@ class UnlockScreen:
                     "Too many wrong PINs. The vault has been "
                     "destroyed. Restore from your seed phrase."
                 ),
-                footer="hold B to exit",
+                footer="B: back",
                 accent=COLOR_DANGER,
             ).draw(fb)
             return
