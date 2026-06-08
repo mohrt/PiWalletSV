@@ -1,7 +1,7 @@
 """Bonnet global settings screen.
 
 A minimal value-editor for :class:`piwallet.core.settings.BonnetSettings`.
-Value rows (brightness, sleep timer, camera) cycle with L/R; action rows
+Value rows (brightness, sleep timer) cycle with L/R; action rows
 open sub-flows on ``A``. The caller persists on save and re-opens this
 screen after read-only sub-screens (e.g. airgap status) return.
 
@@ -26,7 +26,6 @@ from typing import Literal
 from piwallet import __version__ as PIWALLET_VERSION
 from piwallet.core.settings import (
     BRIGHTNESS_OPTIONS,
-    CAMERA_TYPE_OPTIONS,
     SLEEP_TIMER_OPTIONS_MS,
     BonnetSettings,
 )
@@ -46,7 +45,7 @@ SettingsScreenResult = Literal[
     "saved", "back", "change_pin", "airgap", "usb_backup", "about", "system_reset"
 ]
 
-_CYCLER_KEYS = frozenset({"brightness", "sleep_timer", "camera_type"})
+_CYCLER_KEYS = frozenset({"brightness", "sleep_timer"})
 
 
 @dataclass
@@ -74,17 +73,6 @@ def _sleep_timer_value_text(s: BonnetSettings) -> str:
     return _format_sleep_timeout_ms(s.sleep_timeout_ms)
 
 
-_CAMERA_TYPE_LABELS: dict[str, str] = {
-    "ov5647": "OV5647 Mini",
-    "imx708": "CM3 (IMX708)",
-    "auto": "Auto-detect",
-}
-
-
-def _camera_type_value_text(s: BonnetSettings) -> str:
-    return _CAMERA_TYPE_LABELS.get(s.camera_type, s.camera_type)
-
-
 def _action_arrow(_s: BonnetSettings) -> str:
     return ">"
 
@@ -99,11 +87,6 @@ SETTINGS_ROWS: tuple[SettingsRow, ...] = (
         key="sleep_timer",
         label="Sleep timer",
         value_text=_sleep_timer_value_text,
-    ),
-    SettingsRow(
-        key="camera_type",
-        label="Camera",
-        value_text=_camera_type_value_text,
     ),
     SettingsRow(
         key="change_pin",
@@ -207,8 +190,6 @@ class SettingsScreen:
             self._cycle_brightness(step=step)
         elif row.key == "sleep_timer":
             self._cycle_sleep_timer(step=step)
-        elif row.key == "camera_type":
-            self._cycle_camera_type(step=step)
 
     def _cycle_brightness(self, *, step: int) -> None:
         options = BRIGHTNESS_OPTIONS
@@ -239,20 +220,6 @@ class SettingsScreen:
         if new_value == self._draft.sleep_timeout_ms:
             return
         self._draft = replace(self._draft, sleep_timeout_ms=new_value)
-
-    def _cycle_camera_type(self, *, step: int) -> None:
-        options = CAMERA_TYPE_OPTIONS
-        if not options:
-            return
-        try:
-            idx = options.index(self._draft.camera_type)
-        except ValueError:
-            idx = 0
-        new_idx = (idx + step) % len(options)
-        new_value = options[new_idx]
-        if new_value == self._draft.camera_type:
-            return
-        self._draft = replace(self._draft, camera_type=new_value)
 
     def _restore_preview(self) -> None:
         if (

@@ -15,7 +15,7 @@ export const MIN_ENCODED_CHUNK_CHARS = 64;
 // A Version 9 matrix is 53×53 modules — at 640×480 capture each module
 // is ~8 px wide, well within pyzbar's reliable decode range.
 // The previous value of 720 produced Version 17+ QR codes (85×85 modules,
-// ~6 px/module) which were too dense for the OV5647 and Camera Module 3
+// ~6 px/module) which were too dense for the OV5647 kit camera
 // to reliably decode from a screen.
 export const DEFAULT_ENCODED_CHUNK_CHARS = 200;
 

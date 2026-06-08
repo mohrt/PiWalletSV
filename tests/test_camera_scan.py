@@ -7,10 +7,9 @@ any platform without Pi-specific packages.
 
 from __future__ import annotations
 
-import types
 from collections.abc import Iterator
 from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -18,7 +17,6 @@ import pytest
 from piwallet.qr.camera_scan import (
     ScanCancelled,
     _parse_size,
-    configure_autofocus,
     scan_multipart_from_camera,
 )
 from piwallet.qr.multipart import MultipartAssembler, split_envelope_to_lines
@@ -63,18 +61,6 @@ def fake_picamera_cls(fake_cam: MagicMock) -> MagicMock:
     return cls
 
 
-@pytest.fixture()
-def fake_controls() -> types.SimpleNamespace:
-    controls = types.SimpleNamespace()
-    af = types.SimpleNamespace(
-        Continuous="continuous",
-        Auto="auto",
-        Manual="manual",
-    )
-    controls.AfModeEnum = af
-    return controls
-
-
 # ---------------------------------------------------------------------------
 # _parse_size
 # ---------------------------------------------------------------------------
@@ -93,42 +79,19 @@ def test_parse_size_invalid() -> None:
 
 
 # ---------------------------------------------------------------------------
-# configure_autofocus
-# ---------------------------------------------------------------------------
-
-
-def test_configure_autofocus_sets_control(
-    fake_cam: MagicMock,
-    fake_controls: types.SimpleNamespace,
-) -> None:
-    configure_autofocus(fake_cam, fake_controls, mode="continuous")
-    fake_cam.set_controls.assert_called_once_with({"AfMode": "continuous"})
-
-
-def test_configure_autofocus_swallows_unsupported(
-    fake_cam: MagicMock,
-    fake_controls: types.SimpleNamespace,
-) -> None:
-    fake_cam.set_controls.side_effect = RuntimeError("not supported")
-    # Should not raise.
-    configure_autofocus(fake_cam, fake_controls, mode="continuous")
-
-
-# ---------------------------------------------------------------------------
 # scan_multipart_from_camera — success paths
 # ---------------------------------------------------------------------------
 
 
 def _make_scan_patches(
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
     decode_side_effect: Any,
 ) -> list[Any]:
     """Return context manager list suitable for multi-patch tests."""
     return [
         patch(
             "piwallet.qr.camera_scan._import_camera_stack",
-            return_value=(fake_picamera_cls, fake_controls),
+            return_value=fake_picamera_cls,
         ),
         patch(
             "piwallet.qr.camera_scan._import_pyzbar_decode",
@@ -144,12 +107,11 @@ def _make_scan_patches(
 
 def _run_with_patches(
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
     decode_fn: Any,
     **kwargs: Any,
 ) -> bytes:
     """Convenience wrapper that applies all patches and calls the function."""
-    patches = _make_scan_patches(fake_picamera_cls, fake_controls, decode_fn)
+    patches = _make_scan_patches(fake_picamera_cls, decode_fn)
     with (
         patches[0],
         patches[1],
@@ -162,7 +124,6 @@ def _run_with_patches(
 def test_scan_single_fragment(
     fake_cam: MagicMock,
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
 ) -> None:
     """A single-fragment payload is assembled and returned."""
     payload = b"hello world test payload"
@@ -179,7 +140,7 @@ def test_scan_single_fragment(
 
     asm = MultipartAssembler()
     result = _run_with_patches(
-        fake_picamera_cls, fake_controls, decode, assembler=asm
+        fake_picamera_cls, decode, assembler=asm
     )
     assert result == payload
 
@@ -187,7 +148,6 @@ def test_scan_single_fragment(
 def test_scan_multi_fragment(
     fake_cam: MagicMock,
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
 ) -> None:
     """All fragments must arrive before the function returns."""
     # Force small chunks so we get multiple parts (min allowed is 64 chars).
@@ -207,7 +167,7 @@ def test_scan_multi_fragment(
 
     asm = MultipartAssembler()
     result = _run_with_patches(
-        fake_picamera_cls, fake_controls, decode, assembler=asm
+        fake_picamera_cls, decode, assembler=asm
     )
     assert result == payload
 
@@ -215,7 +175,6 @@ def test_scan_multi_fragment(
 def test_scan_skips_non_pw1_qr(
     fake_cam: MagicMock,
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
 ) -> None:
     """QR codes without the PW1| prefix are silently skipped."""
     payload = b"test skip non pw1"
@@ -234,7 +193,7 @@ def test_scan_skips_non_pw1_qr(
 
     asm = MultipartAssembler()
     result = _run_with_patches(
-        fake_picamera_cls, fake_controls, decode, assembler=asm
+        fake_picamera_cls, decode, assembler=asm
     )
     assert result == payload
 
@@ -242,7 +201,6 @@ def test_scan_skips_non_pw1_qr(
 def test_scan_empty_frames_do_not_crash(
     fake_cam: MagicMock,
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
 ) -> None:
     """Empty decode results just increment the frame counter and continue."""
     payload = b"after blank frames"
@@ -260,7 +218,7 @@ def test_scan_empty_frames_do_not_crash(
 
     asm = MultipartAssembler()
     result = _run_with_patches(
-        fake_picamera_cls, fake_controls, decode, assembler=asm
+        fake_picamera_cls, decode, assembler=asm
     )
     assert result == payload
 
@@ -268,7 +226,6 @@ def test_scan_empty_frames_do_not_crash(
 def test_scan_cancel_check_raises_scan_cancelled(
     fake_cam: MagicMock,
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
 ) -> None:
     """When cancel_check() returns True the loop raises ScanCancelled."""
     cancel_after = 2
@@ -282,7 +239,7 @@ def test_scan_cancel_check_raises_scan_cancelled(
         frame_count += 1
         return frame_count > cancel_after
 
-    patches = _make_scan_patches(fake_picamera_cls, fake_controls, decode)
+    patches = _make_scan_patches(fake_picamera_cls, decode)
     with (
         patches[0],
         patches[1],
@@ -299,7 +256,6 @@ def test_scan_cancel_check_raises_scan_cancelled(
 def test_scan_on_progress_callback(
     fake_cam: MagicMock,
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
 ) -> None:
     """on_progress is called whenever a PW1 fragment is fed."""
     payload = b"progress test payload"
@@ -322,7 +278,7 @@ def test_scan_on_progress_callback(
 
     asm = MultipartAssembler()
     _run_with_patches(
-        fake_picamera_cls, fake_controls, decode,
+        fake_picamera_cls, decode,
         assembler=asm, on_progress=on_progress,
     )
     assert len(progress_calls) == len(lines)
@@ -331,7 +287,6 @@ def test_scan_on_progress_callback(
 def test_scan_on_progress_last_frame_reports_full_count(
     fake_cam: MagicMock,
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
 ) -> None:
     """Final fragment must report N/N, not 0/N — feed() resets the assembler."""
     payload = b"x" * 400
@@ -354,7 +309,7 @@ def test_scan_on_progress_last_frame_reports_full_count(
         progress_calls.append((count, msg))
 
     _run_with_patches(
-        fake_picamera_cls, fake_controls, decode,
+        fake_picamera_cls, decode,
         on_progress=on_progress,
     )
     n = len(lines)
@@ -364,7 +319,6 @@ def test_scan_on_progress_last_frame_reports_full_count(
 def test_scan_camera_closed_on_multipart_error(
     fake_cam: MagicMock,
     fake_picamera_cls: MagicMock,
-    fake_controls: types.SimpleNamespace,
 ) -> None:
     """MultipartQrError from conflicting same-index fragments closes the camera."""
     from piwallet.qr.multipart import MultipartQrError
@@ -383,7 +337,7 @@ def test_scan_camera_closed_on_multipart_error(
         except StopIteration:
             return []
 
-    patches = _make_scan_patches(fake_picamera_cls, fake_controls, decode)
+    patches = _make_scan_patches(fake_picamera_cls, decode)
     with (
         patches[0],
         patches[1],

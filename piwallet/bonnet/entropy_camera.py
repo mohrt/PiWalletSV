@@ -51,12 +51,10 @@ class EntropyDualStreamCamera:
         self,
         *,
         still_size: tuple[int, int] = _ENTROPY_STILL_DEFAULT,
-        autofocus_continuous: bool = True,
         preview_settle_s: float = 0.5,
         jpeg_quality: int = 85,
     ) -> None:
         self._still_size = still_size
-        self._autofocus_continuous = autofocus_continuous
         self._preview_settle_s = preview_settle_s
         self._jpeg_quality = jpeg_quality
         self._cam = None
@@ -67,7 +65,6 @@ class EntropyDualStreamCamera:
             return
         try:
             # Local import validates availability with a single error surface.
-            from libcamera import controls  # type: ignore[import-not-found]
             from picamera2 import Picamera2  # type: ignore[import-not-found]
         except ImportError as exc:
             raise RuntimeError(
@@ -89,7 +86,6 @@ class EntropyDualStreamCamera:
                     ),
                 )
                 picam.start()
-                self._apply_af(picam, controls)
                 time.sleep(max(0.0, float(self._preview_settle_s)))
                 self._cam = picam
                 self._mode = "preview_still"
@@ -120,7 +116,6 @@ class EntropyDualStreamCamera:
                     )
                 )
                 picam.start()
-                self._apply_af(picam, controls)
                 time.sleep(max(0.0, float(self._preview_settle_s)))
                 self._cam = picam
                 self._mode = "dual"
@@ -145,14 +140,6 @@ class EntropyDualStreamCamera:
             else f"{last_err!s}"
         )
         raise RuntimeError(msg) from last_err
-
-    def _apply_af(self, picam: object, controls_mod: object) -> None:
-        if not self._autofocus_continuous:
-            return
-        try:
-            picam.set_controls({"AfMode": controls_mod.AfModeEnum.Continuous})  # type: ignore[attr-defined]
-        except Exception as exc:
-            log.debug("continuous AF not applied: %s", exc)
 
     def read_preview_rgb(self):
         """Return an RGB ndarray for TFT thumbnailing (~lores size or preview main size)."""

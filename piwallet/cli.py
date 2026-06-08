@@ -467,14 +467,6 @@ def qr_split(input_path: Path | None, chunk_chars: int, output: Path | None) -> 
     help="Seconds to wait after camera start before decoding (allow AGC/AEC to stabilise).",
 )
 @click.option(
-    "--af",
-    "autofocus",
-    type=click.Choice(["continuous", "auto", "manual"]),
-    default="manual",
-    show_default=True,
-    help="Autofocus mode. Use 'manual' for fixed-focus cameras like OV5647.",
-)
-@click.option(
     "-o",
     "--output",
     type=click.Path(dir_okay=False, path_type=Path),
@@ -497,7 +489,6 @@ def qr_scan_camera(
     size: str,
     interval: float,
     settle: float,
-    autofocus: str,
     output: Path | None,
     show: bool,
     save_frame: str | None,
@@ -514,8 +505,6 @@ def qr_scan_camera(
             size=size,
             interval_s=interval,
             settle_s=settle,
-            skip_autofocus=(autofocus == "manual"),
-            autofocus=autofocus,
             on_progress=on_progress,
             save_frame_path=save_frame,
         )

@@ -32,7 +32,6 @@ def capture_still_jpeg_bytes(
     Blocking call — runs on-device only.
     """
     try:
-        from libcamera import controls  # type: ignore[import-not-found]
         from picamera2 import Picamera2  # type: ignore[import-not-found]
     except ImportError as exc:
         raise RuntimeError(
@@ -47,11 +46,6 @@ def capture_still_jpeg_bytes(
             cam.create_still_configuration(main={"size": (width, height)}),
         )
         cam.start()
-        try:
-            cam.set_controls({"AfMode": controls.AfModeEnum.Continuous})  # type: ignore[attr-defined]
-        except Exception as exc:  # cameras without autofocus
-            log.debug("capture_still: AfMode not supported: %s", exc)
-
         try:
             time.sleep(settle_s)
         except Exception as exc:  # pragma: no cover (interrupted sleep is rare)

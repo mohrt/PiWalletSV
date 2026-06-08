@@ -47,10 +47,6 @@ class CameraEntropyScreen:
     preview_thumb_max_edge: int = 200
     clock_s: Callable[[], float] = field(default_factory=lambda: time.monotonic)
     camera_cls: type = EntropyDualStreamCamera
-    #: Set to ``False`` when the installed camera is fixed-focus (e.g.
-    #: OV5647 Mini) to skip the ``AfMode=Continuous`` control call
-    #: that would otherwise fail silently every session.
-    autofocus_continuous: bool = True
     _dual: EntropyDualStreamCamera | None = field(init=False, default=None)
     _dual_failed: bool = field(init=False, default=False)
     _dual_open_attempted: bool = field(init=False, default=False)
@@ -72,7 +68,7 @@ class CameraEntropyScreen:
             return
         self._dual_open_attempted = True
         try:
-            cam = self.camera_cls(autofocus_continuous=self.autofocus_continuous)
+            cam = self.camera_cls()
             cam.open()
             self._dual = cam
         except Exception:

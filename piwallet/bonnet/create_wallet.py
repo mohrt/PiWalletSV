@@ -112,8 +112,7 @@ def run_create_wallet(
         if src == "csr":
             phrase = mnem.generate(wc)
         elif src == "camera":
-            af = settings is None or settings.camera_type in ("imx708", "auto")
-            caps = CameraEntropyScreen(autofocus_continuous=af)
+            caps = CameraEntropyScreen()
             run_screen(display, input_mgr, caps, target_fps=target_fps, idle_wake=idle_wake)
             if caps.result is None:
                 return CreateWalletOutcome(cancelled=True)

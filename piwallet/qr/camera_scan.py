@@ -36,9 +36,8 @@ class ScanCancelled(RuntimeError):
     """
 
 
-def _import_camera_stack() -> tuple[type, object]:
+def _import_camera_stack() -> type:
     try:
-        from libcamera import controls
         from picamera2 import Picamera2
     except ImportError as exc:
         raise RuntimeError(
@@ -46,7 +45,7 @@ def _import_camera_stack() -> tuple[type, object]:
             "`sudo apt install -y python3-picamera2` and use a venv with "
             "`--system-site-packages`, or run this command on the Pi only."
         ) from exc
-    return Picamera2, controls
+    return Picamera2
 
 
 def _import_pyzbar_decode():
@@ -78,25 +77,11 @@ def _import_pyzbar_decode():
     return decode
 
 
-def configure_autofocus(cam, controls_mod, mode: str = "continuous") -> None:
-    af_map = {
-        "continuous": controls_mod.AfModeEnum.Continuous,
-        "auto": controls_mod.AfModeEnum.Auto,
-        "manual": controls_mod.AfModeEnum.Manual,
-    }
-    try:
-        cam.set_controls({"AfMode": af_map[mode]})
-    except Exception as exc:
-        print(f"  (AfMode={mode} not supported: {exc})", file=sys.stderr)
-
-
 def scan_multipart_from_camera(
     assembler: MultipartAssembler | None = None,
     *,
     size: str = "640x480",
     interval_s: float = 0.35,
-    autofocus: str = "continuous",
-    skip_autofocus: bool = False,
     settle_s: float = 2.0,
     on_progress: ProgressCallback | None = None,
     on_lcd_thumbnail: Callable[[Image.Image], None] | None = None,
@@ -133,7 +118,7 @@ def scan_multipart_from_camera(
 
     prepare_runtime_for_cli_camera_scan()
 
-    picamera_cls, controls_mod = _import_camera_stack()
+    picamera_cls = _import_camera_stack()
     decode = _import_pyzbar_decode()
 
     asm = assembler if assembler is not None else MultipartAssembler()
@@ -143,15 +128,13 @@ def scan_multipart_from_camera(
     # Preview configuration keeps the sensor in continuous video mode:
     # - RGB888 format is guaranteed (no 4-channel XBGR8888 surprises)
     # - AGC/AEC tracks continuously so exposure stabilises in settle_s
-    # - Works on both OV5647 (fixed-focus) and autofocus sensors equally
+    # - OV5647 (kit camera) is fixed-focus; preview mode lets AGC settle
     cam.configure(
         cam.create_preview_configuration(
             main={"format": "RGB888", "size": (w, h)},
         )
     )
     cam.start()
-    if not skip_autofocus:
-        configure_autofocus(cam, controls_mod, autofocus)
     time.sleep(settle_s)
 
     mono = mono_s if mono_s is not None else time.monotonic

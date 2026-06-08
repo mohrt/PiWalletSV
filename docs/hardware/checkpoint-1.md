@@ -50,11 +50,12 @@ ls /dev/spidev0.*                 # expect /dev/spidev0.0 and /dev/spidev0.1
 rpicam-hello --list-cameras       # expect "ov5647" or "arducam" listed
 ```
 
-!!! note "Official Pi cameras"
-    If you swap to a Pi Camera Module 3 or HQ Camera (which have an
-    on-board EEPROM), replace the two lines above with
-    `camera_auto_detect=1` instead. The OV5647 and the EEPROM cameras
-    use mutually exclusive detection methods.
+!!! note "Other libcamera sensors (DIY)"
+    The libcamera stack supports other CSI sensors when the matching
+    `dtoverlay` is set in `config.txt`. PiWalletSV v1 is tested with
+    the kit **ArduCam OV5647** only. See
+    [Supported cameras](../build.md#supported-cameras-libcamera) for
+    common overlays if you bring your own camera.
 
 !!! note "libcamera tool rename on Trixie"
     On Pi OS Trixie the libcamera CLI tools were renamed:

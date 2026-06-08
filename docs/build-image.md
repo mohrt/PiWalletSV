@@ -26,8 +26,8 @@ including the USB backup mount daemon, FAT/exFAT tools, and bonnet
   the official [Download](download.md) page.
 - A **microSD card**, 8&nbsp;GB or larger.
 - A **Raspberry Pi Zero 2&nbsp;W** with the Adafruit 1.3&quot; 240×240 TFT
-  bonnet ([product 4506](https://www.adafruit.com/product/4506)) and a
-  Pi Camera Module v2 or v3.
+  bonnet ([product 4506](https://www.adafruit.com/product/4506)) and an
+  **ArduCam OV5647** camera module.
 - A **5&nbsp;V power supply** with a micro-USB plug for the bonnet's
   PWR-IN port.
 - A computer with `gpg`, `xz`, and either Raspberry Pi Imager or the
@@ -366,10 +366,9 @@ joystick chip on a different I2C address. Contact
 bonnet's silkscreen revision string.
 
 **Camera doesn't detect QR codes.**
-The Pi Camera v2 has a fixed focal length around 30&nbsp;cm. If your
-companion device is closer or farther, the QR sequence will be
-blurry. Hold the bonnet about a foot away. The Camera v3 has
-autofocus and is much more forgiving.
+The kit **ArduCam OV5647** is fixed-focus around 30&nbsp;cm (~1&nbsp;ft).
+If your companion device is closer or farther, the QR sequence will be
+blurry. Hold the bonnet at about that distance while scanning.
 
 **&ldquo;Airgap status&rdquo; shows BREACH.**
 This is the diagnostic working as designed: it found a leak. See
