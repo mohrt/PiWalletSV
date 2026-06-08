@@ -672,6 +672,8 @@ but Balance shows a non-zero total.**
 
 - Confirm `rpicam-hello` shows live preview. If not, the CSI cable
   is the usual culprit — re-seat both ends.
+- The kit **OV5647** is fixed-focus (~30 cm / ~1 ft). Hold the bonnet
+  at that distance from the companion screen.
 - The companion's animation is too fast. Use the **Pause** button to
   hold a frame, then resume. The Pi assembler is happy with frames
   in any order.

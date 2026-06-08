@@ -4,7 +4,7 @@
 > No warranty. Non-custodial: lose your seed and your funds are gone.
 > Report security issues per [`SECURITY.md`](SECURITY.md).
 
-Air-gapped **Bitcoin SV** wallet built on a **Raspberry Pi**, a **TFT bonnet** (joystick + buttons), and a **Pi Camera**. Signing is performed entirely offline; a companion web app on your phone or laptop handles all on-chain work.
+Air-gapped **Bitcoin SV** wallet built on a **Raspberry Pi**, a **TFT bonnet** (joystick + buttons), and an **ArduCam OV5647** camera. Signing is performed entirely offline; a companion web app on your phone or laptop handles all on-chain work.
 
 User-facing site: **[piwalletsv.com](https://piwalletsv.com/)** · Live wallet: **[app.piwalletsv.com](https://app.piwalletsv.com/)**
 
@@ -22,7 +22,7 @@ pytest
 ```
 
 - **CLI:** `piwallet --help` — vault, sign, decode, multipart QR (`piwallet qr join`, `piwallet qr scan-camera` on Pi), USB backup (`piwallet backup export|import`).
-- **Pi camera path:** install `python3-picamera2` via apt, then in a venv use `pip install pyzbar` and `sudo apt install libzbar0t64`. See [GETTING_STARTED.md](GETTING_STARTED.md).
+- **Pi camera path:** kit **ArduCam OV5647** with `python3-picamera2` via apt; in a venv use `pip install pyzbar` and `sudo apt install libzbar0t64`. See [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ## Companion web app
 

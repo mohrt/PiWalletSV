@@ -4,7 +4,7 @@
     Pre-assembled PiWalletSV kits are not yet available.
 
     When ready, a complete kit will include a Raspberry Pi Zero 2 W,
-    Adafruit 240×240 TFT bonnet, compatible camera module, and a
+    Adafruit 240×240 TFT bonnet, ArduCam OV5647 camera module, and a
     pre-flashed microSD card with the latest signed firmware image —
     ready to power on and pair.
 

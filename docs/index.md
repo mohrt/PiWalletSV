@@ -12,7 +12,7 @@ hide:
 
 # An air-gapped wallet for Bitcoin SV
 
-Built on a Raspberry Pi, a TFT bonnet, and a Pi Camera. Your **keys
+Built on a Raspberry Pi, a TFT bonnet, and an **ArduCam OV5647** camera. Your **keys
 never leave the device** — no Wi-Fi, no Bluetooth, no Ethernet. A
 small web app on your phone or laptop talks to the chain; the Pi
 just signs.
@@ -119,7 +119,7 @@ device signs anything.
 
 -   :material-shopping-outline: __Off-the-shelf parts__
 
-    Raspberry Pi, TFT bonnet, Pi Camera. No proprietary hardware,
+    Raspberry Pi, TFT bonnet, ArduCam OV5647 camera. No proprietary hardware,
     no soldering, no signed firmware to trust.
 
 </div>

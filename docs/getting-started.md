@@ -11,10 +11,8 @@ transaction in a CLI smoke test." For the user-facing journey
   bonnet plugs into).
 - An **Adafruit 1.3" 240×240 TFT bonnet** ([product 4506](https://www.adafruit.com/product/4506)) —
   ST7789-class panel with a joystick and A/B buttons.
-- A **Pi Camera Module 3** plus the ribbon cable adapter for the
-  Pi Zero CSI connector. The original Camera Module v2 also works
-  but autofocus is much nicer for scanning animated QRs on a phone
-  screen.
+- An **ArduCam OV5647** camera module (kit camera) plus the ribbon
+  cable adapter for the Pi Zero CSI connector.
 - A **microSD card** (8 GB is enough; 16 GB is more comfortable).
 - A **5 V power supply** with a micro-USB connector that plugs into
   the bonnet's **PWR IN** port (the one farthest from the SD slot).
@@ -45,6 +43,18 @@ buttons cycle the picture, the hardware side is ready.
 
 ## Wire up the camera
 
+Add the kit camera overlay to `/boot/firmware/config.txt`:
+
+```bash
+sudo tee -a /boot/firmware/config.txt <<'EOF'
+camera_auto_detect=0
+dtoverlay=ov5647
+EOF
+sudo reboot
+```
+
+Install the libcamera stack and QR decoder:
+
 ```bash
 sudo apt install -y python3-picamera2 libzbar0t64
 source ~/.venvs/piwallet/bin/activate
@@ -62,6 +72,10 @@ The script grabs a frame, runs `pyzbar` against it, and prints the
 decoded text. If `rpicam-hello` shows live preview and
 `camera_qr_test.py` decodes a real QR code from your phone, the
 camera is ready.
+
+DIY builders using a different libcamera-supported sensor must install
+the matching `dtoverlay` and apt packages — see
+[Supported cameras](build.md#supported-cameras-libcamera) in the build guide.
 
 ## Install the offline core
 

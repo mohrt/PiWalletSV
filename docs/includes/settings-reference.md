@@ -10,15 +10,14 @@ when you need the device off.
 
 ### Value rows
 
-Use **UP/DOWN** to move the cursor. On **Brightness**, **Sleep timer**,
-and **Camera**, use **LEFT/RIGHT** to cycle through the allowed values.
+Use **UP/DOWN** to move the cursor. On **Brightness** and **Sleep timer**,
+use **LEFT/RIGHT** to cycle through the allowed values.
 Press **A** on a value row to save and return to the wallet list.
 
 | Row | What it does |
 |-----|----------------|
 | **Brightness** | Backlight level (preset percentages). |
 | **Sleep timer** | Minutes until the panel blanks when idle (`Off` disables). |
-| **Camera** | Sensor profile (`OV5647 Mini`, `CM3 (IMX708)`, or `Auto-detect`). |
 
 ### Action rows
 

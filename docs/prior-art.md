@@ -49,7 +49,7 @@ is the weak point in most setups." A commenter explicitly suggests
 QR codes to mitigate this.
 
 PiWalletSV: there is no USB port in the trust path. The Pi receives
-proposals via Camera Module 3 + PW1 multipart QR
+proposals via ArduCam OV5647 + PW1 multipart QR
 ([QR transport](protocol/qr-transport.md)) and emits signed
 envelopes the same way. This eliminates the entire BadUSB / autorun
 / executable-on-removable-media class of attacks the article ducks

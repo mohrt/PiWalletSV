@@ -317,8 +317,10 @@ terminal QR loop.
 
 ### `qr scan-camera`
 
-Pi-only. Capture frames from the Camera Module 3 until a full PW1
-payload is assembled.
+Pi-only. Capture frames from the libcamera stack until a full PW1
+payload is assembled. The sealed image is configured for the kit
+**ArduCam OV5647**; DIY builds need the matching boot overlay — see
+[Supported cameras](build.md#supported-cameras-libcamera).
 
 ```bash
 piwallet qr scan-camera -o /tmp/blob.bin
@@ -328,7 +330,7 @@ Common options:
 
 - `--size 1280x960` — capture resolution.
 - `--interval 0.35` — seconds between frames.
-- `--af continuous` — autofocus mode.
+- `--settle 2.0` — seconds after camera start before decoding (AGC/AEC settle).
 - `--show / --no-show` — print envelope summary to stderr on
   completion (default on).
 

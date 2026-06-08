@@ -125,6 +125,28 @@ The two extras matter:
   bundle native libs. We keep the marker so future optional pip
   dependencies can land cleanly.
 
+## Supported cameras (libcamera)
+
+The sealed PiWalletSV image ships with the **ArduCam OV5647** (fixed
+focus). That is the kit minimum and the only combination tested for v1.
+
+PiWalletSV uses the standard Raspberry Pi OS **libcamera / picamera2**
+stack. Other CSI sensors may work if you configure the correct boot
+overlay and install the apt packages above — PiWalletSV does not test
+those combinations in v1.
+
+| Sensor / module | Typical overlay | Notes |
+|-----------------|-----------------|-------|
+| **OV5647** (ArduCam kit) | `dtoverlay=ov5647` | Sealed image default. Fixed focus (~30 cm / ~1 ft for phone-screen QRs). |
+| IMX219 (Pi Camera v2) | `dtoverlay=imx219` | Fixed focus. |
+| IMX477 (HQ Camera) | `dtoverlay=imx477` | Fixed focus. |
+| IMX708 (Pi Camera Module 3) | `dtoverlay=imx708` or `camera_auto_detect=1` | Autofocus sensor; hold at a consistent distance. |
+| IMX296 (Global Shutter) | `dtoverlay=imx296` | Fixed focus. |
+
+See Raspberry Pi's [camera documentation](https://www.raspberrypi.com/documentation/computers/camera.html)
+for the full sensor list and wiring. DIY builders are responsible for
+matching overlay, cable, and apt packages to their hardware.
+
 Smoke test:
 
 ```bash

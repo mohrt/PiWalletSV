@@ -28,7 +28,7 @@ slot**). Keep **PWR IN** connected for power.
 PiWalletSV/backups/<YYYYMMDD-HHMMSSZ>/
 ├── manifest.json    wallet labels + fingerprints (public metadata)
 ├── vault.bin        encrypted vault (same format as on the SD card)
-└── settings.json    optional (brightness, sleep timer, camera type)
+└── settings.json    optional (brightness, sleep timer, QR background)
 ```
 
 **`terms.json` is never exported** — you re-accept the disclaimer

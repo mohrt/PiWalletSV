@@ -706,7 +706,6 @@ def _make_default_worker(
     capture_size: str = "640x480",
     interval_s: float = 0.35,
     settle_s: float = 1.0,
-    skip_autofocus: bool = False,
 ):
     """Factory returning a ``start_worker(state)`` callable.
 
@@ -731,7 +730,6 @@ def _make_default_worker(
                     size=capture_size,
                     interval_s=interval_s,
                     settle_s=settle_s,
-                    skip_autofocus=skip_autofocus,
                     on_progress=on_progress,
                     on_lcd_thumbnail=on_thumb,
                     cancel_check=cancel_check,
@@ -823,8 +821,7 @@ def run_sign_flow(
                 hold_seconds=toast_seconds,
             )
             return "stay"
-        skip_af = settings is not None and settings.camera_type not in ("imx708", "auto")
-        start_worker = _make_default_worker(skip_autofocus=skip_af)
+        start_worker = _make_default_worker()
     scan = ScanProposalScreen(start_worker=start_worker)
     run_screen(display, input_mgr, scan, target_fps=target_fps, idle_wake=idle_wake)
 

@@ -202,7 +202,7 @@ def test_draw_at_maximum_brightness() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_settings_rows_include_brightness_then_sleep_timer_then_camera_then_action_rows() -> None:
+def test_settings_rows_include_brightness_then_sleep_timer_then_action_rows() -> None:
     """Order is fixed — value rows first, then action rows.
 
     The Settings screen's row ordering is observable via cursor index;
@@ -214,7 +214,6 @@ def test_settings_rows_include_brightness_then_sleep_timer_then_camera_then_acti
     assert keys == [
         "brightness",
         "sleep_timer",
-        "camera_type",
         "change_pin",
         "airgap",
         "usb_backup",

@@ -199,3 +199,26 @@ def test_save_then_load_roundtrips_qr_background(tmp_path: Path) -> None:
 def test_with_qr_background_clamps() -> None:
     assert BonnetSettings().with_qr_background(999).qr_background == 255
     assert BonnetSettings().with_qr_background(0).qr_background == 31
+
+
+def test_load_v4_file_ignores_legacy_camera_type(tmp_path: Path) -> None:
+    """Schema v5 drops ``camera_type``; older files still load cleanly."""
+    p = tmp_path / "settings.json"
+    p.write_text(
+        json.dumps(
+            {
+                "schema_version": 4,
+                "brightness": 0.7,
+                "sleep_timeout_ms": 300_000,
+                "camera_type": "imx708",
+                "qr_background": 62,
+            }
+        )
+    )
+    s = load_settings(p)
+    assert s.brightness == pytest.approx(0.7)
+    assert s.qr_background == 62
+    save_settings(s, p)
+    payload = json.loads(p.read_text())
+    assert payload["schema_version"] == SETTINGS_SCHEMA_VERSION
+    assert "camera_type" not in payload

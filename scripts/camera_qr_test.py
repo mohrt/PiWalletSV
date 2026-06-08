@@ -4,10 +4,10 @@
 """
 PiWallet camera bring-up smoke test.
 
-Continuously captures frames from a Pi Camera (Module 3 recommended) via
-picamera2/libcamera, runs pyzbar QR decode on each frame, and prints any
-decoded payloads. Confirms the same hardware + software path Phase 3 will
-use to scan unsigned-proposal QR codes from the companion PWA.
+Continuously captures frames from the libcamera stack (kit: ArduCam OV5647)
+via picamera2, runs pyzbar QR decode on each frame, and prints any
+decoded payloads. Confirms the same hardware + software path the bonnet
+uses to scan unsigned-proposal QR codes from the companion PWA.
 
 Usage (in the piwallet venv):
 
@@ -25,7 +25,6 @@ import time
 
 try:
     from picamera2 import Picamera2
-    from libcamera import controls
 except ImportError as exc:
     sys.exit(
         f"picamera2/libcamera missing: {exc}\n"
@@ -47,12 +46,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--size", default="1280x960", help="capture size WxH (default 1280x960)")
     p.add_argument("--save", metavar="PATH", help="save the last captured frame as JPEG")
     p.add_argument("--interval", type=float, default=0.4, help="seconds between frames (default 0.4)")
-    p.add_argument(
-        "--af",
-        choices=["continuous", "auto", "manual"],
-        default="continuous",
-        help="autofocus mode (Module 3 only; ignored on fixed-focus cameras)",
-    )
     return p.parse_args()
 
 
@@ -62,18 +55,6 @@ def parse_size(spec: str) -> tuple[int, int]:
         return w, h
     except ValueError as exc:
         raise SystemExit(f"bad --size '{spec}', expected like 1280x960") from exc
-
-
-def configure_af(cam: Picamera2, mode: str) -> None:
-    af_map = {
-        "continuous": controls.AfModeEnum.Continuous,
-        "auto": controls.AfModeEnum.Auto,
-        "manual": controls.AfModeEnum.Manual,
-    }
-    try:
-        cam.set_controls({"AfMode": af_map[mode]})
-    except Exception as exc:  # noqa: BLE001 - module 1/2 lack AF; not fatal
-        print(f"  (AfMode={mode} not supported on this camera: {exc})")
 
 
 def main() -> int:
@@ -86,8 +67,7 @@ def main() -> int:
     print(f"Capture size: {width}x{height}")
 
     cam.start()
-    configure_af(cam, args.af)
-    time.sleep(1.0)  # let AE / AF settle
+    time.sleep(1.0)  # let AGC/AEC settle
 
     frame_no = 0
     last_frame = None
