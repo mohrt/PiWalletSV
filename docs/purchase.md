@@ -15,7 +15,7 @@
     before first boot (recommended).
 
     A **printable quick-start card** for the box is in
-    [`docs/print/kit-insert.md`](../print/kit-insert.md).
+    [`docs/print/kit-insert.md`](print/kit-insert.md).
 
     In the meantime, build your own using the
     [pre-built image](download.md) or
