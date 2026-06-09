@@ -282,9 +282,15 @@ note any non-backwards-compatible changes per release.
   after this chapter and rely on physical access for maintenance.
   See [Security](security.md) for the threat-model rationale.
 
-## 15. Reproducible image (planned)
+## 15. Official SD image
 
-A future v0.1 release will ship a `pi-gen`-built SD image with the
-signer pre-installed and the vault directory pre-created, signed with
-the project's PGP key. Tracking issue: `phase8-hardening`. Until that
-lands, the manual sequence in this chapter is the canonical install.
+The sealed image is built with
+[`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
+on **Raspberry Pi OS Lite 32-bit** (Pi Zero W / Zero WH). Signed `.img.xz`
+artifacts are published on **GitHub Releases** — see [Download](download.md).
+
+Operator workflow (capture, sign, factory burn):
+[`docs/includes/image-release-operator.md`](includes/image-release-operator.md).
+
+Future work: `pi-gen` reproducible builds (`phase8-hardening`).
+Until then, the manual provision + capture sequence above is canonical.

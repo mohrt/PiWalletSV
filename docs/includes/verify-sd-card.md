@@ -27,7 +27,7 @@ you create a wallet or receive funds.
 !!! note "Honest limits"
     Raspberry Pi hardware has **no secure boot**. Option B removes
     supply-chain doubt because **you** supply the image from
-    piwalletsv.com after GPG verification.
+    [Download](download.md) (GitHub Releases) after GPG verification.
 
 ### Before you start
 

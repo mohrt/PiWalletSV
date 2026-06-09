@@ -45,7 +45,9 @@ Typical PiWalletSV kit contents:
 2. **Heat sink** for the Pi Zero (attach before seating the bonnet)
 3. **Adafruit 1.3″ TFT bonnet** (240×240 display, joystick, A/B buttons)
 4. **ArduCam OV5647 camera** + ribbon cable
-5. **microSD card** (pre-flashed with PiWalletSV firmware)
+5. **microSD card** (factory-flashed with PiWalletSV firmware) + **SD adapter**
+   (full-size). Use **your own USB microSD reader** on a PC/Mac to re-flash
+   from GitHub before funding (strongly recommended — see Step 0).
 6. **5 V USB power adapter** (wall charger)
 7. **Micro-USB cable** (USB-A → micro-USB) — from the power adapter to
    the **right** micro-USB port (**power only**)
@@ -64,8 +66,13 @@ Keep the seed phrase backup **separate** from the device and SD card.
 
 ## Step 0 — Verify the microSD (do this before funding)
 
-Your kit may arrive with a **pre-flashed** SD card. For a **cold wallet**,
-verify the firmware **before** you create a wallet or receive BSV.
+Your kit includes a **factory-flashed** microSD for convenience. For a
+**cold wallet**, treat that as a starting point only — **re-flash from the
+signed GitHub download** before you create a wallet or receive BSV.
+
+**Why:** The card could have been swapped or modified in transit. Raspberry
+Pi has **no secure boot**. Re-flashing a GPG-verified image you download
+yourself is the only practical way to eliminate that doubt.
 
 **Do not boot the Pi to verify.** The device cannot show a trustworthy
 checksum of the whole card, and the first power-on already changes the
@@ -77,7 +84,7 @@ microSD.
 yourself, and write it to the card. On a new kit that is simpler and
 stronger than trying to prove the factory flash byte-for-byte.
 
-1. **Download** from https://piwalletsv.com/download :
+1. **Download** from https://piwalletsv.com/download (links to GitHub Releases):
    - `piwalletsv-<version>.img.xz`
    - `piwalletsv-<version>.img.xz.asc` (signature)
 

@@ -192,10 +192,12 @@ For each release tag:
 6. Tag the release: `git tag -s vX.Y.Z -m "vX.Y.Z"` and push.
 7. Generate a release notes draft from the commit log since the
    previous tag.
-8. **For v0.1 and later**: build the reproducible pi-gen SD image,
-   sign the `SHA256SUMS` with the release PGP key, and attach
-   both to the GitHub release. (The pipeline isn't automated yet;
-   `phase8-hardening` will track it.)
+8. **For v0.1 and later**: build the sealed SD image with
+   [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh),
+   capture and sign
+   per [`docs/includes/image-release-operator.md`](includes/image-release-operator.md),
+   and attach artifacts to the GitHub Release. (Full `pi-gen` automation
+   is tracked under `phase8-hardening`.)
 
 ## 9. Filing security issues
 

@@ -150,10 +150,10 @@ would verify an address on a Ledger or Trezor — do it before sharing.
 
 ## Release key
 
-Every PiWalletSV image artifact published from the
-[Download](download.md) page is signed with a single OpenPGP release
-key. Pin the fingerprint here so a substituted website can't lie
-about it.
+Every PiWalletSV image artifact is signed with a single OpenPGP release
+key and published on
+[GitHub Releases](https://github.com/mohrt/PiWalletSV/releases).
+Pin the fingerprint here so a substituted website cannot lie about it.
 
 | Field | Value |
 |-------|-------|
@@ -177,7 +177,7 @@ gpg --verify piwalletsv-<VERSION>.img.xz.asc piwalletsv-<VERSION>.img.xz
 The release key is held in a hardware keystore (Yubikey, OpenPGP
 applet) that never touches a networked machine; new releases are
 signed by physically presenting the key on a build host whose only
-network exit is the upload to `download.piwalletsv.com`.
+network exit is the upload to GitHub Releases.
 
 ## Verify a pre-flashed SD card
 

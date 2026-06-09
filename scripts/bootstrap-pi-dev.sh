@@ -9,7 +9,7 @@
 #   2) Adafruit raspi-blinka.py (if it asks)
 #   3) raspi-spi-reassign.py (CE0/CE1 disabled for bonnet)
 #
-# Production sealed images use deploy/provision-pi.sh (64-bit Zero 2 WH).
+# Production sealed images use deploy/provision-pi.sh (32-bit Pi Zero W).
 #
 # Typical workflow (Mac → Pi):
 #   rsync -av --delete \
