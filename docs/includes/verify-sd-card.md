@@ -33,7 +33,7 @@ you create a wallet or receive funds.
 
 - Do this **before funding** the device. **Option B erases the card**;
   if you already created a wallet, back up first
-  ([Upgrade your device § Step 1](../user-manual.md#step-1-back-up-before-you-flash)).
+  ([Upgrade your device § Step 1](#step-1-back-up-before-you-flash)).
 - Check **tamper-evident packaging** on the case if included.
 - For Option B you need a computer (internet once), **GPG**, a **card
   reader**, and [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
@@ -49,7 +49,7 @@ card is correct.
 
 #### 1. Download
 
-From [Download](../download.md):
+From [Download](download.md):
 
 - `piwalletsv-<VERSION>.img.xz`
 - `piwalletsv-<VERSION>.img.xz.asc`
@@ -61,7 +61,7 @@ Your kit paperwork states which `<VERSION>` applies (e.g. round-one
 #### 2. Verify signature and checksum
 
 Import the release key once (fingerprint in
-[Security § Release key](../security.md#release-key)):
+[Security § Release key](security.md#release-key)):
 
 ```bash
 gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
@@ -72,7 +72,7 @@ shasum -a 256 piwalletsv-<VERSION>.img.xz   # match SHA256SUMS
 **Stop if anything fails.** Do not flash.
 
 Step-by-step:
-[Flash and first run § Verify the download](../build-image.md#step-1-verify-the-download).
+[Flash and first run § Verify the download](build-image.md#step-1-verify-the-download).
 
 #### 3. Re-flash the microSD
 
@@ -84,13 +84,13 @@ Step-by-step:
 4. Eject, reinsert in the Pi, power on.
 
 Details:
-[Flash and first run § Flash the image](../build-image.md#step-2-flash-the-image).
+[Flash and first run § Flash the image](build-image.md#step-2-flash-the-image).
 
 #### 4. First-time setup
 
-Continue from [Flash and first run § Assemble](../build-image.md#step-3-assemble-the-hardware):
+Continue from [Flash and first run § Assemble](build-image.md#step-3-assemble-the-hardware):
 disclaimer → vault PIN → wallet →
-[air-gap check](../build-image.md#step-7-verify-the-air-gap).
+[air-gap check](build-image.md#step-7-verify-the-air-gap).
 
 ---
 
@@ -103,7 +103,7 @@ than Option B.
 
 1. Compare **Image ID** and firmware version printed on your **kit
    insert** (or packaging) to the verify list on **piwalletsv.com**
-   (linked from [Download](../download.md)).
+   (linked from [Download](download.md)).
 2. **Match** → paperwork matches that official batch. **Mismatch** →
    do not use; re-flash (Option B).
 
@@ -137,7 +137,7 @@ Confirms the **official `.img.xz` file** on piwalletsv.com is intact.
 Required before Option B; **does not** prove the microSD in your kit
 matches that file.
 
-1. From [Download](../download.md), note the **SHA-256** for
+1. From [Download](download.md), note the **SHA-256** for
    `piwalletsv-<VERSION>.img.xz` (also in `SHA256SUMS`).
 2. Download the same `.img.xz` and run:
 
@@ -152,7 +152,7 @@ matches that file.
 ## Already flashed the card yourself?
 
 If you downloaded, verified, and flashed before first boot, you already
-followed Option B. Proceed to [First boot](../user-manual.md#1-first-boot).
+followed Option B. Proceed to [First boot](#1-first-boot).
 
 ---
 
@@ -160,7 +160,7 @@ followed Option B. Proceed to [First boot](../user-manual.md#1-first-boot).
 
 - **Settings → Maintenance → Airgap status** — confirm Wi‑Fi / Bluetooth / network
   indicators
-  ([User manual § Airgap status](../user-manual.md#airgap-status)).
+  ([User manual § Airgap status](#airgap-status)).
 - Create or restore your wallet; test on **testnet** before mainnet.
 
 If anything fails after a verified re-flash, stop and contact support
