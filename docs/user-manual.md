@@ -14,6 +14,24 @@ phone) provides the same workflows.
     and [Security policy](security.md) describe the risks and your
     responsibilities.
 
+## Verify your SD card on arrival { #verify-sd-card-on-arrival }
+
+Pre-flashed kits should be verified **before** you create a wallet or
+receive funds:
+
+- **Option B — Re-flash a verified image** (recommended): download from
+  [Download](download.md), verify GPG + SHA-256, and flash the card
+  yourself **before first boot**. Easiest way to trust the microSD.
+- **Option A — Light checks** (optional, weaker): compare **Image ID** on
+  the kit insert to piwalletsv.com (paperwork only), or hash the card
+  in a computer reader without booting the Pi (advanced). The device
+  cannot verify the card on-screen.
+
+A **printable version** of this section ships in the kit:
+[`docs/print/kit-insert.md`](print/kit-insert.md).
+
+--8<-- "docs/includes/verify-sd-card.md"
+
 ## 1. First boot
 
 When you first boot the Pi with PiWalletSV installed, the bonnet shows
@@ -411,7 +429,7 @@ To wipe the vault entirely, delete the vault file:
 rm ~/.piwallet/vault.bin
 ```
 
-Or use **Settings → System reset** on the bonnet to securely overwrite
+Or use **Settings → Maintenance → Factory reset** on the bonnet to securely overwrite
 the vault and clear settings and disclaimer state before handing the
 device to someone else — see [§15 Settings](#settings).
 
@@ -447,7 +465,7 @@ re-install from the site); only the Pi device follows the steps below.
 ### What you need
 
 - Your **mnemonic** on paper (or steel), **or** a **USB backup** from
-  Settings → **USB backup** → **Backup to USB** (recommended before any re-flash).
+  **Settings → Maintenance → USB backup** → **Backup to USB** (recommended before any re-flash).
 - Your **PIN** (required for USB or vault-file restore).
 - A **FAT32 or exFAT USB flash drive** (factory formatting is fine) for
   Path A below, **or** a microSD card reader for Path C.
@@ -473,7 +491,7 @@ On the **current** firmware, before you re-flash:
 
 1. Insert a **FAT32 or exFAT** USB stick into the Pi's **data** micro-USB
    port (the one closer to the SD slot; power stays on **PWR IN**).
-2. **Press B** → Settings → **USB backup** → **Backup to USB**.
+2. **Press B** → **Settings** → **Maintenance** → **USB backup** → **Backup to USB**.
 3. Pick the drive from the list, confirm your **PIN**, and wait for
    *Backup saved*. Press **A** or **B** to dismiss, then **B** to
    return to Settings.
@@ -551,7 +569,7 @@ Pick **one** path below. Import **replaces all wallets** on the device
 1. Power on the flashed Pi, accept the **disclaimer** (always shown
    after a firmware upgrade).
 2. On **First setup**, choose **Restore from USB** (or, if you already
-   have a vault, **press B** → Settings → **USB backup** →
+   have a vault, **press B** → **Settings** → **Maintenance** → **USB backup** →
    **Restore from USB**).
 3. Insert the backup stick, pick the drive, then pick the backup
    timestamp.
@@ -609,7 +627,7 @@ again, replace `vault.bin` with your backup, and boot once more.
 Treat the upgraded device like a new install until you have evidence
 it is still sealed:
 
-1. **Press B** → Settings → **Airgap status** → **A**. Every row
+1. **Press B** → **Settings** → **Maintenance** → **Airgap status** → **A**. Every row
    should read `OK` and the header should say **Air-gapped**. See
    [§14 Airgap status](#airgap-status) if anything shows `!!`.
 2. Run a **TESTNET** send round-trip ([Flash and first run § Step 9](build-image.md#step-9-sign-your-first-transaction))
@@ -748,8 +766,9 @@ full host interface verification), see
 
 ## 15. Settings { #settings }
 
-Global device options and maintenance live under **Settings** on the
-bonnet. Open it with a short **B** press from the wallet list.
+Global device options live under **Settings** on the bonnet (hub with
+**Preferences** and **Maintenance**). Open it with a short **B** press
+from the wallet list. Press **B** on the hub to return to wallets.
 
 --8<-- "docs/includes/settings-reference.md"
 

@@ -44,96 +44,72 @@ Set the **hostname** to something distinctive (`piwallet-1.local`).
 Set the **timezone** correctly — the signer doesn't have a real-time
 clock, and BEEF anchor verification compares header timestamps.
 
-## 3. First boot housekeeping
+## 3. Bootstrap the Pi (recommended)
 
-Power on, SSH in (`ssh pi@piwallet-1.local`), then:
+The checked-in bootstrap script replaces the manual apt/SPI/Blinka/pip
+steps below. Run it **on the Pi** after syncing the repo from your
+workstation.
+
+--8<-- "docs/includes/bootstrap-pi-dev.md"
+
+Sections 4–5 below are **reference only** if you need to debug individual
+steps. For a new SD card, use the bootstrap script.
+
+## 4. Manual reference: first boot housekeeping
+
+Power on, SSH in, then (bootstrap does this automatically):
 
 ```bash
 sudo apt update
 sudo apt full-upgrade -y
-sudo apt install -y \
-    git python3-venv python3-pip \
-    python3-picamera2 libzbar0t64 \
-    libatlas-base-dev   # for numpy on the Pi
 ```
 
-The `python3-picamera2` apt package matters: building Picamera2 from
-PyPI on a Pi Zero 2 W takes >30 minutes and pulls in libcamera headers
-that don't exist in pip world.
-
-Reboot once after the upgrade so any kernel/firmware bumps land:
-
-```bash
-sudo reboot
-```
-
-## 4. Enable SPI + tune the kernel buffer
+## 5. Manual reference: SPI + kernel buffer
 
 The bonnet uses SPI; the default `spidev` buffer (4 KB) is too small
-for a 240×240 frame and produces the classic "good top half, garbage
-bottom half" symptom. Raise it to 128 KB:
-
-```bash
-sudo raspi-config nonint do_spi 0    # enable SPI
-echo 'spidev.bufsiz=131072' | sudo tee /boot/firmware/cmdline.append
-# Append the same flag to /boot/firmware/cmdline.txt (single line):
-sudo sed -i 's|$| spidev.bufsiz=131072|' /boot/firmware/cmdline.txt
-```
+for a 240×240 frame. Bootstrap sets `spidev.bufsiz=131072` on the kernel
+cmdline and enables SPI/I2C in `config.txt`.
 
 Verify after reboot:
 
 ```bash
-cat /sys/module/spidev/parameters/bufsiz
-# 131072
+ls -l /dev/spidev0.*
+cat /sys/module/spidev/parameters/bufsiz   # 131072
 ```
 
-Re-assign the SPI chip-select pins so the bonnet's CE0/CE1 don't
-collide:
+Bonnet display also requires Adafruit Blinka + SPI CE reassign —
+handled by `scripts/setup-bonnet-hardware.sh` (called from bootstrap).
+
+(See [`GETTING_STARTED.md`](https://github.com/mohrt/PiWalletSV/blob/main/GETTING_STARTED.md)
+for bonnet electrical details and the display-only demo.)
+
+## 6. Sync the repo (if not using sync-to-pi.sh)
+
+The signer code lives at a predictable path so `scripts/run_bonnet.sh`
+and the systemd example unit work out of the box.
 
 ```bash
-sudo /home/pi/PiWallet/scripts/raspi-spi-reassign.py \
-    --ce0 disabled --ce1 disabled
-sudo reboot
+./scripts/sync-to-pi.sh pi@piwallet-1.local --bootstrap
 ```
 
-(See [`GETTING_STARTED.md`](https://github.com/example/piwallet/blob/main/GETTING_STARTED.md)
-for the bonnet electrical details.)
+Or rsync + bootstrap manually — see the include above.
 
-## 5. Clone the repo and install the venv
-
-The signer code lives in a single repo at a fixed path. Picking a
-predictable path is what lets the systemd unit and the
-`scripts/run_bonnet.sh` launcher be checked-in defaults.
+After bootstrap completes, smoke-test:
 
 ```bash
-cd /home/pi
-git clone https://github.com/example/piwallet.git PiWallet
-cd PiWallet
-
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip wheel
-pip install -e ".[display,camera]"
+./scripts/run_display_demo.sh
+./scripts/run_camera_qr_test.sh --once
+piwallet --help
+piwallet mnemonic new
 ```
 
-The two extras matter:
+If the bonnet hardware is wired correctly, the display demo shows a
+coloured frame and the buttons cycle the picture.
 
-- **`[display]`** pulls Adafruit Blinka + the CircuitPython RGB-display
-  driver. Linux-only.
-- **`[camera]`** is empty by default — the Pi camera dependencies
-  (`picamera2`, `libcamera`) come from apt, not pip, because they
-  bundle native libs. We keep the marker so future optional pip
-  dependencies can land cleanly.
-
-## Supported cameras (libcamera)
+## 7. Supported cameras (libcamera)
 
 The sealed PiWalletSV image ships with the **ArduCam OV5647** (fixed
 focus). That is the kit minimum and the only combination tested for v1.
-
-PiWalletSV uses the standard Raspberry Pi OS **libcamera / picamera2**
-stack. Other CSI sensors may work if you configure the correct boot
-overlay and install the apt packages above — PiWalletSV does not test
-those combinations in v1.
 
 | Sensor / module | Typical overlay | Notes |
 |-----------------|-----------------|-------|
@@ -144,27 +120,9 @@ those combinations in v1.
 | IMX296 (Global Shutter) | `dtoverlay=imx296` | Fixed focus. |
 
 See Raspberry Pi's [camera documentation](https://www.raspberrypi.com/documentation/computers/camera.html)
-for the full sensor list and wiring. DIY builders are responsible for
-matching overlay, cable, and apt packages to their hardware.
+for the full sensor list and wiring.
 
-Smoke test:
-
-```bash
-piwallet --help
-piwallet mnemonic new
-```
-
-If both work, the offline core is functional. If the bonnet hardware
-is wired correctly, you can also run the Pillow + buttons demo:
-
-```bash
-python scripts/rgb_display_pillow_bonnet_buttons.py
-```
-
-You should see a coloured frame + see the joystick/buttons cycle the
-picture.
-
-## 6. Pick a vault path
+## 8. Pick a vault path
 
 The encrypted vault is a single file. Pick a path that survives
 reboots and is owned by the `pi` user. The convention used throughout
@@ -199,7 +157,7 @@ Save the mnemonic somewhere offline. The CLI does not store it — the
 vault holds the encrypted xprv only. You'll need the mnemonic to
 restore.
 
-## 7. First-boot disclaimer state
+## 9. First-boot disclaimer state
 
 The disclaimer acceptance lives in a plain JSON file (it's checked
 *before* vault unlock so it can't be in the encrypted vault):
@@ -214,7 +172,7 @@ piwallet firstboot run                        # interactive, hold-A to accept
 Once `firstboot status` reports `accepted` for the current terms
 version, the bonnet boot path will skip the disclaimer screen.
 
-## 8. Run the bonnet manually
+## 10. Run the bonnet manually
 
 Verify the full boot path works under your user before wiring up
 systemd:
@@ -228,7 +186,7 @@ entry screen, the wallet list, and the per-wallet manage menu.
 `Ctrl-C` (or hold the bonnet's B button) exits. The display should go
 dark on exit — if it doesn't, you've hit a bug; file it.
 
-## 9. Wire up systemd for autostart
+## 11. Wire up systemd for autostart
 
 Copy the example unit and journald drop-in into place:
 
@@ -277,7 +235,7 @@ include this stack. Either run the `step_usb_backup` function from
 `provision-pi.sh` on the Pi, or use the CLI with a manually mounted
 stick ([CLI § `piwallet backup`](cli.md#piwallet-backup)).
 
-## 10. Verify the kiosk
+## 12. Verify the kiosk
 
 After enabling the unit:
 
@@ -292,7 +250,7 @@ After enabling the unit:
 
 If steps 2 or 3 fail, jump to [Operate § Troubleshooting](operate.md#troubleshooting).
 
-## 11. Update procedure
+## 13. Update procedure
 
 Day-to-day updates are a `git pull` + venv refresh + service restart:
 
@@ -301,7 +259,7 @@ ssh pi@piwallet-1.local
 cd /home/pi/PiWallet
 git pull
 source .venv/bin/activate
-pip install -e ".[display,camera]"
+bash scripts/install-piwallet-deps.sh
 sudo systemctl restart piwallet-bonnet
 ```
 
@@ -310,7 +268,7 @@ you'll also need to update the companion PWA on whatever device you
 pair with. The docs site and the [Protocol spec](protocol/README.md)
 note any non-backwards-compatible changes per release.
 
-## 12. What you didn't have to do
+## 14. What you didn't have to do
 
 - **No Wi-Fi access points.** The signer has no inbound services and
   doesn't need to be on the same network as the companion.
@@ -324,7 +282,7 @@ note any non-backwards-compatible changes per release.
   after this chapter and rely on physical access for maintenance.
   See [Security](security.md) for the threat-model rationale.
 
-## 13. Reproducible image (planned)
+## 15. Reproducible image (planned)
 
 A future v0.1 release will ship a `pi-gen`-built SD image with the
 signer pre-installed and the vault directory pre-created, signed with

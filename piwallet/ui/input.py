@@ -146,7 +146,7 @@ class BonnetInputBackend(InputBackend):
         except ImportError as exc:
             raise RuntimeError(
                 "BonnetInputBackend requires the 'display' extra. "
-                "Install with `pip install -e '.[display]'` on a Raspberry Pi."
+                "Install with `bash scripts/bootstrap-pi-dev.sh` on a Raspberry Pi."
             ) from exc
 
         self._inputs: dict[Button, Any] = {}

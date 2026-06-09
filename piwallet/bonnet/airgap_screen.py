@@ -2,7 +2,7 @@
 
 Presents the result of :func:`piwallet.diag.airgap.check_airgap` as a
 green-or-red headline plus three summary rows (**Wi-Fi**, **Bluetooth**,
-**Network**). Reachable from the Settings menu's ``Airgap status`` action
+**Network**). Reachable from Settings → **Maintenance** → **Airgap status**
 row. Each row rolls up several technical checks (drivers, switches, apps,
 startup config) so the operator only sees familiar labels.
 
@@ -31,7 +31,7 @@ Controls
 --------
 =========  ==================================================
 A / SEL    Refresh — re-run all checks.
-B          Back to Settings.
+B          Back to Maintenance.
 =========  ==================================================
 """
 

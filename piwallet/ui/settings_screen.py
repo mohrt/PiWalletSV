@@ -39,11 +39,13 @@ from piwallet.ui.display import (
     FrameBuffer,
 )
 from piwallet.ui.input import Button, Event, EventKind
-from piwallet.ui.widgets import draw_text
+from piwallet.ui.widgets import ListItem, ListView, draw_text
 
 SettingsScreenResult = Literal[
     "saved", "back", "change_pin", "airgap", "usb_backup", "about", "system_reset"
 ]
+
+SettingsHubResult = Literal["preferences", "maintenance", "back"]
 
 _CYCLER_KEYS = frozenset({"brightness", "sleep_timer"})
 
@@ -77,7 +79,7 @@ def _action_arrow(_s: BonnetSettings) -> str:
     return ">"
 
 
-SETTINGS_ROWS: tuple[SettingsRow, ...] = (
+PREFERENCES_ROWS: tuple[SettingsRow, ...] = (
     SettingsRow(
         key="brightness",
         label="Brightness",
@@ -88,6 +90,9 @@ SETTINGS_ROWS: tuple[SettingsRow, ...] = (
         label="Sleep timer",
         value_text=_sleep_timer_value_text,
     ),
+)
+
+MAINTENANCE_ROWS: tuple[SettingsRow, ...] = (
     SettingsRow(
         key="change_pin",
         label="Change PIN",
@@ -114,15 +119,65 @@ SETTINGS_ROWS: tuple[SettingsRow, ...] = (
     ),
     SettingsRow(
         key="system_reset",
-        label="System reset",
+        label="Factory reset",
         value_text=_action_arrow,
         is_action=True,
     ),
 )
 
+SETTINGS_ROWS: tuple[SettingsRow, ...] = PREFERENCES_ROWS + MAINTENANCE_ROWS
+
 _FOOTER_HINT_TOP_Y = DISPLAY_HEIGHT - 26
 _FOOTER_HINT_BOTTOM_Y = DISPLAY_HEIGHT - 12
 _LIST_BOTTOM_Y = DISPLAY_HEIGHT - 36
+
+
+class _SettingsHubChoice:
+    """ListView values for :class:`SettingsHubScreen`."""
+
+    PREFERENCES = "preferences"
+    MAINTENANCE = "maintenance"
+
+
+@dataclass
+class SettingsHubScreen:
+    """Top-level Settings menu — Preferences or Maintenance."""
+
+    done: bool = False
+    result: SettingsHubResult | None = None
+    _list: ListView = field(init=False)
+    _b_pressed_here: bool = field(default=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._list = ListView(
+            items=[
+                ListItem(label="Preferences", value=_SettingsHubChoice.PREFERENCES),
+                ListItem(label="Maintenance", value=_SettingsHubChoice.MAINTENANCE),
+            ],
+            title="Settings",
+            footer="A: select   B: back",
+        )
+
+    def on_event(self, event: Event) -> None:
+        if self.done:
+            return
+        if event.button == Button.B:
+            if event.kind == EventKind.PRESS:
+                self._b_pressed_here = True
+                return
+            if event.kind == EventKind.RELEASE:
+                if self._b_pressed_here:
+                    self.done = True
+                    self.result = "back"
+                self._b_pressed_here = False
+                return
+        self._list.on_event(event)
+        if self._list.confirmed is not None:
+            self.done = True
+            self.result = str(self._list.confirmed)
+
+    def draw(self, fb: FrameBuffer) -> None:
+        self._list.draw(fb)
 
 
 @dataclass
@@ -132,6 +187,7 @@ class SettingsScreen:
     settings: BonnetSettings
     apply_brightness: Callable[[float], None] | None = None
     rows: tuple[SettingsRow, ...] = SETTINGS_ROWS
+    title: str = "Settings"
     cursor: int = 0
     done: bool = False
     result: SettingsScreenResult | None = None
@@ -237,7 +293,7 @@ class SettingsScreen:
             fb,
             DISPLAY_WIDTH // 2,
             title_h // 2,
-            "Settings",
+            self.title,
             size=14,
             color=COLOR_ACCENT,
             anchor="mm",

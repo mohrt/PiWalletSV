@@ -259,10 +259,10 @@ def test_settings_save_writes_both_fields(tmp_path: Path) -> None:
     assert payload["sleep_timeout_ms"] == 60_000
 
 
-def test_airgap_back_reopens_settings_not_wallet_list(
+def test_airgap_back_reopens_maintenance_not_wallet_list(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """B on the airgap screen must return to Settings, not the wallet list."""
+    """B on airgap returns to Maintenance; only hub B exits to wallet list."""
     from piwallet.bonnet import app as bonnet_app
     from piwallet.bonnet.airgap_screen import AirgapScreen
     from piwallet.core.settings import BonnetSettings
@@ -270,16 +270,26 @@ def test_airgap_back_reopens_settings_not_wallet_list(
     from piwallet.ui.app import IdleWakeTracker
     from piwallet.ui.display import HeadlessDisplay
     from piwallet.ui.input import FakeInputBackend, InputManager
-    from piwallet.ui.settings_screen import SettingsScreen
+    from piwallet.ui.settings_screen import (
+        MAINTENANCE_ROWS,
+        SettingsHubScreen,
+        SettingsScreen,
+    )
 
-    settings_opens = 0
+    hub_opens = 0
+    maintenance_opens = 0
 
     def fake_run_screen(display, input_mgr, screen, **kwargs) -> object:
-        nonlocal settings_opens
-        if isinstance(screen, SettingsScreen):
-            settings_opens += 1
+        nonlocal hub_opens, maintenance_opens
+        if isinstance(screen, SettingsHubScreen):
+            hub_opens += 1
             screen.done = True
-            screen.result = "airgap" if settings_opens == 1 else "back"
+            screen.result = "maintenance" if hub_opens == 1 else "back"
+        elif isinstance(screen, SettingsScreen):
+            if screen.rows == MAINTENANCE_ROWS:
+                maintenance_opens += 1
+                screen.done = True
+                screen.result = "airgap" if maintenance_opens == 1 else "back"
         elif isinstance(screen, AirgapScreen):
             screen.done = True
             screen.result = "back"
@@ -305,6 +315,73 @@ def test_airgap_back_reopens_settings_not_wallet_list(
         idle_wake=idle,
     )
 
-    assert settings_opens == 2
+    assert hub_opens == 2
+    assert maintenance_opens == 2
+    assert status == "back"
+    assert exit_requested is False
+
+
+def test_preferences_save_stays_in_settings_until_hub_back(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Saving brightness re-shows Preferences; hub B is the wallet-list exit."""
+    from piwallet.bonnet import app as bonnet_app
+    from piwallet.core.settings import BonnetSettings
+    from piwallet.core.vault import Vault
+    from piwallet.ui.app import IdleWakeTracker
+    from piwallet.ui.display import HeadlessDisplay
+    from piwallet.ui.input import FakeInputBackend, InputManager
+    from piwallet.ui.settings_screen import (
+        PREFERENCES_ROWS,
+        SettingsHubScreen,
+        SettingsScreen,
+    )
+
+    hub_opens = 0
+    preferences_opens = 0
+    saved: list[BonnetSettings] = []
+
+    def fake_run_screen(display, input_mgr, screen, **kwargs) -> object:
+        nonlocal hub_opens, preferences_opens
+        if isinstance(screen, SettingsHubScreen):
+            hub_opens += 1
+            screen.done = True
+            if hub_opens == 1:
+                screen.result = "preferences"
+            else:
+                screen.result = "back"
+        elif isinstance(screen, SettingsScreen):
+            if screen.rows == PREFERENCES_ROWS:
+                preferences_opens += 1
+                screen.done = True
+                screen.result = "saved" if preferences_opens == 1 else "back"
+        return screen.result
+
+    def fake_save(settings: BonnetSettings, path) -> None:
+        saved.append(settings)
+
+    monkeypatch.setattr(bonnet_app, "run_screen", fake_run_screen)
+    monkeypatch.setattr(bonnet_app, "save_settings", fake_save)
+
+    display = HeadlessDisplay()
+    mgr = InputManager(FakeInputBackend())
+    idle = IdleWakeTracker(mgr)
+    vault = Vault(tmp_path / "vault.bin")
+
+    _settings, status, exit_requested, _pin = bonnet_app._run_settings_loop(
+        display,
+        mgr,
+        BonnetSettings(),
+        vault=vault,
+        pin="123456",
+        settings_path=tmp_path / "settings.json",
+        terms_path=tmp_path / "terms.json",
+        target_fps=1000,
+        idle_wake=idle,
+    )
+
+    assert hub_opens == 2
+    assert preferences_opens == 2
+    assert len(saved) == 1
     assert status == "back"
     assert exit_requested is False

@@ -179,6 +179,20 @@ This guide follows **stack A** (PIL + buttons + joystick on Lite). **Stack B** i
 
 Pipe the same ``PW1|…`` lines on a laptop with ``piwallet qr join -o proposal.bin``. Then verify/sign with ``piwallet decode …`` / ``piwallet sign …``.
 
-**PiWalletSV repo:** install with ``pip install -e ".[dev]"`` on Python 3.13 (see README).
+**PiWalletSV repo (full signer on the Pi):** after the bonnet demo in §7,
+sync this project and run the bootstrap script:
+
+```bash
+# from Mac (repo parent directory):
+./PiWallet/scripts/sync-to-pi.sh YOUR_USER@YOUR_PI.local --bootstrap
+
+# or on the Pi after rsync:
+cd ~/PiWallet
+bash scripts/bootstrap-pi-dev.sh
+bash scripts/bootstrap-pi-dev.sh --resume   # after reboot(s)
+```
+
+Use **`./scripts/run_display_demo.sh`** and **`./scripts/run_camera_qr_test.sh`**
+(not system `python3`). See [docs/build.md](docs/build.md).
 
 **More detail if something breaks:** [Adafruit 1.3" bonnet Python setup](https://learn.adafruit.com/adafruit-1-3-color-tft-bonnet-for-raspberry-pi/python-setup) · [CircuitPython on Raspberry Pi](https://learn.adafruit.com/circuitpython-on-raspberrypi-linux)

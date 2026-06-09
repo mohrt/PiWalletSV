@@ -237,7 +237,8 @@ class ST7789Display(Display):
         except ImportError as exc:
             raise RuntimeError(
                 "ST7789Display requires the 'display' extra. "
-                "Install with `pip install -e '.[display]'` on a Raspberry Pi."
+                "Install with `bash scripts/bootstrap-pi-dev.sh` or "
+                "`bash scripts/install-piwallet-deps.sh` on a Raspberry Pi."
             ) from exc
 
         if rotation not in (0, 90, 180, 270):

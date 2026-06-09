@@ -33,7 +33,7 @@ including the USB backup mount daemon, FAT/exFAT tools, and bonnet
 - A computer with `gpg`, `xz`, and either Raspberry Pi Imager or the
   ability to run `dd` (Linux/macOS) or balenaEtcher (cross-platform).
 
-## Step 1 &mdash; Verify the download
+## Step 1 &mdash; Verify the download { #step-1-verify-the-download }
 
 This is the single most important step. The whole point of an
 air-gapped signer is that you trust the firmware running on it; if
@@ -182,6 +182,12 @@ automatically so you don't need to unzip first.
         overwrite your system disk or another drive. Verify
         `diskutil list` / `lsblk` output carefully before running the
         write command.
+
+!!! question "Received a pre-flashed kit?"
+    You should **re-flash from a verified download** (recommended) before
+    you create a wallet. Optional: compare Image ID on kit paperwork, or
+    hash the SD in a computer reader without booting the Pi.
+    See [User manual § Verify your SD card on arrival](user-manual.md#verify-sd-card-on-arrival).
 
 ## Step 3 &mdash; Assemble the hardware
 
@@ -340,7 +346,7 @@ post-upgrade verification — is documented in
 
 Brief summary:
 
-1. Back up your mnemonic and/or run **Settings → USB backup → Backup to USB**
+1. Back up your mnemonic and/or run **Settings → Maintenance → USB backup → Backup to USB**
    (or copy `vault.bin` off the SD card)
    **before** flashing.
 2. Download and verify a new image from [Download](download.md)

@@ -79,8 +79,7 @@ the matching `dtoverlay` and apt packages — see
 
 ## Install the offline core
 
-On the Pi (or, for offline development, on your laptop —
-PiWalletSV's core has no Pi-specific dependencies):
+On a **laptop** (offline protocol development):
 
 ```bash
 git clone https://github.com/example/piwallet.git
@@ -91,10 +90,21 @@ pip install -e ".[dev]"
 pytest
 ```
 
-You should see 150-ish tests pass. The `[dev]` extra pulls in
-`pytest`, `pytest-cov`, and `ruff`. The optional Pi-side display
-dependencies live behind `[display]` and only install cleanly on
-Linux/Pi.
+On a **Raspberry Pi** with the bonnet already working, sync the repo
+and run the bootstrap script (apt, boot config, venv, pip — including
+the armv6l `coincurve` workaround):
+
+```bash
+cd ~/PiWallet
+bash scripts/bootstrap-pi-dev.sh
+```
+
+See [Build & deploy — Bootstrap the Pi](build.md#3-bootstrap-the-pi-recommended)
+for rsync excludes and platform notes.
+
+You should see 150-ish tests pass on a laptop. The `[dev]` extra pulls in
+`pytest`, `pytest-cov`, and `ruff`. Pi-side display/camera deps install
+via `bootstrap-pi-dev.sh` or `install-piwallet-deps.sh`.
 
 The CLI is installed as `piwallet`. Run `piwallet --help` to see
 the top-level commands: `mnemonic`, `vault`, `xpub-export`,

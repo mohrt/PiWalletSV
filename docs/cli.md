@@ -530,7 +530,7 @@ Import **replaces** the entire vault. See
 
 ## `piwallet diag airgap`
 
-Verify the Pi has no live radio path. The bonnet **Settings → Airgap
+Verify the Pi has no live radio path. The bonnet **Settings → Maintenance → Airgap
 status** screen shows three summary rows; `piwallet diag airgap` lists
 six technical rows on the host. Run from a shell for the full host
 report (including interfaces). See

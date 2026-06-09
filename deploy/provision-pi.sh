@@ -67,6 +67,9 @@ readonly APP_VENV="${APP_DIR}/.venv"
 readonly APP_REPO="https://github.com/mohrt/PiWalletSV.git"
 readonly HOSTNAME_NEW="piwalletsv"
 readonly BOOT_CFG="/boot/firmware/config.txt"
+readonly CMDLINE="/boot/firmware/cmdline.txt"
+readonly CMDLINE_LEGACY="/boot/cmdline.txt"
+readonly SPI_BUFSIZ="spidev.bufsiz=131072"
 readonly MODPROBE_BLACKLIST="/etc/modprobe.d/piwalletsv-no-radio.conf"
 readonly JOURNALD_CONF="/etc/systemd/journald.conf.d/piwallet.conf"
 readonly UNIT_SRC_DIR="deploy/systemd"
@@ -82,11 +85,17 @@ readonly APT_INSTALL=(
     python3-pip
     python3-venv
     python3-pil
+    python3-numpy
+    libzbar0t64
     rng-tools-debian
     fonts-dejavu-core
     dosfstools
     exfatprogs
     git
+    curl
+    pkg-config
+    libffi-dev
+    libsecp256k1-dev
     # Build toolchain for C extensions pulled in by adafruit-blinka:
     # RPi.GPIO and rpi-ws281x ship sdists only (no Python 3.13 wheels
     # for aarch64 yet), so pip needs python3-dev headers + a compiler.
@@ -314,9 +323,33 @@ step_apt_purge() {
     run env DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge
 }
 
+step_cmdline_spidev() {
+    log "cmdline: raise spidev transfer buffer to 128 KiB"
+    local file=""
+    if [[ -f "$CMDLINE" ]]; then
+        file="$CMDLINE"
+    elif [[ -f "$CMDLINE_LEGACY" ]]; then
+        file="$CMDLINE_LEGACY"
+    else
+        warn "no cmdline.txt — skipping spidev.bufsiz (bonnet may show banding)"
+        return 0
+    fi
+    if grep -q "$SPI_BUFSIZ" "$file" 2>/dev/null; then
+        log "  already set in $file"
+        return 0
+    fi
+    if [[ $dry_run -eq 1 ]]; then
+        log "  DRY: append $SPI_BUFSIZ to $file"
+        return 0
+    fi
+    sed -i "s|\$| ${SPI_BUFSIZ}|" "$file"
+}
+
 step_boot_config() {
     log "boot config: enable SPI/I2C/camera, audio/radios per flags"
     [[ -f "$BOOT_CFG" ]] || fail "$BOOT_CFG missing"
+
+    step_cmdline_spidev
 
     # Hardware enables.
     ensure_line "dtparam=spi=on"        "$BOOT_CFG"
@@ -475,7 +508,29 @@ step_install_app() {
     # panel, and pyzbar for QR decode in the camera flow. Without
     # these, ST7789Display() raises ImportError -> open_display("auto")
     # silently falls back to HeadlessDisplay and the panel stays dark.
-    run "$APP_VENV/bin/pip" install --quiet --editable "${APP_DIR}[display,camera]"
+    # scripts/install-piwallet-deps.sh handles the armv6l coincurve pin
+    # when experimental 32-bit images are provisioned with --src.
+    run bash "$APP_DIR/scripts/install-piwallet-deps.sh" \
+        --repo "$APP_DIR" \
+        --venv "$APP_VENV"
+}
+
+step_bonnet_hardware() {
+    log "bonnet hardware (Blinka + SPI CE reassign)"
+    if [[ ! -x "$APP_VENV/bin/python" ]]; then
+        fail "venv missing at $APP_VENV"
+    fi
+    set +e
+    run bash "$APP_DIR/scripts/setup-bonnet-hardware.sh" \
+        --repo "$APP_DIR" \
+        --venv "$APP_VENV"
+    local hw_rc=$?
+    set -e
+    if [[ $hw_rc -eq 2 ]]; then
+        log "  bonnet hardware setup requested a reboot (expected on first image build)"
+    elif [[ $hw_rc -ne 0 ]]; then
+        warn "bonnet hardware setup exited $hw_rc — verify display after reboot"
+    fi
 }
 
 step_usb_backup() {
@@ -603,6 +658,7 @@ main() {
     step_ssh
     step_create_user
     step_install_app
+    step_bonnet_hardware
     step_usb_backup
     step_install_unit
     step_hostname

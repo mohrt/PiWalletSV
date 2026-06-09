@@ -67,6 +67,10 @@ tampered with in transit, or someone has replaced the website.
 
 Once the image is verified and flashed:
 
+- **Pre-flashed kit?** Before you fund the device, **re-flash from a
+  verified download** (recommended — [User manual § Verify your SD card](user-manual.md#verify-sd-card-on-arrival)).
+  Optional lighter checks: Image ID on kit paperwork, or hash the SD in
+  a computer reader without booting the Pi.
 - Follow [Flash and first run](build-image.md) for first-boot
   setup: disclaimer, vault PIN, wallet creation, airgap check, and a
   TESTNET smoke test.

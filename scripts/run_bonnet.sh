@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PIWALLET="$ROOT/.venv/bin/piwallet"
 
 if [[ ! -x "$PIWALLET" ]]; then
-  echo "missing $PIWALLET — create the venv and pip install -e . first" >&2
+  echo "missing $PIWALLET — run: bash scripts/bootstrap-pi-dev.sh" >&2
   exit 1
 fi
 

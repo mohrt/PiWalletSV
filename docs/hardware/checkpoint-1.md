@@ -19,35 +19,29 @@ can prove that:
 
 ## 1. Prep the Pi
 
-A working Raspberry Pi OS Lite (Bookworm or later, 64-bit) on an SD
-card, with SSH + the standard Bookworm Python 3.11+ stack. SPI must
-be enabled (`sudo raspi-config nonint do_spi 0`).
+Use the bootstrap script — it installs apt packages, enables SPI/I2C,
+sets the OV5647 overlay, creates the venv, and configures bonnet hardware:
 
 ```sh
-ssh <user>@<host>
-sudo apt update
-sudo apt install -y python3-venv python3-dev \
-    rpicam-apps python3-picamera2 python3-libcamera \
-    libzbar0t64
+# from workstation
+./scripts/sync-to-pi.sh <user>@<host> --bootstrap
 
-# Enable SPI (bonnet).
-sudo raspi-config nonint do_spi 0
-
-# Arducam OV5647 Mini has no EEPROM — disable auto-detect and load
-# the ov5647 overlay explicitly.  Add these two lines to config.txt:
-sudo tee -a /boot/firmware/config.txt <<'EOF'
-camera_auto_detect=0
-dtoverlay=ov5647
-EOF
-
-sudo reboot
+# or on the Pi after rsync:
+cd <repo-path>
+bash scripts/bootstrap-pi-dev.sh
+bash scripts/bootstrap-pi-dev.sh --resume   # after reboot(s)
 ```
 
-After it comes back, sanity-check that the kernel sees both peripherals:
+See [Build & deploy — Bootstrap](../build.md#3-bootstrap-the-pi-recommended)
+and [bootstrap reference](../includes/bootstrap-pi-dev.md).
+
+Sanity-check after bootstrap:
 
 ```sh
 ls /dev/spidev0.*                 # expect /dev/spidev0.0 and /dev/spidev0.1
-rpicam-hello --list-cameras       # expect "ov5647" or "arducam" listed
+cat /sys/module/spidev/parameters/bufsiz   # 131072
+rpicam-hello --list-cameras       # expect ov5647
+./scripts/run_display_demo.sh     # bonnet panel + buttons
 ```
 
 !!! note "Other libcamera sensors (DIY)"
@@ -64,12 +58,13 @@ rpicam-hello --list-cameras       # expect "ov5647" or "arducam" listed
 
 ## 2. Push the code
 
-From your workstation:
+From your workstation (or use `sync-to-pi.sh` which rsyncs + bootstraps):
 
 ```sh
 rsync -av --delete \
-    --exclude .venv --exclude node_modules --exclude '__pycache__' \
-    --exclude companion --exclude site --exclude _site \
+    --exclude .git --exclude .venv --exclude node_modules \
+    --exclude '__pycache__' --exclude companion --exclude site \
+    --exclude hardware \
     ./ <user>@<host>:<repo-path>/
 ```
 
@@ -78,17 +73,19 @@ excluded to keep the transfer small.
 
 ## 3. Install on the Pi
 
+If you used `sync-to-pi.sh --bootstrap`, skip this section. Otherwise:
+
 ```sh
 ssh <user>@<host>
 cd <repo-path>
-python3 -m venv .venv
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -e '.[display,camera]'
+bash scripts/bootstrap-pi-dev.sh
 ```
 
-The `[display]` extra pulls in `adafruit-blinka` and
-`adafruit-circuitpython-rgb-display`, which are the ST7789 driver
-plus the GPIO HAL.
+To refresh Python deps after a code push:
+
+```sh
+bash scripts/install-piwallet-deps.sh
+```
 
 ## 4. Seed a vault (one-time)
 

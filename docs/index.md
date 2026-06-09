@@ -113,7 +113,7 @@ device signs anything.
 -   :material-usb: __USB vault backup__
 
     Export and restore the encrypted vault to a FAT32/exFAT stick from
-    Settings → **USB backup** — included on images built with
+    **Settings → Maintenance → USB backup** — included on images built with
     `deploy/provision-pi.sh`. See
     [User manual § USB backup](user-manual.md#usb-backup).
 

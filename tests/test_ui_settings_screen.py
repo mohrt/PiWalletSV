@@ -17,7 +17,10 @@ from piwallet.ui.display import (
 )
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.settings_screen import (
+    MAINTENANCE_ROWS,
+    PREFERENCES_ROWS,
     SETTINGS_ROWS,
+    SettingsHubScreen,
     SettingsScreen,
     _format_sleep_timeout_ms,
 )
@@ -31,6 +34,8 @@ def _make_screen(
     *,
     brightness: float = MAX_BRIGHTNESS,
     apply_recorder: list[float] | None = None,
+    rows: tuple = SETTINGS_ROWS,
+    title: str = "Settings",
 ) -> SettingsScreen:
     apply_brightness = (
         apply_recorder.append if apply_recorder is not None else None
@@ -38,6 +43,8 @@ def _make_screen(
     return SettingsScreen(
         settings=BonnetSettings(brightness=brightness),
         apply_brightness=apply_brightness,
+        rows=rows,
+        title=title,
     )
 
 
@@ -203,23 +210,18 @@ def test_draw_at_maximum_brightness() -> None:
 
 
 def test_settings_rows_include_brightness_then_sleep_timer_then_action_rows() -> None:
-    """Order is fixed — value rows first, then action rows.
-
-    The Settings screen's row ordering is observable via cursor index;
-    if a future edit reorders the rows, every existing test that
-    pokes ``cursor`` (and anyone's muscle memory on a real device)
-    has to update too.
-    """
-    keys = [row.key for row in SETTINGS_ROWS]
-    assert keys == [
-        "brightness",
-        "sleep_timer",
+    """PREFERENCES_ROWS and MAINTENANCE_ROWS partition SETTINGS_ROWS."""
+    pref_keys = [row.key for row in PREFERENCES_ROWS]
+    maint_keys = [row.key for row in MAINTENANCE_ROWS]
+    assert pref_keys == ["brightness", "sleep_timer"]
+    assert maint_keys == [
         "change_pin",
         "airgap",
         "usb_backup",
         "about",
         "system_reset",
     ]
+    assert list(PREFERENCES_ROWS) + list(MAINTENANCE_ROWS) == list(SETTINGS_ROWS)
 
 
 def test_change_pin_airgap_and_usb_backup_are_action_rows() -> None:
@@ -236,8 +238,8 @@ def test_change_pin_airgap_and_usb_backup_are_action_rows() -> None:
 
 
 def test_a_on_usb_backup_row_returns_usb_backup_result() -> None:
-    s = _make_screen(brightness=0.5)
-    target = next(i for i, r in enumerate(SETTINGS_ROWS) if r.key == "usb_backup")
+    s = _make_screen(brightness=0.5, rows=MAINTENANCE_ROWS, title="Maintenance")
+    target = next(i for i, r in enumerate(MAINTENANCE_ROWS) if r.key == "usb_backup")
     while s.cursor != target:
         s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.A))
@@ -246,8 +248,8 @@ def test_a_on_usb_backup_row_returns_usb_backup_result() -> None:
 
 
 def test_a_on_about_row_returns_about_result() -> None:
-    s = _make_screen(brightness=0.5)
-    target = next(i for i, r in enumerate(SETTINGS_ROWS) if r.key == "about")
+    s = _make_screen(rows=MAINTENANCE_ROWS, title="Maintenance")
+    target = next(i for i, r in enumerate(MAINTENANCE_ROWS) if r.key == "about")
     while s.cursor != target:
         s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.A))
@@ -256,8 +258,8 @@ def test_a_on_about_row_returns_about_result() -> None:
 
 
 def test_a_on_system_reset_row_returns_system_reset_result() -> None:
-    s = _make_screen(brightness=0.5)
-    target = next(i for i, r in enumerate(SETTINGS_ROWS) if r.key == "system_reset")
+    s = _make_screen(rows=MAINTENANCE_ROWS, title="Maintenance")
+    target = next(i for i, r in enumerate(MAINTENANCE_ROWS) if r.key == "system_reset")
     while s.cursor != target:
         s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.A))
@@ -266,8 +268,8 @@ def test_a_on_system_reset_row_returns_system_reset_result() -> None:
 
 
 def test_a_on_airgap_row_returns_airgap_result() -> None:
-    s = _make_screen(brightness=0.5)
-    target = next(i for i, r in enumerate(SETTINGS_ROWS) if r.key == "airgap")
+    s = _make_screen(rows=MAINTENANCE_ROWS, title="Maintenance")
+    target = next(i for i, r in enumerate(MAINTENANCE_ROWS) if r.key == "airgap")
     while s.cursor != target:
         s.on_event(_evt(Button.DOWN))
     s.on_event(_evt(Button.A))
@@ -450,3 +452,26 @@ def test_unknown_drafted_value_snaps_to_first_preset_on_cycle() -> None:
     s.on_event(_evt(Button.RIGHT))
     # idx 0 (1 min) + step → idx 1 (5 min).
     assert s.draft.sleep_timeout_ms == SLEEP_TIMER_OPTIONS_MS[1]
+
+
+def test_hub_b_returns_back() -> None:
+    hub = SettingsHubScreen()
+    hub.on_event(_evt(Button.B, EventKind.PRESS))
+    hub.on_event(_evt(Button.B, EventKind.RELEASE))
+    assert hub.done is True
+    assert hub.result == "back"
+
+
+def test_hub_a_on_preferences_returns_preferences() -> None:
+    hub = SettingsHubScreen()
+    hub.on_event(_evt(Button.A))
+    assert hub.done is True
+    assert hub.result == "preferences"
+
+
+def test_preferences_screen_uses_custom_title() -> None:
+    s = _make_screen(rows=PREFERENCES_ROWS, title="Preferences")
+    fb = FrameBuffer()
+    s.draw(fb)
+    # Title is rendered at top center — smoke test only.
+    assert s.title == "Preferences"
