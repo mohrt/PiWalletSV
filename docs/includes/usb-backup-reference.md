@@ -3,19 +3,21 @@
 From the **wallet list**:
 
 1. Press **B** to open **Settings**.
-2. Select **USB backup** → **A**.
-3. Pick **Backup to USB** or **Restore from USB**.
+2. Select **Maintenance** → **A**.
+3. Select **USB backup** → **A**.
+4. Pick **Backup to USB** or **Restore from USB**.
 
-**B** at the USB backup submenu returns to **Settings**. **B** from
-Settings returns to the wallet list.
+**B** at the USB backup submenu returns to **Maintenance**. **B** from
+Maintenance returns to the Settings hub. **B** on the hub returns to the
+wallet list.
 
 On **first boot** (empty vault), choose **Restore from USB** from the
 **First setup** screen instead.
 
 ### USB port
 
-Use the Pi's **data** micro-USB port (the one **closer to the SD
-slot**). Keep **PWR IN** connected for power.
+Use the Pi's **left** micro-USB port with the included OTG adapter and a
+**USB flash drive**. Keep **PWR IN** (right port) connected for power.
 
 ### Stick requirements
 

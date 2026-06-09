@@ -1,4 +1,4 @@
-"""System reset flow from Settings."""
+"""Factory reset flow from Maintenance."""
 
 from __future__ import annotations
 

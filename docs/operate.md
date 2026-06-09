@@ -124,7 +124,7 @@ example) and emits one line per wallet: `<id> <label>`.
 ### USB vault backup { #usb-vault-backup }
 
 The recommended backup path for sealed devices is the bonnet:
-**press B** → Settings → **USB backup**. Full operator steps,
+**press B** → **Settings** → **Maintenance** → **USB backup**. Full operator steps,
 stick layout, and hot-plug notes are in
 [User manual § USB backup and restore](user-manual.md#usb-backup).
 
@@ -192,9 +192,9 @@ returns the device to first-setup condition.
 
 #### Bonnet (sealed device)
 
-**Settings → System reset** → double confirm → vault **PIN**. The vault
+**Settings → Maintenance → Factory reset** → double confirm → vault **PIN**. The vault
 file is securely overwritten; `settings.json` and `terms.json` are
-removed. The bonnet then shows *Device reset* and loops into disclaimer
+removed. The bonnet then shows *Factory reset complete* and loops into disclaimer
 and new PIN setup. See [User manual § Settings](user-manual.md#settings).
 
 #### CLI (dev Pi or automation)
@@ -236,7 +236,7 @@ ssh pi@piwallet-1.local
 cd /home/pi/PiWallet
 git pull
 source .venv/bin/activate
-pip install -e ".[display,camera]"
+bash scripts/install-piwallet-deps.sh
 sudo systemctl restart piwallet-bonnet
 ```
 
@@ -258,7 +258,7 @@ sudo systemctl stop piwallet-bonnet
 cd /home/pi/PiWallet
 tar xzf /tmp/piwallet.tgz
 source .venv/bin/activate
-pip install -e ".[display,camera]"
+bash scripts/install-piwallet-deps.sh
 sudo systemctl start piwallet-bonnet
 ```
 
@@ -294,7 +294,7 @@ once. Then disable it before unplugging from Wi-Fi.
 
 ## Airgap diagnostic { #airgap-diagnostic }
 
-The bonnet **Settings → Airgap status** screen shows three summary rows
+The bonnet **Settings → Maintenance → Airgap status** screen shows three summary rows
 (**Wi-Fi**, **Bluetooth**, **Network**) that roll up the same underlying
 checks as `piwallet diag airgap`. Inside the bonnet app the **Network**
 row only sees the app's network sandbox (`PrivateNetwork=yes`). From a
@@ -340,8 +340,8 @@ If status is `failed` or `activating (auto-restart)` in a tight loop:
    journalctl -u piwallet-bonnet -b 0 --no-pager | tail -80
    ```
 2. Common causes:
-    - **`ModuleNotFoundError: piwallet`** — the venv is missing or
-      not editable. `pip install -e ".[display,camera]"` again.
+    - **`ModuleNotFoundError: piwallet`** — the venv is missing.
+      Run `bash scripts/install-piwallet-deps.sh` again.
     - **`Permission denied` on the vault path** — the unit's `User=`
       doesn't match the owner of the vault file. Either chown the
       vault or update the unit.

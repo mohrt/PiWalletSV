@@ -1,13 +1,13 @@
 """Bonnet About screen — device and build metadata.
 
-Reachable from Settings → **About**. Shows the
+Reachable from Settings → **Maintenance** → **About**. Shows the
 PiWalletSV logo, a short product blurb, software version, website,
 wallet count, Pi board serial, and hostname.
 
 Controls
 --------
 =========  ==================================================
-B PRESS    Back to Settings.
+B PRESS    Back to Maintenance.
 A / SEL    Same as B PRESS — back.
 =========  ==================================================
 """

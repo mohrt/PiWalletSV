@@ -74,7 +74,7 @@ The complete disclosure / reporting policy lives in the project's
   internet, don't type the seed into anything online, and don't let
   cameras or screen-recorders see the disclaimer-revealed phrase
   during initial setup or recovery. Verify the device is still quiet
-  with Settings &rarr; **Airgap status** on the bonnet; see
+  with **Settings → Maintenance → Airgap status** on the bonnet; see
   [User manual § Airgap status](user-manual.md#airgap-status) for
   what each indicator means.
 
@@ -178,6 +178,19 @@ The release key is held in a hardware keystore (Yubikey, OpenPGP
 applet) that never touches a networked machine; new releases are
 signed by physically presenting the key on a build host whose only
 network exit is the upload to `download.piwalletsv.com`.
+
+## Verify a pre-flashed SD card
+
+Kits may ship with the microSD already written. Before you fund the
+device:
+
+- **Re-flash a verified image** (recommended) — download, GPG-verify,
+  and flash the card yourself before first boot. Easiest real assurance.
+- **Light checks** (optional) — Image ID on the **kit insert** vs
+  piwalletsv.com (paperwork only); or remove the SD and hash it on a
+  computer without booting the Pi (advanced). No on-device verification.
+
+Full steps: [User manual § Verify your SD card on arrival](user-manual.md#verify-sd-card-on-arrival).
 
 ## Reporting a vulnerability
 

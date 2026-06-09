@@ -53,7 +53,7 @@ See [Operate § Airgap diagnostic](operate.md#airgap-diagnostic) and
 | Button | Action |
 |--------|--------|
 | **A** | Refresh — re-run all checks. |
-| **B** | Back to Settings. |
+| **B** | Back to Maintenance. |
 
 ### If you see BREACH
 

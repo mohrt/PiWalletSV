@@ -22,7 +22,7 @@ pytest
 ```
 
 - **CLI:** `piwallet --help` — vault, sign, decode, multipart QR (`piwallet qr join`, `piwallet qr scan-camera` on Pi), USB backup (`piwallet backup export|import`).
-- **Pi camera path:** kit **ArduCam OV5647** with `python3-picamera2` via apt; in a venv use `pip install pyzbar` and `sudo apt install libzbar0t64`. See [GETTING_STARTED.md](GETTING_STARTED.md).
+- **Pi bring-up:** `./scripts/sync-to-pi.sh user@host --bootstrap` or `bash scripts/bootstrap-pi-dev.sh` on the Pi. Smoke tests: `./scripts/run_display_demo.sh`, `./scripts/run_bonnet.sh`. See [docs/build.md](docs/build.md).
 
 ## Companion web app
 

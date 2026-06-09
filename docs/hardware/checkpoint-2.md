@@ -37,11 +37,8 @@ On the Pi:
 ```sh
 ssh <user>@<host>
 cd <repo-path>
-.venv/bin/pip install -e '.[display,camera]'
+bash scripts/install-piwallet-deps.sh
 ```
-
-The install should be a no-op past `segno` since the previous
-checkpoint already pulled in all transitive deps.
 
 ## 2. Run the bonnet against a clean vault
 

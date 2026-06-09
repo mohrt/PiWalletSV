@@ -1,6 +1,6 @@
 """Bonnet "Change PIN" flow.
 
-Reachable from the Settings screen via the "Change PIN…" action row.
+Reachable from Settings → **Maintenance** via the **Change PIN** row.
 Sequences three sub-screens:
 
 1. :class:`UnlockScreen` — verify the *current* PIN. Reusing the

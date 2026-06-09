@@ -61,12 +61,9 @@ On the Pi:
 ```sh
 ssh <user>@<host>
 cd <repo-path>
-.venv/bin/pip install -e '.[display,camera]'
+bash scripts/install-piwallet-deps.sh
 sudo systemctl restart piwallet-bonnet  # or kill & relaunch interactive
 ```
-
-The install should be a no-op past whatever the previous checkpoint
-already pulled in.
 
 ## 2. Serve the companion PWA from the dev machine
 

@@ -1,4 +1,4 @@
-"""Bonnet "System reset" flow — factory wipe from Settings."""
+"""Bonnet factory reset flow — wipe device state from Maintenance."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def run_system_reset(
 ) -> SystemResetResult:
     """Double-confirm, verify PIN, then wipe vault + settings + terms."""
     confirm = DoubleConfirmScreen(
-        title="Reset device?",
+        title="Factory reset?",
         first_prompt=(
             "All wallets, PINs, and settings are erased from this Pi. "
             "Funds stay on the blockchain — only your seed phrase can "
@@ -100,7 +100,7 @@ def run_system_reset(
         verify=_make_verify_fn(vault),
         attempts_remaining=vault.attempts_remaining,
     )
-    unlock.pin_entry.title = "PIN to confirm reset"
+    unlock.pin_entry.title = "PIN to confirm factory reset"
     run_screen(
         display,
         input_mgr,
@@ -133,7 +133,7 @@ def run_system_reset(
 
     _show_message(
         display,
-        title="Device reset",
+        title="Factory reset complete",
         body="All data erased. Set up this Pi as a new device.",
         accent=COLOR_OK,
     )
