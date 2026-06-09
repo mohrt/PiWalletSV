@@ -134,6 +134,11 @@ extra:
   # building the dev mirror; otherwise this falls back to the
   # canonical prod host. Reference in markdown as {{ companion_url }}.
   companion_url: !ENV [PIWALLETSV_COMPANION_URL, "https://app.piwalletsv.com"]
+  # Signed firmware on GitHub Releases — same URLs on dev and prod docs.
+  firmware_version: !ENV [PIWALLETSV_FIRMWARE_VERSION, "0.1.0-r1"]
+  firmware_github_tag: !ENV [PIWALLETSV_FIRMWARE_GITHUB_TAG, "v0.1.0-r1"]
+  firmware_release_base: !ENV [PIWALLETSV_FIRMWARE_RELEASE_BASE, "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r1"]
+  firmware_release_page: !ENV [PIWALLETSV_FIRMWARE_RELEASE_PAGE, "https://github.com/mohrt/PiWalletSV/releases/tag/v0.1.0-r1"]
 
 nav:
   - Home: index.md

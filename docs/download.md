@@ -1,90 +1,87 @@
 # Download
 
-The fastest way to run PiWalletSV is to flash the prebuilt SD-card
-image onto a microSD and boot. The image is a sealed appliance: it
-boots straight into the bonnet UI, has no SSH or Wi-Fi, and runs the
-PiWalletSV application as the only foreground task on the device.
+The fastest way to run PiWalletSV is to flash the prebuilt SD-card image
+onto a microSD and boot. The image is a sealed appliance: it boots straight
+into the bonnet UI, has no SSH or Wi-Fi, and runs PiWalletSV as the only
+foreground task on the device.
 
-!!! info "Image artifact in flight"
+**Canonical host:** signed firmware lives on
+[GitHub Releases]({{ firmware_release_page }}). The same download URLs are
+linked from **piwalletsv.com** and **dev.piwalletsv.com** — there is no
+separate “dev firmware.”
 
-    The downloadable image artifact is currently being prepared. The
-    URLs below will go live alongside the alpha release.
-    Until then, you can produce the same image yourself by following
-    [Build &amp; deploy](build.md) &mdash; the prebuilt image is exactly
-    what `deploy/provision-pi.sh` produces.
+!!! info "First release"
+    Release **{{ firmware_github_tag }}** (`{{ firmware_version }}`) targets
+    **Raspberry Pi Zero W / Zero WH** (32-bit). If the GitHub assets are not
+    uploaded yet, follow the operator guide in
+    [`docs/includes/image-release-operator.md`](includes/image-release-operator.md)
+    or build the same image with
+    [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
+    via [Build & deploy](build.md).
 
-## Files
+## Files (release {{ firmware_github_tag }})
 
-| File | Purpose |
-|------|---------|
-| `piwalletsv-<VERSION>.img.xz` | The compressed SD-card image. Decompress and flash. |
-| `piwalletsv-<VERSION>.img.xz.asc` | Detached PGP signature over the image. |
-| `SHA256SUMS` | Plain-text checksum for double-checking after download. |
-| `SHA256SUMS.asc` | PGP signature over the checksum file. |
+| File | Download |
+|------|----------|
+| `piwalletsv-{{ firmware_version }}.img.xz` | [Image (.xz)]({{ firmware_release_base }}/piwalletsv-{{ firmware_version }}.img.xz) |
+| `piwalletsv-{{ firmware_version }}.img.xz.asc` | [OpenPGP signature]({{ firmware_release_base }}/piwalletsv-{{ firmware_version }}.img.xz.asc) |
+| `SHA256SUMS` | [Checksums]({{ firmware_release_base }}/SHA256SUMS) |
+| `SHA256SUMS.asc` | [Signed checksums]({{ firmware_release_base }}/SHA256SUMS.asc) |
 
-All four files come from the same release URL on
-`download.piwalletsv.com`. The release-key fingerprint and the
-expected SHA-256 are pinned in
-[`docs/security.md`](security.md#release-key) so a substituted
-website can't lie about either.
+Machine-readable manifest:
+[`releases/releases.json`](https://github.com/mohrt/PiWalletSV/blob/main/releases/releases.json)
+in the source repo.
 
 ## Verify before you flash
 
-The signing device's whole security claim is &ldquo;keys never leave the
-device.&rdquo; That claim collapses if the firmware running on the device
-isn't the one we built. **Verify the signature before you flash.**
+The signing device's whole security claim is “keys never leave the device.”
+That claim collapses if the firmware running on the device is not the one
+we built. **Verify the signature before you flash.**
 
 ```bash
-# One-time: import the release key.
+# One-time: import the release key (fingerprint in docs/security.md).
 gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
 
 # Verify the image.
-gpg --verify piwalletsv-<VERSION>.img.xz.asc piwalletsv-<VERSION>.img.xz
+gpg --verify piwalletsv-{{ firmware_version }}.img.xz.asc \
+    piwalletsv-{{ firmware_version }}.img.xz
 
 # Cross-check the SHA-256.
-shasum -a 256 piwalletsv-<VERSION>.img.xz
+shasum -a 256 piwalletsv-{{ firmware_version }}.img.xz
 ```
 
-A successful verification ends with **&ldquo;Good signature&rdquo;** and the
-release-key fingerprint. Anything else means the file has been
-tampered with in transit, or someone has replaced the website.
+A successful verification ends with **“Good signature”** and the release-key
+fingerprint pinned in [`docs/security.md`](security.md#release-key).
 **Do not flash an unverified image.**
 
 ## Flash the image
 
-!!! tip "Jump straight to the flashing guide"
-    The [Flash and first run](build-image.md#step-2-flash-the-image)
-    page has step-by-step instructions for every platform:
+!!! tip "Step-by-step flashing"
+    [Flash and first run § Flash the image](build-image.md#step-2-flash-the-image)
+    covers Windows, macOS, and Linux (Raspberry Pi Imager or `dd`).
 
-    - **Windows** — Raspberry Pi Imager or balenaEtcher (GUI, no command line needed)
-    - **macOS** — Raspberry Pi Imager via GUI or `brew`, or `dd` from the terminal
-    - **Linux** — `dd` from the terminal, or Raspberry Pi Imager via `apt` / Flatpak
-
-    Both recommended GUI tools handle `.img.xz` decompression
-    automatically — no need to unzip the file first.
+You need a **USB microSD reader/writer** on your computer. PiWalletSV kits
+include a microSD and SD adapter when a full kit is offered; **they do not
+include a USB reader.**
 
 ## Next steps
 
 Once the image is verified and flashed:
 
-- **Pre-flashed kit?** Before you fund the device, **re-flash from a
-  verified download** (recommended — [User manual § Verify your SD card](user-manual.md#verify-sd-card-on-arrival)).
-  Optional lighter checks: Image ID on kit paperwork, or hash the SD in
-  a computer reader without booting the Pi.
-- Follow [Flash and first run](build-image.md) for first-boot
-  setup: disclaimer, vault PIN, wallet creation, airgap check, and a
-  TESTNET smoke test.
-- See the [User manual](user-manual.md) for routine use after the
-  device is set up, including
-  [USB backup and restore](user-manual.md#usb-backup),
-  [Upgrade your device](user-manual.md#upgrade-your-device), and
-  [Airgap status](user-manual.md#airgap-status).
+- **Full kit with factory-flashed card?** Before you fund, **strongly
+  recommend re-flashing** from this download page —
+  [User manual § Verify your SD card](user-manual.md#verify-sd-card-on-arrival).
+- Follow [Flash and first run](build-image.md) for disclaimer, vault PIN,
+  wallet creation, airgap check, and a TESTNET smoke test.
+- Routine use: [User manual](user-manual.md) ([USB backup](user-manual.md#usb-backup),
+  [Upgrade your device](user-manual.md#upgrade-your-device),
+  [Airgap status](user-manual.md#airgap-status)).
 
 ## Building from source
 
-If you'd rather build the image yourself &mdash; you'll need a Raspberry
-Pi running Raspberry Pi OS Lite, a network connection during
-provisioning, and the patience for a 10-minute scripted bring-up &mdash;
-see [Build &amp; deploy](build.md). The build path produces a
-bit-identical sealed image to the one published here, modulo the
-date stamp baked into `/etc/piwalletsv-release`.
+Need a custom tree or no GitHub asset yet? Flash Raspberry Pi OS Lite
+32-bit, run
+[`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh),
+and capture your own image — see
+[Build & deploy](build.md) and the operator notes in
+[`docs/includes/image-release-operator.md`](includes/image-release-operator.md).

@@ -1080,7 +1080,7 @@ module front_lid() {
 // Render mode switch
 // =====================================================================
 
-mode = "lid";
+mode = "all";
 
 if (mode == "tub") {
  back_tub();

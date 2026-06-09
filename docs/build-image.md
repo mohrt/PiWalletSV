@@ -25,9 +25,9 @@ including the USB backup mount daemon, FAT/exFAT tools, and bonnet
 - A downloaded image (`.img.xz`) and its `.asc` signature, both from
   the official [Download](download.md) page.
 - A **microSD card**, 8&nbsp;GB or larger.
-- A **Raspberry Pi Zero 2&nbsp;W** with the Adafruit 1.3&quot; 240×240 TFT
+- A **Raspberry Pi Zero W or Zero WH** with the Adafruit 1.3&quot; 240×240 TFT
   bonnet ([product 4506](https://www.adafruit.com/product/4506)) and an
-  **ArduCam OV5647** camera module.
+  **ArduCam OV5647** camera module (32-bit Raspberry Pi OS Lite image).
 - A **5&nbsp;V power supply** with a micro-USB plug for the bonnet's
   PWR-IN port.
 - A computer with `gpg`, `xz`, and either Raspberry Pi Imager or the

@@ -6,8 +6,9 @@
 # This is the script we run when **building the official image**.
 # It assumes:
 #
-#   * Raspberry Pi OS Lite 64-bit (Bookworm or later) is already on
-#     the SD card and has booted into a working shell.
+#   * Raspberry Pi OS Lite **32-bit** (Bookworm or Trixie) on the SD
+#     card, booted into a working shell. Primary target: **Pi Zero W /
+#     Zero WH** (ARMv6). Pi Zero 2 W (64-bit) is also supported.
 #   * The bonnet hardware (TFT + buttons + camera) is wired up.
 #   * Network is reachable for the duration of provisioning so apt
 #     can fetch packages — *the network is then disabled forever as
@@ -31,7 +32,13 @@
 #   * journald bounded so a misbehaving log can't fill the SD card.
 #
 # Usage:
-#   sudo deploy/provision-pi.sh [--src PATH] [--keep-ssh] [--keep-radios] [--dry-run]
+#   sudo deploy/provision-pi.sh [--src PATH] [--release-version VER]
+#                 [--image-channel CH] [--keep-ssh] [--keep-radios] [--dry-run]
+#
+#   --release-version VER   Baked into /etc/piwalletsv-release (default:
+#                           PIWALLETSV_RELEASE_VERSION or 0.1.0-r1).
+#   --image-channel CH      Image channel label (default:
+#                           PIWALLETSV_IMAGE_CHANNEL or round1-zero-w).
 #
 #   --src PATH    Install the app from a local directory (rsync) instead
 #                 of cloning github.com/mohrt/PiWalletSV. Used by image
@@ -74,7 +81,8 @@ readonly MODPROBE_BLACKLIST="/etc/modprobe.d/piwalletsv-no-radio.conf"
 readonly JOURNALD_CONF="/etc/systemd/journald.conf.d/piwallet.conf"
 readonly UNIT_SRC_DIR="deploy/systemd"
 readonly UNIT_DST_DIR="/etc/systemd/system"
-readonly LOG_PREFIX="[provision-pi]"
+readonly RELEASE_FILE="/etc/piwalletsv-release"
+readonly RELEASE_JSON="${APP_DIR}/RELEASE.json"
 
 # Packages we need at runtime. picamera2/libcamera come from system
 # wheels because the libcamera Python bindings link against system
@@ -162,6 +170,8 @@ readonly MASK_ALWAYS_UNITS=(
 # ============================================================
 
 src_dir=""
+release_version="${PIWALLETSV_RELEASE_VERSION:-0.1.0-r1}"
+image_channel="${PIWALLETSV_IMAGE_CHANNEL:-round1-zero-w}"
 keep_ssh=0
 keep_radios=0
 dry_run=0
@@ -175,6 +185,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --src)         src_dir=${2:?--src requires a path}; shift ;;
         --src=*)       src_dir=${1#--src=} ;;
+        --release-version) release_version=${2:?--release-version requires a value}; shift ;;
+        --release-version=*) release_version=${1#--release-version=} ;;
+        --image-channel) image_channel=${2:?--image-channel requires a value}; shift ;;
+        --image-channel=*) image_channel=${1#--image-channel=} ;;
         --keep-ssh)    keep_ssh=1 ;;
         --keep-radios) keep_radios=1 ;;
         --dry-run)     dry_run=1 ;;
@@ -267,6 +281,7 @@ preflight() {
 
     log "  keep_ssh:    ${keep_ssh}"
     log "  keep_radios: ${keep_radios}"
+    log "  release:     ${release_version} (${image_channel})"
     log "  dry-run:     ${dry_run}"
 
     if [[ $keep_radios -eq 1 ]]; then
@@ -280,9 +295,23 @@ preflight() {
 
 step_apt_install() {
     log "apt install runtime deps"
+    local zbar_pkg=libzbar0t64
+    if ! apt-cache show "$zbar_pkg" >/dev/null 2>&1; then
+        zbar_pkg=libzbar0
+    fi
+    log "  zbar package: ${zbar_pkg}"
     run apt-get update -qq
+    local pkgs=()
+    local pkg
+    for pkg in "${APT_INSTALL[@]}"; do
+        if [[ "$pkg" == libzbar0t64 ]]; then
+            pkgs+=("$zbar_pkg")
+        else
+            pkgs+=("$pkg")
+        fi
+    done
     run env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        "${APT_INSTALL[@]}"
+        "${pkgs[@]}"
 }
 
 step_apt_purge() {
@@ -643,6 +672,96 @@ step_cleanup() {
     fi
 }
 
+step_release_metadata() {
+    log "write release metadata (${release_version}, ${image_channel})"
+    [[ -d "$APP_DIR" ]] || fail "APP_DIR missing — run step_install_app first"
+
+    local git_commit="" app_tree_sha256="" image_id="" built_at model os_pretty arch
+    built_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    model=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null || echo unknown)
+    if [[ -r /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        os_pretty="${PRETTY_NAME:-unknown}"
+    else
+        os_pretty=unknown
+    fi
+    arch=$(uname -m)
+
+    if [[ -d "$APP_DIR/.git" ]]; then
+        git_commit=$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null || true)
+    elif [[ -n "$src_dir" && -d "$src_dir/.git" ]]; then
+        git_commit=$(git -C "$src_dir" rev-parse HEAD 2>/dev/null || true)
+    fi
+
+    if [[ $dry_run -eq 1 ]]; then
+        log "  DRY: would compute app_tree_sha256 and write ${RELEASE_FILE}"
+        return 0
+    fi
+
+    app_tree_sha256=$(
+        find "$APP_DIR" -type f \
+            ! -path '*/.venv/*' \
+            ! -path '*/.git/*' \
+            ! -path '*/__pycache__/*' \
+            ! -name '*.pyc' \
+            -print0 \
+        | sort -z \
+        | xargs -0 sha256sum \
+        | sha256sum \
+        | awk '{print $1}'
+    )
+    image_id=${app_tree_sha256:0:8}
+
+    cat > "$RELEASE_FILE" <<EOF
+# Written by deploy/provision-pi.sh — do not hand-edit.
+PIWALLETSV_VERSION=${release_version}
+PIWALLETSV_IMAGE_CHANNEL=${image_channel}
+PIWALLETSV_IMAGE_ID=${image_id}
+PIWALLETSV_APP_TREE_SHA256=${app_tree_sha256}
+PIWALLETSV_GIT_COMMIT=${git_commit}
+PIWALLETSV_BUILT_AT=${built_at}
+PIWALLETSV_BOARD_MODEL=${model}
+PIWALLETSV_OS=${os_pretty}
+PIWALLETSV_ARCH=${arch}
+EOF
+    chmod 0644 "$RELEASE_FILE"
+
+    export PIWALLETSV_VERSION="$release_version"
+    export PIWALLETSV_IMAGE_CHANNEL="$image_channel"
+    export PIWALLETSV_IMAGE_ID="$image_id"
+    export PIWALLETSV_APP_TREE_SHA256="$app_tree_sha256"
+    export PIWALLETSV_GIT_COMMIT="$git_commit"
+    export PIWALLETSV_BUILT_AT="$built_at"
+    export PIWALLETSV_BOARD_MODEL="$model"
+    export PIWALLETSV_OS="$os_pretty"
+    export PIWALLETSV_ARCH="$arch"
+    export PIWALLETSV_RELEASE_JSON="$RELEASE_JSON"
+
+    python3 <<'PY'
+import json
+import os
+from pathlib import Path
+
+payload = {
+    "piwalletsv_version": os.environ["PIWALLETSV_VERSION"],
+    "image_channel": os.environ["PIWALLETSV_IMAGE_CHANNEL"],
+    "image_id": os.environ["PIWALLETSV_IMAGE_ID"],
+    "app_tree_sha256": os.environ["PIWALLETSV_APP_TREE_SHA256"],
+    "git_commit": os.environ["PIWALLETSV_GIT_COMMIT"],
+    "built_at": os.environ["PIWALLETSV_BUILT_AT"],
+    "board_model": os.environ["PIWALLETSV_BOARD_MODEL"],
+    "os": os.environ["PIWALLETSV_OS"],
+    "arch": os.environ["PIWALLETSV_ARCH"],
+}
+Path(os.environ["PIWALLETSV_RELEASE_JSON"]).write_text(
+    json.dumps(payload, indent=2) + "\n", encoding="utf-8"
+)
+PY
+    chmod 0644 "$RELEASE_JSON"
+    log "  image_id=${image_id} app_tree_sha256=${app_tree_sha256:0:16}…"
+}
+
 # ============================================================
 # Main
 # ============================================================
@@ -658,6 +777,7 @@ main() {
     step_ssh
     step_create_user
     step_install_app
+    step_release_metadata
     step_bonnet_hardware
     step_usb_backup
     step_install_unit
