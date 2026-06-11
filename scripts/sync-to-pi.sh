@@ -54,6 +54,9 @@ EXCLUDE_FILE="$ROOT/scripts/rsync-pi-excludes.txt"
 echo "rsync → ${REMOTE}:${REMOTE_PATH}/"
 rsync -av --delete --exclude-from="$EXCLUDE_FILE" "$ROOT/" "${REMOTE}:${REMOTE_PATH}/"
 
+echo "prune stale payload artifacts on Pi..."
+ssh "$REMOTE" "bash ${REMOTE_PATH}/scripts/prune-pi-payload.sh ${REMOTE_PATH}"
+
 echo "verify remote payload..."
 ssh "$REMOTE" "bash ${REMOTE_PATH}/scripts/verify-pi-payload.sh ${REMOTE_PATH}"
 
