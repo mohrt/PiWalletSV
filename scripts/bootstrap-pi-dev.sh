@@ -12,11 +12,8 @@
 # Production sealed images use deploy/provision-pi.sh (32-bit Pi Zero W).
 #
 # Typical workflow (Mac → Pi):
-#   rsync -av --delete \
-#     --exclude .git --exclude .venv --exclude node_modules \
-#     --exclude companion --exclude site --exclude hardware \
-#     ./ pisv@piwalletsv32.local:~/PiWallet/
-#   ssh pisv@piwalletsv32.local 'cd ~/PiWallet && bash scripts/bootstrap-pi-dev.sh'
+#   ./scripts/sync-to-pi.sh pisv@piwalletsv32.local --bootstrap
+#   # excludes: scripts/rsync-pi-excludes.txt
 #
 # After the first reboot (or any time pip is already installed):
 #   bash scripts/bootstrap-pi-dev.sh --resume

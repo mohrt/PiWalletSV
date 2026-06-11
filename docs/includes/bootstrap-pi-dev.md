@@ -30,13 +30,15 @@ From the repo root on your Mac/Linux machine:
 Or manually:
 
 ```bash
-rsync -av --delete \
-    --exclude .git --exclude .venv --exclude node_modules \
-    --exclude companion --exclude site --exclude hardware \
-    ./ user@piwallet.local:~/PiWallet/
+./scripts/sync-to-pi.sh user@piwallet.local
 
 ssh user@piwallet.local 'cd ~/PiWallet && bash scripts/bootstrap-pi-dev.sh'
 ```
+
+Excludes are listed in [`scripts/rsync-pi-excludes.txt`](../../scripts/rsync-pi-excludes.txt)
+(vault state, dev caches, companion PWA, docs site, hardware CAD, tests, …).
+`sync-to-pi.sh` runs [`scripts/verify-pi-payload.sh`](../../scripts/verify-pi-payload.sh)
+on the Pi after each sync; production `provision-pi.sh` runs the same check before pip.
 
 **Include `scripts/`** in the sync. Do not exclude it.
 

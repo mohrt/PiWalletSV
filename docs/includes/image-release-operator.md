@@ -10,37 +10,83 @@ flash from [Download](../download.md) on GitHub Releases.
 - **Provisioner:** [`deploy/provision-pi.sh`](../../deploy/provision-pi.sh)
 - **Version tag:** `0.1.0-r1` → Git tag `v0.1.0-r1`
 
+## Payload rules (dev and production)
+
+Every Pi tree — dev checkout (`~/PiWallet`) and sealed install (`/opt/piwallet`)
+— must contain **only** the runtime firmware:
+
+| Included | Excluded |
+|----------|----------|
+| `piwallet/`, `scripts/`, `deploy/`, `pyproject.toml` | `companion/`, `hardware/`, `docs/`, `tests/`, `releases/`, `site/`, dev caches, local vault state |
+
+Canonical exclude list:
+[`scripts/rsync-pi-excludes.txt`](../../scripts/rsync-pi-excludes.txt)
+
+| Step | Tool | What it does |
+|------|------|----------------|
+| Workstation → Pi | [`scripts/sync-to-pi.sh`](../../scripts/sync-to-pi.sh) | `rsync` with excludes + `verify-pi-payload.sh` on the Pi |
+| `--src` → `/opt/piwallet` | [`deploy/provision-pi.sh`](../../deploy/provision-pi.sh) | Same excludes + verify before venv install |
+| Git clone fallback | `provision-pi.sh` | `prune-pi-payload.sh` then verify |
+
+**Never** raw `rsync` without `--exclude-from=scripts/rsync-pi-excludes.txt`.
+**Never** provision from a tree that still contains `docs/`, `tests/`, or `companion/`.
+
 ## 1. Build the sealed root filesystem
 
-On a Pi with network (builder card — **not** the image you ship yet):
+### 1a. Flash a builder SD card
+
+Raspberry Pi Imager → **Pi OS Lite 32-bit** → hostname, user, Wi‑Fi, SSH key.
+
+### 1b. Sync source to the Pi (workstation)
+
+From your Mac at a **known commit**:
 
 ```bash
-# Sync a known commit to the Pi, then:
-cd /path/to/PiWallet
+./scripts/sync-to-pi.sh pi@piwallet-builder.local
+# adds --bootstrap to run bootstrap-pi-dev.sh after verify
+```
+
+This rsyncs with excludes and runs `verify-pi-payload.sh` on the Pi before
+you proceed.
+
+### 1c. Builder provision (keep SSH + radios)
+
+On the Pi:
+
+```bash
+cd ~/PiWallet
 sudo deploy/provision-pi.sh \
   --src "$(pwd)" \
   --release-version 0.1.0-r1 \
   --image-channel round1-zero-w \
-  --keep-ssh --keep-radios   # builder only
+  --keep-ssh --keep-radios
 sudo reboot
 ```
 
-After reboot, run factory QA:
+`provision-pi.sh` rsyncs `~/PiWallet` → `/opt/piwallet` with the **same**
+exclude file, runs `verify-pi-payload.sh`, then builds the venv and seals
+everything except SSH/radios.
+
+### 1d. Factory QA
+
+After reboot:
 
 ```bash
 sudo bash /opt/piwallet/scripts/factory-smoke-test.sh --serial BUILD-001
 ```
 
-When happy, **re-flash a fresh SD** (or wipe and re-provision) **without**
-`--keep-ssh` or `--keep-radios` to produce the sealed appliance:
+### 1e. Seal the shipping image
+
+Re-flash a **fresh** SD (or wipe and re-provision) **without** builder flags:
 
 ```bash
+# sync again if needed, then on the Pi:
 sudo deploy/provision-pi.sh \
-  --src /path/to/PiWallet \
+  --src ~/PiWallet \
   --release-version 0.1.0-r1 \
   --image-channel round1-zero-w
 sudo reboot
-# Bonnet should show disclaimer on tty1; no SSH.
+# Bonnet shows disclaimer on tty1; no SSH; radios off.
 ```
 
 Note **Image ID** from `/etc/piwalletsv-release` (or
@@ -82,3 +128,13 @@ For each kit microSD (after the GitHub release is live):
 
 Tell every full-kit buyer: **re-flash from GitHub before funding** —
 see [Verify your SD card](../user-manual.md#verify-sd-card-on-arrival).
+
+## Dev vs production summary
+
+| | Dev (`sync-to-pi.sh`) | Production (`provision-pi.sh`) |
+|--|----------------------|-------------------------------|
+| Destination | `~/PiWallet` | `/opt/piwallet` |
+| Excludes | `rsync-pi-excludes.txt` | same file |
+| Verify | `verify-pi-payload.sh` after rsync | after rsync/prune, before pip |
+| SSH / Wi‑Fi | unchanged | off unless `--keep-ssh` / `--keep-radios` |
+| User | your login | `pwsv` (locked, no shell) |

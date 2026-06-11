@@ -6,6 +6,8 @@
 //   button_cap — flanged pad; actuates via lid platform pocket (×2).
 //
 // Render modes: mode = "tub" | "lid" | "cap" | "caps" | "lid_caps" | "all" | "preview"
+// Loop 43: corner pillars stay square cubes; exterior overflow trimmed to outer_brick.
+// Loop 42: bonnet front-corner support shelves (45° gusset + annular pad at FL/FR holes).
 // Loop 40: M2 × 6 mm pan-head corner screws; 4.8 × 4.8 mm square pillars at corners.
 // Loop 41: tighter button lid ports + button centres +0.5 mm Y.
 //   tub      — back tub only
@@ -132,6 +134,7 @@ mount_inset_x = 3.5;
 mount_inset_y = 3.5;
 mount_pitch_x = 58.0;
 mount_pitch_y = 23.0;
+mount_hole_dia = 2.7;             // M2.5 clearance — Pi Zero / bonnet corner holes
 
 // LCD geometry. lcd_module is the glass outline; lcd_active_area is
 // the lit-pixel rectangle, smaller than the glass; lcd_active_area_offset
@@ -335,6 +338,17 @@ pi_standoff_outer        = 7.0;         // Ø 7 mm column
 pi_standoff_pilot        = 2.1;         // M2.5 self-tap pilot in PETG
 pi_standoff_pilot_depth  = 5.0;         // blind bore from post top — tune ±0.5
 
+// Bonnet front-corner support shelves (Loop 42). Two pads at the front-row
+// M2.5 mount holes (coaxial with Pi holes) — profile matches pi standoff
+// footprint; through-hole (pi_standoff_pilot) through plate + gusset.
+bonnet_front_support_enabled  = true;
+bonnet_gap_above_pi_top       = 8.7;    // MEASURED — Pi PCB top → bonnet PCB bottom
+bonnet_shelf_footprint        = pi_standoff_outer;  // 7 mm — same as Pi standoff OD
+bonnet_shelf_thickness        = 1.0;
+bonnet_shelf_corner_r         = 1.0;    // fillet on the two outer (+y) top corners
+bonnet_shelf_port_clearance   = 0.5;    // gap above tallest front-port top
+bonnet_ledge_z_trim           = 0.2;    // shelf starts slightly below bonnet — tune
+
 // Lens cone in the back tub's back wall.
 lens_cone_dia     = 8.0;
 lens_cone_recess  = 3.0;
@@ -476,6 +490,17 @@ pi_standoff_height = camera_post_height + camera_module_z + ribbon_under_pi;
 usb_jack_z = wall + pi_standoff_height + pi_pcb_thickness
            + usb_jack_z_above_pi_top;
 
+// Bonnet front-shelf z stack (Loop 42).
+pi_pcb_top_z = wall + pi_standoff_height + pi_pcb_thickness;
+bonnet_pcb_bottom_z = pi_pcb_top_z + bonnet_gap_above_pi_top;
+_usb_port_top_z = usb_jack_z + usb_cutout_h / 2;
+_hdmi_port_top_z = usb_jack_z + hdmi_cutout_h / 2;
+usb_port_top_z = hdmi_cutout_enabled
+    ? max(_usb_port_top_z, _hdmi_port_top_z)
+    : _usb_port_top_z;
+bonnet_shelf_gusset_base_z = usb_port_top_z + bonnet_shelf_port_clearance;
+bonnet_shelf_top_z = bonnet_pcb_bottom_z - bonnet_ledge_z_trim;
+
 // Seam between tub and lid. The lid's front face sits on top of the
 // tub; the lid's skirt drops into the tub's stepped lip below.
 tub_top = case_z - wall;             // = 32.74 (case_z 35.14 − wall 2.4)
@@ -518,6 +543,66 @@ module outer_brick(x, y, z, r=corner_radius) {
 }
 
 
+// 2D footprint: wall-rooted bracket with the two outer (+y) corners radiused.
+module bonnet_shelf_profile(cx, y_root, depth) {
+    half_f = bonnet_shelf_footprint / 2;
+    r = min(
+        bonnet_shelf_corner_r,
+        half_f - 0.05,
+        depth - wall - 0.05
+    );
+    y_far = y_root + depth;
+
+    hull() {
+        translate([cx - half_f, y_root])
+            square([bonnet_shelf_footprint, depth - r]);
+        translate([cx - half_f + r, y_far - r])
+            circle(r = r, $fn = 24);
+        translate([cx + half_f - r, y_far - r])
+            circle(r = r, $fn = 24);
+    }
+}
+
+
+// Full-footprint ledge + 45° wall gusset at one front M2.5 mount hole (Pi/bonnet coaxial).
+// Gusset: hull from a wall-root sliver (z_gbase) to the full rounded footprint at
+// z_bot — ~45° cavity-facing slope, printable open-side-up. Top plate is the same
+// profile extruded 1 mm upward. Through-hole (pi_standoff_pilot, Ø 2.1 mm) runs the
+// full height of the ledge assembly — same as M2.5 self-tap pilots in Pi standoffs.
+module bonnet_front_corner_shelf(mount_xy) {
+    half_f = bonnet_shelf_footprint / 2;
+    z_top = bonnet_shelf_top_z;
+    z_bot = z_top - bonnet_shelf_thickness;
+    z_gbase = bonnet_shelf_gusset_base_z;
+    y_wall = cavity_origin_y;
+    y_root = y_wall - wall;
+    cx = mount_xy.x;
+    depth = bonnet_shelf_footprint + wall;
+
+    difference() {
+        union() {
+            // 45° support wedge — full footprint at shelf bottom, rooted on front wall.
+            if (z_bot > z_gbase + 0.01) {
+                hull() {
+                    translate([0, 0, z_bot - 0.01])
+                        linear_extrude(0.02)
+                            bonnet_shelf_profile(cx, y_root, depth);
+                    translate([cx - half_f, y_root, z_gbase])
+                        cube([bonnet_shelf_footprint, 0.01, 0.01]);
+                }
+            }
+
+            // Ledge top plate — rounded outer corners, fused to gusset top.
+            translate([0, 0, z_bot])
+                linear_extrude(bonnet_shelf_thickness)
+                    bonnet_shelf_profile(cx, y_root, depth);
+        }
+        translate([mount_xy.x, mount_xy.y, z_gbase - 0.01])
+            cylinder(h = z_top - z_gbase + 0.02, d = pi_standoff_pilot);
+    }
+}
+
+
 function pi_standoff_positions() = [
     [bonnet_origin_x + mount_inset_x,
      bonnet_origin_y + mount_inset_y],
@@ -527,6 +612,12 @@ function pi_standoff_positions() = [
      bonnet_origin_y + mount_inset_y + mount_pitch_y],
     [bonnet_origin_x + mount_inset_x + mount_pitch_x,
      bonnet_origin_y + mount_inset_y + mount_pitch_y],
+];
+
+// Front-row mount holes only (low y) — bonnet support shelf locations.
+function front_mount_positions() = [
+    pi_standoff_positions()[0],
+    pi_standoff_positions()[1],
 ];
 
 function camera_post_positions() = [
@@ -582,13 +673,34 @@ if (lid_screw_enabled) {
     assert(_corner_pillar_clear_pi(3), "BR corner pillar overlaps Pi keepout");
 }
 
+// Square corner pillar with only the exterior case-corner overflow trimmed to match
+// outer_brick. Interior faces and screw-centre geometry stay as the original cube.
+module corner_pillar_body(i) {
+    _fp = corner_pillar_footprint(i);
+    s = corner_pillar_size;
+    h = tub_top;
+
+    difference() {
+        translate([_fp[0], _fp[1], 0])
+            cube([s, s, h]);
+
+        // Material inside the pillar box but outside the tub outer_brick profile.
+        intersection() {
+            translate([_fp[0], _fp[1], 0])
+                cube([s, s, h + 0.02]);
+            difference() {
+                translate([-0.01, -0.01, -0.01])
+                    cube([case_x + 0.02, case_y + 0.02, h + 0.04]);
+                outer_brick(case_x, case_y, h + 0.04, r = corner_radius);
+            }
+        }
+    }
+}
+
 module corner_pillars() {
     if (lid_screw_enabled) {
-        for (i = [0:3]) {
-            _fp = corner_pillar_footprint(i);
-            translate([_fp[0], _fp[1], 0])
-                cube([corner_pillar_size, corner_pillar_size, tub_top]);
-        }
+        for (i = [0:3])
+            corner_pillar_body(i);
     }
 }
 
@@ -746,6 +858,11 @@ module back_tub() {
             for (p = pi_standoff_positions())
                 translate([p.x, p.y, wall])
                     cylinder(h=pi_standoff_height, d=pi_standoff_outer);
+
+            // ---- Bonnet front-corner support shelves (Loop 42) ----
+            if (bonnet_front_support_enabled)
+                for (p = front_mount_positions())
+                    bonnet_front_corner_shelf(p);
 
             // ---- Corner lid-screw pillars — full height at outer corners ----
             corner_pillars();
@@ -1055,26 +1172,15 @@ module front_lid() {
         // Corner tub pillars — skirt pockets + M2 through-holes (full stack).
         lid_corner_screw_cutouts();
 
-        // Outer top-face chamfer — bevel where the rounded slab
-        // meets the front face. Built by subtracting the difference
-        // between an oversized brick and a chamfered (smaller-top)
-        // brick. Subtle: ~0.8 mm visible bevel.
+        // Outer top-face chamfer — bevel where the rounded slab meets the front face.
         chamfer_z_top = lid_skirt_h + wall;
         chamfer_z_bot = chamfer_z_top - lid_face_chamfer;
         translate([0, 0, chamfer_z_bot])
             difference() {
-                translate([0, 0, 0])
-                    outer_brick(case_x, case_y, lid_face_chamfer + 0.01);
+                outer_brick(case_x, case_y, lid_face_chamfer + 0.01);
                 hull() {
-                    outer_brick(
-                        case_x, case_y, 0.001,
-                        r=corner_radius
-                    );
-                    translate([
-                        lid_face_chamfer,
-                        lid_face_chamfer,
-                        lid_face_chamfer
-                    ])
+                    outer_brick(case_x, case_y, 0.001, r=corner_radius);
+                    translate([lid_face_chamfer, lid_face_chamfer, lid_face_chamfer])
                         outer_brick(
                             case_x - 2*lid_face_chamfer,
                             case_y - 2*lid_face_chamfer,

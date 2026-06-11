@@ -44,17 +44,12 @@ tests, but only the round-trip on real hardware can prove that:
 From the dev machine:
 
 ```sh
-rsync -av --delete \
-    --exclude='.venv/' \
-    --exclude='__pycache__/' \
-    --exclude='node_modules/' \
-    --exclude='site/' \
-    --exclude='companion/dist/' \
-    ./ <user>@<host>:<repo-path>/
+./scripts/sync-to-pi.sh <user>@<host> --path <repo-path>
 ```
 
-The `site/` exclude matters if you've ever run `mkdocs build` locally —
-the rendered HTML lands there and serves no purpose on the Pi.
+Excludes and post-sync verification are defined in
+[`scripts/rsync-pi-excludes.txt`](../../scripts/rsync-pi-excludes.txt)
+(drops `site/`, `companion/`, `docs/`, `tests/`, dev caches, vault state, …).
 
 On the Pi:
 

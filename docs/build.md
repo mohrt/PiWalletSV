@@ -94,6 +94,11 @@ and the systemd example unit work out of the box.
 
 Or rsync + bootstrap manually — see the include above.
 
+`sync-to-pi.sh` uses [`scripts/rsync-pi-excludes.txt`](../scripts/rsync-pi-excludes.txt)
+and runs [`scripts/verify-pi-payload.sh`](../scripts/verify-pi-payload.sh) on the Pi
+after every sync. The same exclude list is enforced when
+[`deploy/provision-pi.sh`](../deploy/provision-pi.sh) installs to `/opt/piwallet`.
+
 After bootstrap completes, smoke-test:
 
 ```bash
@@ -289,8 +294,10 @@ The sealed image is built with
 on **Raspberry Pi OS Lite 32-bit** (Pi Zero W / Zero WH). Signed `.img.xz`
 artifacts are published on **GitHub Releases** — see [Download](download.md).
 
-Operator workflow (capture, sign, factory burn):
+Operator workflow (sync → provision → capture → sign → publish):
 [`docs/includes/image-release-operator.md`](includes/image-release-operator.md).
+Dev and production share one payload manifest — never sync `companion/`, `docs/`,
+`tests/`, or local vault state to the Pi.
 
 Future work: `pi-gen` reproducible builds (`phase8-hardening`).
 Until then, the manual provision + capture sequence above is canonical.

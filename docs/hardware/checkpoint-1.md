@@ -61,15 +61,12 @@ rpicam-hello --list-cameras       # expect ov5647
 From your workstation (or use `sync-to-pi.sh` which rsyncs + bootstraps):
 
 ```sh
-rsync -av --delete \
-    --exclude .git --exclude .venv --exclude node_modules \
-    --exclude '__pycache__' --exclude companion --exclude site \
-    --exclude hardware \
-    ./ <user>@<host>:<repo-path>/
+./scripts/sync-to-pi.sh <user>@<host> --path <repo-path>
 ```
 
-The `companion/` PWA isn't needed for the bonnet test, so it's
-excluded to keep the transfer small.
+Or `rsync -av --delete --exclude-from=scripts/rsync-pi-excludes.txt ./ …`.
+The exclude list drops the companion PWA, docs, hardware CAD, tests, local
+vault state, and dev-machine caches — none of which the bonnet needs.
 
 ## 3. Install on the Pi
 
