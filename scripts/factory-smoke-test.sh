@@ -102,12 +102,38 @@ fi
 
 if [[ $SKIP_DISPLAY -eq 0 && -x "$REPO_ROOT/scripts/run_display_demo.sh" ]]; then
     log "== display demo (5s) =="
-    if timeout 8 bash "$REPO_ROOT/scripts/run_display_demo.sh" --timeout 5 2>/dev/null; then
+    demo_seconds=5
+    demo_timeout=$((demo_seconds + 20))
+    bonnet_was=0
+    if systemctl is-active -q piwallet-bonnet.service 2>/dev/null; then
+        bonnet_was=1
+        systemctl stop piwallet-bonnet.service
+    fi
+    demo_rc=0
+    demo_err=""
+    if id pwsv &>/dev/null; then
+        demo_err=$(mktemp)
+        if ! timeout "$demo_timeout" sudo -u pwsv bash "$REPO_ROOT/scripts/run_display_demo.sh" \
+                --timeout "$demo_seconds" >"$demo_err" 2>&1; then
+            demo_rc=$?
+        fi
+    elif ! timeout "$demo_timeout" bash "$REPO_ROOT/scripts/run_display_demo.sh" \
+            --timeout "$demo_seconds" >/dev/null 2>&1; then
+        demo_rc=$?
+    fi
+    if [[ $bonnet_was -eq 1 ]]; then
+        systemctl start piwallet-bonnet.service 2>/dev/null || \
+            warn "failed to restart piwallet-bonnet"
+    fi
+    if [[ $demo_rc -eq 0 ]]; then
+        [[ -n "$demo_err" ]] && rm -f "$demo_err"
         log "PASS display demo"
-    elif timeout 8 bash "$REPO_ROOT/scripts/run_display_demo.sh" 2>/dev/null; then
-        log "PASS display demo (no --timeout flag)"
     else
-        fail_step "display demo — run manually: bash scripts/run_display_demo.sh"
+        if [[ -n "$demo_err" && -s "$demo_err" ]]; then
+            warn "display demo output: $(tail -3 "$demo_err" | tr '\n' ' ')"
+            rm -f "$demo_err"
+        fi
+        fail_step "display demo — run manually: sudo systemctl stop piwallet-bonnet && bash scripts/run_display_demo.sh --timeout 5"
     fi
 else
     log "SKIP display demo"
