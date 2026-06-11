@@ -1,9 +1,8 @@
-#!/bin/bash
-rsync -av \
-  --exclude '.git' --exclude '.venv' --exclude '__pycache__' \
-  --exclude '*.pyc' --exclude '*.egg-info' --exclude 'companion' \
-  --exclude 'node_modules' --exclude 'site' --exclude 'docs' \
-  --exclude 'hardware' --exclude 'tests' --exclude 'deploy' \
-  --exclude 'requirements-docs.txt' \
-  --exclude 'mkdocs.yml' \
-  /Users/mohrt/PiWallet/ pisv@piwalletsv32.local:PiWallet/
+#!/usr/bin/env bash
+# Deprecated: use scripts/sync-to-pi.sh (canonical excludes + verify).
+#
+#   ./scripts/sync-to-pi.sh pisv@piwalletsv32.local --bootstrap
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$ROOT/scripts/sync-to-pi.sh" pisv@piwalletsv32.local "$@"

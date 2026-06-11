@@ -23,13 +23,7 @@ can prove that:
 From the dev machine:
 
 ```sh
-rsync -av --delete \
-    --exclude='.venv/' \
-    --exclude='__pycache__/' \
-    --exclude='node_modules/' \
-    --exclude='site/' \
-    --exclude='companion/dist/' \
-    ./ <user>@<host>:<repo-path>/
+./scripts/sync-to-pi.sh <user>@<host> --path <repo-path>
 ```
 
 On the Pi:

@@ -1,0 +1,58 @@
+# Canonical Pi payload excludes — used by:
+#   scripts/sync-to-pi.sh       (workstation → Pi dev tree)
+#   deploy/provision-pi.sh      (--src rsync → /opt/piwallet)
+#   scripts/prune-pi-payload.sh (after git clone fallback)
+#   scripts/verify-pi-payload.sh (post-sync / post-provision gate)
+#
+# Runtime paths that MUST remain: piwallet/, scripts/, deploy/, pyproject.toml
+
+# VCS & IDE
+.git
+.github
+.vscode
+.idea
+.DS_Store
+
+# Python env & build artifacts
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+build
+dist
+.pytest_cache
+.ruff_cache
+.mypy_cache
+htmlcov
+.coverage
+.tox
+
+# Node
+node_modules
+
+# Local vault / secrets — never push dev machine state to the Pi
+.piwallet
+.piwallet-dev
+vault.bin
+vault.bin.bak
+*.vault
+local_*.cbor
+scratch
+
+# Not needed on the Pi (bonnet runtime / image build)
+companion
+hardware
+docs
+tests
+releases
+site
+_site
+mkdocs.yml
+requirements-docs.txt
+enclosure
+
+# Workstation-only helpers
+deploy.sh

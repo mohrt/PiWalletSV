@@ -45,19 +45,17 @@ done
 
 [[ -n "$REMOTE" ]] || usage
 
-RSYNC_EXCLUDES=(
-    --exclude .git
-    --exclude .venv
-    --exclude node_modules
-    --exclude '__pycache__'
-    --exclude companion
-    --exclude site
-    --exclude _site
-    --exclude hardware
-)
+EXCLUDE_FILE="$ROOT/scripts/rsync-pi-excludes.txt"
+[[ -f "$EXCLUDE_FILE" ]] || {
+    echo "missing exclude list: $EXCLUDE_FILE" >&2
+    exit 1
+}
 
 echo "rsync → ${REMOTE}:${REMOTE_PATH}/"
-rsync -av --delete "${RSYNC_EXCLUDES[@]}" "$ROOT/" "${REMOTE}:${REMOTE_PATH}/"
+rsync -av --delete --exclude-from="$EXCLUDE_FILE" "$ROOT/" "${REMOTE}:${REMOTE_PATH}/"
+
+echo "verify remote payload..."
+ssh "$REMOTE" "bash ${REMOTE_PATH}/scripts/verify-pi-payload.sh ${REMOTE_PATH}"
 
 if [[ $DO_BOOTSTRAP -eq 1 ]]; then
     echo "bootstrap on Pi..."

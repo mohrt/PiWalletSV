@@ -496,14 +496,12 @@ step_install_app() {
     log "install app at $APP_DIR"
 
     if [[ -n "$src_dir" ]]; then
-        log "  rsync from $src_dir"
+        local exclude_file="${src_dir%/}/scripts/rsync-pi-excludes.txt"
+        [[ -f "$exclude_file" ]] || \
+            fail "missing $exclude_file — sync with scripts/sync-to-pi.sh or copy the full scripts/ tree"
+        log "  rsync from $src_dir (exclude-from scripts/rsync-pi-excludes.txt)"
         run rsync -a --delete \
-            --exclude='.venv/' \
-            --exclude='__pycache__/' \
-            --exclude='node_modules/' \
-            --exclude='companion/dist/' \
-            --exclude='site/' \
-            --exclude='.git/' \
+            --exclude-from="$exclude_file" \
             "${src_dir%/}/" "$APP_DIR/"
     else
         if [[ -d "$APP_DIR/.git" ]]; then
@@ -514,7 +512,15 @@ step_install_app() {
             run rm -rf "$APP_DIR"
             run git clone --depth 1 "$APP_REPO" "$APP_DIR"
         fi
+        log "  prune non-runtime paths (git clone carries the full repo)"
+        run bash "$APP_DIR/scripts/prune-pi-payload.sh" "$APP_DIR"
     fi
+
+    [[ -x "$APP_DIR/scripts/verify-pi-payload.sh" ]] || \
+        chmod 0755 "$APP_DIR/scripts/verify-pi-payload.sh" 2>/dev/null || true
+    [[ -x "$APP_DIR/scripts/prune-pi-payload.sh" ]] || \
+        chmod 0755 "$APP_DIR/scripts/prune-pi-payload.sh" 2>/dev/null || true
+    run bash "$APP_DIR/scripts/verify-pi-payload.sh" "$APP_DIR"
 
     # App code stays root-owned and read-only for the runtime user.
     # A code-execution exploit can't rewrite the binary it just ran.
@@ -699,10 +705,14 @@ step_release_metadata() {
         return 0
     fi
 
+    # Hash only runtime firmware paths (matches pi-payload excludes).
     app_tree_sha256=$(
         find "$APP_DIR" -type f \
+            \( -path "$APP_DIR/piwallet/*" \
+               -o -path "$APP_DIR/scripts/*" \
+               -o -path "$APP_DIR/deploy/*" \
+               -o -path "$APP_DIR/pyproject.toml" \) \
             ! -path '*/.venv/*' \
-            ! -path '*/.git/*' \
             ! -path '*/__pycache__/*' \
             ! -name '*.pyc' \
             -print0 \
