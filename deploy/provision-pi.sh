@@ -507,6 +507,8 @@ step_install_app() {
         run rsync -a --delete \
             --exclude-from="$exclude_file" \
             "${src_dir%/}/" "$APP_DIR/"
+        log "  prune non-runtime paths (rsync --delete skips excluded dest files)"
+        run bash "$APP_DIR/scripts/prune-pi-payload.sh" "$APP_DIR"
     else
         if [[ -d "$APP_DIR/.git" ]]; then
             log "  git pull (existing checkout)"
