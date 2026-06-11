@@ -318,32 +318,12 @@ step_apt_install() {
         "${pkgs[@]}"
 }
 
-step_apt_purge() {
-    if [[ $keep_radios -eq 1 ]]; then
-        log "apt purge radio packages: SKIPPED (--keep-radios). Audio still purged."
-        # Audio is unrelated to networking; purge it either way to
-        # keep the image lean during testing.
-        local audio_pkgs=(alsa-utils alsa-ucm-conf)
-        local installed=()
-        local pkg
-        for pkg in "${audio_pkgs[@]}"; do
-            if dpkg -s "$pkg" >/dev/null 2>&1; then
-                installed+=("$pkg")
-            fi
-        done
-        if [[ ${#installed[@]} -gt 0 ]]; then
-            run env DEBIAN_FRONTEND=noninteractive apt-get purge -y "${installed[@]}"
-        fi
-        run env DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge
-        return 0
-    fi
-    log "apt purge radio + audio packages"
-    # apt-get purge with packages that aren't installed is fine
-    # (no-op + warning). Filter to installed packages so the run is
-    # quiet on a Lite image that may not have them all.
+step_apt_purge_audio() {
+    log "apt purge audio packages"
+    local audio_pkgs=(alsa-utils alsa-ucm-conf)
     local installed=()
     local pkg
-    for pkg in "${APT_PURGE[@]}"; do
+    for pkg in "${audio_pkgs[@]}"; do
         if dpkg -s "$pkg" >/dev/null 2>&1; then
             installed+=("$pkg")
         fi
@@ -351,9 +331,44 @@ step_apt_purge() {
     if [[ ${#installed[@]} -gt 0 ]]; then
         run env DEBIAN_FRONTEND=noninteractive apt-get purge -y "${installed[@]}"
     else
-        log "  (no purge candidates installed)"
+        log "  (no audio packages installed)"
+    fi
+}
+
+step_apt_purge_radios() {
+    log "apt purge radio packages"
+    local radio_pkgs=(
+        wireless-tools
+        wpasupplicant
+        bluez
+        bluez-firmware
+        pi-bluetooth
+        libnss-mdns
+        avahi-daemon
+        avahi-utils
+    )
+    local installed=()
+    local pkg
+    for pkg in "${radio_pkgs[@]}"; do
+        if dpkg -s "$pkg" >/dev/null 2>&1; then
+            installed+=("$pkg")
+        fi
+    done
+    if [[ ${#installed[@]} -gt 0 ]]; then
+        run env DEBIAN_FRONTEND=noninteractive apt-get purge -y "${installed[@]}"
+    else
+        log "  (no radio packages installed)"
     fi
     run env DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge
+}
+
+step_apt_purge() {
+    step_apt_purge_audio
+    if [[ $keep_radios -eq 1 ]]; then
+        log "apt purge radio packages: SKIPPED (--keep-radios)"
+        return 0
+    fi
+    log "apt purge radio packages: deferred until after app install (network still up)"
 }
 
 step_cmdline_spidev() {
@@ -400,13 +415,14 @@ step_boot_config() {
         log "  Wi-Fi/BT firmware disable: SKIPPED (--keep-radios)"
         return 0
     fi
+    log "  Wi-Fi/BT firmware disable: deferred until after app install"
+}
 
-    # Hardware disables. The dtoverlay form is what raspi-config
-    # writes when you toggle "Disable Wi-Fi" / "Disable Bluetooth"
-    # in its menus, so this is the canonical knob.
+step_disable_radios_firmware() {
+    log "boot config: disable Wi-Fi / Bluetooth firmware"
+    [[ -f "$BOOT_CFG" ]] || fail "$BOOT_CFG missing"
     ensure_line "dtoverlay=disable-wifi" "$BOOT_CFG"
     ensure_line "dtoverlay=disable-bt"   "$BOOT_CFG"
-}
 
 step_modprobe_blacklist() {
     if [[ $keep_radios -eq 1 ]]; then
@@ -435,28 +451,37 @@ step_modprobe_blacklist() {
     chmod 0644 "$MODPROBE_BLACKLIST"
 }
 
-step_mask_units() {
-    log "mask console + (conditionally) radio units"
-    local to_mask=("${MASK_ALWAYS_UNITS[@]}")
-    if [[ $keep_radios -eq 0 ]]; then
-        to_mask+=("${MASK_RADIO_UNITS[@]}")
-    else
-        log "  radio units: SKIPPED (--keep-radios)"
-    fi
-
+step_mask_console_units() {
+    log "mask console units (bonnet owns tty1)"
     local unit
-    for unit in "${to_mask[@]}"; do
-        # `systemctl cat` resolves template instances (getty@tty1
-        # → getty@.service) where `list-unit-files | grep` does
-        # not. Returns 0 if systemd knows the unit, nonzero if the
-        # unit was purged or never existed; either way we won't
-        # spam errors trying to mask something that isn't there.
+    for unit in "${MASK_ALWAYS_UNITS[@]}"; do
         if systemctl cat "$unit" >/dev/null 2>&1; then
             run systemctl mask "$unit" || true
         else
             log "  $unit: not present, skipping"
         fi
     done
+}
+
+step_mask_radio_units() {
+    log "mask radio / mDNS units"
+    local unit
+    for unit in "${MASK_RADIO_UNITS[@]}"; do
+        if systemctl cat "$unit" >/dev/null 2>&1; then
+            run systemctl mask "$unit" || true
+        else
+            log "  $unit: not present, skipping"
+        fi
+    done
+}
+
+step_mask_units() {
+    step_mask_console_units
+    if [[ $keep_radios -eq 1 ]]; then
+        log "  radio units: SKIPPED (--keep-radios)"
+    else
+        log "  radio units: deferred until after app install"
+    fi
 }
 
 step_ssh() {
@@ -471,6 +496,22 @@ step_ssh() {
     # that re-enables ssh on next boot via the raspi-config helper.
     # Remove it so the disable sticks.
     run rm -f /boot/firmware/ssh /boot/firmware/ssh.txt
+}
+
+step_seal_device() {
+    if [[ $keep_radios -eq 1 && $keep_ssh -eq 1 ]]; then
+        return 0
+    fi
+    log "seal device for shipping (disable network + SSH)"
+    if [[ $keep_radios -eq 0 ]]; then
+        step_apt_purge_radios
+        step_disable_radios_firmware
+        step_modprobe_blacklist
+        step_mask_radio_units
+    fi
+    if [[ $keep_ssh -eq 0 ]]; then
+        step_ssh
+    fi
 }
 
 step_create_user() {
@@ -537,7 +578,7 @@ step_install_app() {
     run find "$APP_DIR" -type f -name '*.sh' -exec chmod 0755 {} +
     run find "$APP_DIR/scripts" -type f -name '*.py' -exec chmod 0755 {} + 2>/dev/null || true
 
-    log "  build venv at $APP_VENV"
+    log "  build venv at $APP_VENV (pip install may take several minutes on Pi Zero W)"
     if [[ ! -x "$APP_VENV/bin/python" ]]; then
         run python3 -m venv --system-site-packages "$APP_VENV"
     fi
@@ -829,9 +870,13 @@ main() {
     step_apt_install
     step_apt_purge
     step_boot_config
-    step_modprobe_blacklist
+    if [[ $keep_radios -eq 1 ]]; then
+        step_modprobe_blacklist
+    fi
     step_mask_units
-    step_ssh
+    if [[ $keep_ssh -eq 0 && $keep_radios -eq 1 ]]; then
+        step_ssh
+    fi
     step_create_user
     step_install_app
     step_install_udev
@@ -839,6 +884,7 @@ main() {
     step_bonnet_hardware
     step_usb_backup
     step_install_unit
+    step_seal_device
     step_hostname
     step_swap_off
     step_rng
