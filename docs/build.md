@@ -94,10 +94,10 @@ and the systemd example unit work out of the box.
 
 Or rsync + bootstrap manually — see the include above.
 
-`sync-to-pi.sh` uses [`scripts/rsync-pi-excludes.txt`](../scripts/rsync-pi-excludes.txt)
-and runs [`scripts/verify-pi-payload.sh`](../scripts/verify-pi-payload.sh) on the Pi
+`sync-to-pi.sh` uses [`scripts/rsync-pi-excludes.txt`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/rsync-pi-excludes.txt)
+and runs [`scripts/verify-pi-payload.sh`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/verify-pi-payload.sh) on the Pi
 after every sync. The same exclude list is enforced when
-[`deploy/provision-pi.sh`](../deploy/provision-pi.sh) installs to `/opt/piwallet`.
+[`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh) installs to `/opt/piwallet`.
 
 After bootstrap completes, smoke-test:
 

@@ -36,7 +36,7 @@
 #                 [--image-channel CH] [--keep-ssh] [--keep-radios] [--dry-run]
 #
 #   --release-version VER   Baked into /etc/piwalletsv-release (default:
-#                           PIWALLETSV_RELEASE_VERSION or 0.1.0-r1).
+#                           PIWALLETSV_RELEASE_VERSION or 0.1.0-r2).
 #   --image-channel CH      Image channel label (default:
 #                           PIWALLETSV_IMAGE_CHANNEL or round1-zero-w).
 #
@@ -112,6 +112,8 @@ readonly APT_INSTALL=(
     # to HeadlessDisplay at boot (panel stays blank, no error visible).
     python3-dev
     build-essential
+    # lgpio bindings so Blinka uses gpiochip nodes instead of /dev/mem.
+    python3-rpi-lgpio
 )
 
 # Packages we PURGE — anything that could touch a radio or speaker.
@@ -170,7 +172,7 @@ readonly MASK_ALWAYS_UNITS=(
 # ============================================================
 
 src_dir=""
-release_version="${PIWALLETSV_RELEASE_VERSION:-0.1.0-r1}"
+release_version="${PIWALLETSV_RELEASE_VERSION:-0.1.0-r2}"
 image_channel="${PIWALLETSV_IMAGE_CHANNEL:-round1-zero-w}"
 keep_ssh=0
 keep_radios=0
@@ -201,6 +203,8 @@ done
 # ============================================================
 # Logging
 # ============================================================
+
+readonly LOG_PREFIX="[provision-pi]"
 
 log()  { printf '%s %s\n' "$LOG_PREFIX" "$*"; }
 warn() { printf '%s WARN: %s\n' "$LOG_PREFIX" "$*" >&2; }
@@ -620,11 +624,52 @@ step_install_unit() {
 
 step_hostname() {
     log "set hostname to $HOSTNAME_NEW"
-    run hostnamectl set-hostname "$HOSTNAME_NEW"
+    # Imager writes hostname into cloud-init user-data on the boot
+    # partition; without patching it, the next reboot reverts our change.
+    local user_data="/boot/firmware/user-data"
+    if [[ -f "$user_data" ]] && grep -q '^hostname:' "$user_data" 2>/dev/null; then
+        if [[ $dry_run -eq 1 ]]; then
+            log "  DRY: patch $user_data hostname -> $HOSTNAME_NEW"
+        else
+            sed -i -E "s/^hostname:.*/hostname: ${HOSTNAME_NEW}/" "$user_data"
+            log "  patched $user_data"
+        fi
+    fi
+    if [[ $dry_run -eq 1 ]]; then
+        log "  DRY: hostnamectl set-hostname $HOSTNAME_NEW"
+    else
+        printf '%s\n' "$HOSTNAME_NEW" > /etc/hostname
+        hostnamectl set-hostname "$HOSTNAME_NEW"
+    fi
     # /etc/hosts often has the old hostname pinned to 127.0.1.1; fix
     # it so name lookups inside the box don't fail.
     if [[ -f /etc/hosts ]] && [[ $dry_run -eq 0 ]]; then
         sed -i -E "s/127\\.0\\.1\\.1\\s+.*/127.0.1.1\t${HOSTNAME_NEW}/" /etc/hosts
+    fi
+}
+
+step_install_udev() {
+    log "install udev rules for spi/gpio device access"
+    local rules_src=""
+    if [[ -n "$src_dir" && -f "$src_dir/deploy/udev/99-piwallet-hardware.rules" ]]; then
+        rules_src="$src_dir/deploy/udev/99-piwallet-hardware.rules"
+    elif [[ -f "$APP_DIR/deploy/udev/99-piwallet-hardware.rules" ]]; then
+        rules_src="$APP_DIR/deploy/udev/99-piwallet-hardware.rules"
+    else
+        fail "missing deploy/udev/99-piwallet-hardware.rules"
+    fi
+    run install -m 0644 "$rules_src" /etc/udev/rules.d/99-piwallet-hardware.rules
+    run udevadm control --reload-rules
+    run udevadm trigger -c add -s spidev || true
+    run udevadm trigger -c add -s gpio || true
+    # Apply immediately when nodes already exist (builder images).
+    if [[ -e /dev/spidev0.0 ]] && [[ $dry_run -eq 0 ]]; then
+        chgrp spi /dev/spidev0.0 2>/dev/null || true
+        chmod 0660 /dev/spidev0.0 2>/dev/null || true
+    fi
+    if [[ -e /dev/gpiomem ]] && [[ $dry_run -eq 0 ]]; then
+        chgrp gpio /dev/gpiomem 2>/dev/null || true
+        chmod 0660 /dev/gpiomem 2>/dev/null || true
     fi
 }
 
@@ -731,8 +776,8 @@ PIWALLETSV_IMAGE_ID=${image_id}
 PIWALLETSV_APP_TREE_SHA256=${app_tree_sha256}
 PIWALLETSV_GIT_COMMIT=${git_commit}
 PIWALLETSV_BUILT_AT=${built_at}
-PIWALLETSV_BOARD_MODEL=${model}
-PIWALLETSV_OS=${os_pretty}
+PIWALLETSV_BOARD_MODEL="${model}"
+PIWALLETSV_OS="${os_pretty}"
 PIWALLETSV_ARCH=${arch}
 EOF
     chmod 0644 "$RELEASE_FILE"
@@ -787,6 +832,7 @@ main() {
     step_ssh
     step_create_user
     step_install_app
+    step_install_udev
     step_release_metadata
     step_bonnet_hardware
     step_usb_backup

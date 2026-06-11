@@ -1,0 +1,11 @@
+# PiWalletSV — device node permissions for the runtime user (pwsv).
+# Installed by deploy/provision-pi.sh; reloaded via udevadm trigger.
+
+# Bonnet ST7789 panel (SPI CE0)
+SUBSYSTEM=="spidev", GROUP="spi", MODE="0660"
+
+# Legacy BCM GPIO via /dev/gpiomem (Blinka / RPi.GPIO on Pi Zero class boards)
+KERNEL=="gpiomem", GROUP="gpio", MODE="0660"
+
+# libgpiod character devices (preferred on newer Pi OS images)
+SUBSYSTEM=="gpio", GROUP="gpio", MODE="0660"

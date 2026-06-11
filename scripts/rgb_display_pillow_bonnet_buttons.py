@@ -33,6 +33,7 @@ not support PIL/pillow (python imaging library)!
 """
 
 import random
+import sys
 import time
 from colorsys import hsv_to_rgb
 
@@ -118,6 +119,13 @@ button_outline = "#FFFFFF"
 
 fnt = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30)
 
+_run_seconds = 0.0
+if len(sys.argv) >= 3 and sys.argv[1] == "--timeout":
+    _run_seconds = float(sys.argv[2])
+elif len(sys.argv) >= 2 and sys.argv[1].startswith("--timeout="):
+    _run_seconds = float(sys.argv[1].split("=", 1)[1])
+_deadline = time.monotonic() + _run_seconds if _run_seconds > 0 else None
+
 while True:
     up_fill = 0
     if not button_U.value:  # up pressed
@@ -166,3 +174,5 @@ while True:
     disp.image(image)
 
     time.sleep(0.01)
+    if _deadline is not None and time.monotonic() >= _deadline:
+        break

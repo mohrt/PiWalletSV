@@ -48,7 +48,7 @@ From the dev machine:
 ```
 
 Excludes and post-sync verification are defined in
-[`scripts/rsync-pi-excludes.txt`](../../scripts/rsync-pi-excludes.txt)
+[`scripts/rsync-pi-excludes.txt`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/rsync-pi-excludes.txt)
 (drops `site/`, `companion/`, `docs/`, `tests/`, dev caches, vault state, …).
 
 On the Pi:
