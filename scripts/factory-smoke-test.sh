@@ -128,9 +128,9 @@ fi
 
 if [[ -f /etc/piwalletsv-release ]]; then
     log "== release metadata =="
-    # shellcheck disable=SC1091
-    . /etc/piwalletsv-release
-    log "  version=${PIWALLETSV_VERSION:-?} channel=${PIWALLETSV_IMAGE_CHANNEL:-?} image_id=${PIWALLETSV_IMAGE_ID:-?}"
+    log "  version=$(grep -E '^PIWALLETSV_VERSION=' /etc/piwalletsv-release | cut -d= -f2-)"
+    log "  channel=$(grep -E '^PIWALLETSV_IMAGE_CHANNEL=' /etc/piwalletsv-release | cut -d= -f2-)"
+    log "  image_id=$(grep -E '^PIWALLETSV_IMAGE_ID=' /etc/piwalletsv-release | cut -d= -f2-)"
 else
     warn "missing /etc/piwalletsv-release"
 fi

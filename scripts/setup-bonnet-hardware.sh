@@ -94,10 +94,14 @@ step_blinka() {
         log "Blinka: SKIPPED"
         return 0
     fi
-    if blinka_ready; then
-        log "Blinka: board module already importable"
-        mark_blinka_done
+    # `import board` succeeding after pip install is not enough — raspi-blinka.py
+    # must run once to pick lgpio/gpiod over root-only /dev/mem (RPi.GPIO).
+    if [[ -f "$STATE_DIR/blinka.done" ]] && blinka_ready; then
+        log "Blinka: already configured ($STATE_DIR/blinka.done)"
         return 0
+    fi
+    if blinka_ready; then
+        log "Blinka: importable but not configured — running raspi-blinka.py"
     fi
 
     log "run raspi-blinka.py"

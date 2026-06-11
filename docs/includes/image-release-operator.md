@@ -7,7 +7,7 @@ flash from [Download](../download.md) on GitHub Releases.
 
 - **Hardware:** Raspberry Pi **Zero W / Zero WH** + Adafruit **4506** bonnet + **OV5647**
 - **OS base:** Raspberry Pi OS **Lite 32-bit** (Bookworm or Trixie)
-- **Provisioner:** [`deploy/provision-pi.sh`](../../deploy/provision-pi.sh)
+- **Provisioner:** [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
 - **Version tag:** `0.1.0-r1` → Git tag `v0.1.0-r1`
 
 ## Payload rules (dev and production)
@@ -20,12 +20,12 @@ Every Pi tree — dev checkout (`~/PiWallet`) and sealed install (`/opt/piwallet
 | `piwallet/`, `scripts/`, `deploy/`, `pyproject.toml` | `companion/`, `hardware/`, `docs/`, `tests/`, `releases/`, `site/`, dev caches, local vault state |
 
 Canonical exclude list:
-[`scripts/rsync-pi-excludes.txt`](../../scripts/rsync-pi-excludes.txt)
+[`scripts/rsync-pi-excludes.txt`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/rsync-pi-excludes.txt)
 
 | Step | Tool | What it does |
 |------|------|----------------|
-| Workstation → Pi | [`scripts/sync-to-pi.sh`](../../scripts/sync-to-pi.sh) | `rsync` with excludes + `verify-pi-payload.sh` on the Pi |
-| `--src` → `/opt/piwallet` | [`deploy/provision-pi.sh`](../../deploy/provision-pi.sh) | Same excludes + verify before venv install |
+| Workstation → Pi | [`scripts/sync-to-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/sync-to-pi.sh) | `rsync` with excludes + `verify-pi-payload.sh` on the Pi |
+| `--src` → `/opt/piwallet` | [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh) | Same excludes + verify before venv install |
 | Git clone fallback | `provision-pi.sh` | `prune-pi-payload.sh` then verify |
 
 **Never** raw `rsync` without `--exclude-from=scripts/rsync-pi-excludes.txt`.

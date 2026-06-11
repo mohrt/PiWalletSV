@@ -35,9 +35,9 @@ Or manually:
 ssh user@piwallet.local 'cd ~/PiWallet && bash scripts/bootstrap-pi-dev.sh'
 ```
 
-Excludes are listed in [`scripts/rsync-pi-excludes.txt`](../../scripts/rsync-pi-excludes.txt)
+Excludes are listed in [`scripts/rsync-pi-excludes.txt`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/rsync-pi-excludes.txt)
 (vault state, dev caches, companion PWA, docs site, hardware CAD, tests, …).
-`sync-to-pi.sh` runs [`scripts/verify-pi-payload.sh`](../../scripts/verify-pi-payload.sh)
+`sync-to-pi.sh` runs [`scripts/verify-pi-payload.sh`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/verify-pi-payload.sh)
 on the Pi after each sync; production `provision-pi.sh` runs the same check before pip.
 
 **Include `scripts/`** in the sync. Do not exclude it.
