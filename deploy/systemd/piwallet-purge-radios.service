@@ -1,0 +1,20 @@
+# PiWalletSV — purge Wi-Fi/BT userspace on first boot after sealed provision.
+#
+# Do not purge wpasupplicant during live provision over Wi-Fi: dpkg hangs
+# stopping wpa_supplicant while SSH uses wlan0. Provision schedules this
+# unit instead; radios are already firmware-disabled and masked.
+[Unit]
+Description=PiWalletSV one-time radio package purge
+Documentation=https://piwalletsv.com/operate/
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target
+ConditionPathExists=/var/lib/piwallet/radio-purge.pending
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/piwallet/deploy/purge-radio-packages.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -17,6 +17,9 @@ fail() {
 
 REQUIRED=(
     pyproject.toml
+    deploy/provision-pi.sh
+    deploy/purge-radio-packages.sh
+    deploy/systemd/piwallet-purge-radios.service
     deploy/systemd/piwallet-bonnet.service
     piwallet/__init__.py
     scripts/install-piwallet-deps.sh

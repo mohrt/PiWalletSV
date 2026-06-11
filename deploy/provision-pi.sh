@@ -11,8 +11,9 @@
 #     Zero WH** (ARMv6). Pi Zero 2 W (64-bit) is also supported.
 #   * The bonnet hardware (TFT + buttons + camera) is wired up.
 #   * Network is reachable for the duration of provisioning so apt
-#     can fetch packages — *the network is then disabled forever as
-#     the last step of provisioning*.
+#     can fetch packages. Radio *packages* are purged on first boot
+#     after seal (not over a live Wi-Fi SSH session — see
+#     deploy/purge-radio-packages.sh).
 #   * This script is run as root.
 #
 # The result:
@@ -24,9 +25,8 @@
 #   * /home/pwsv/.piwallet/ pre-created, the only writable location
 #     the runtime sees.
 #   * Wi-Fi and Bluetooth disabled at four layers: firmware overlay,
-#     modprobe blacklist, masked services, purged userspace
-#     packages. SSH off. Audio off. mDNS / DNS resolver disabled —
-#     the device cannot reach the network even if it had one.
+#     modprobe blacklist, masked services, and (on first boot after
+#     seal) purged userspace packages. SSH off. Audio off.
 #   * SPI / I2C / camera enabled.
 #   * piwallet-bonnet.service installed, enabled, owns tty1.
 #   * journald bounded so a misbehaving log can't fill the SD card.
@@ -335,31 +335,23 @@ step_apt_purge_audio() {
     fi
 }
 
-step_apt_purge_radios() {
-    log "apt purge radio packages"
-    local radio_pkgs=(
-        wireless-tools
-        wpasupplicant
-        bluez
-        bluez-firmware
-        pi-bluetooth
-        libnss-mdns
-        avahi-daemon
-        avahi-utils
-    )
-    local installed=()
-    local pkg
-    for pkg in "${radio_pkgs[@]}"; do
-        if dpkg -s "$pkg" >/dev/null 2>&1; then
-            installed+=("$pkg")
-        fi
-    done
-    if [[ ${#installed[@]} -gt 0 ]]; then
-        run env DEBIAN_FRONTEND=noninteractive apt-get purge -y "${installed[@]}"
-    else
-        log "  (no radio packages installed)"
+step_schedule_radio_purge_on_boot() {
+    log "schedule radio package purge on first boot (not over live Wi-Fi SSH)"
+    local script_src="${APP_DIR}/deploy/purge-radio-packages.sh"
+    local unit_src="${APP_DIR}/deploy/systemd/piwallet-purge-radios.service"
+    [[ -f "$script_src" ]] || fail "missing $script_src"
+    [[ -f "$unit_src" ]] || fail "missing $unit_src"
+    if [[ $dry_run -eq 1 ]]; then
+        log "  DRY: install purge script + piwallet-purge-radios.service"
+        return 0
     fi
-    run env DEBIAN_FRONTEND=noninteractive apt-get autoremove -y --purge
+    run install -m 0755 "$script_src" "${APP_DIR}/deploy/purge-radio-packages.sh"
+    run install -m 0644 "$unit_src" "$UNIT_DST_DIR/piwallet-purge-radios.service"
+    run install -d -m 0755 /var/lib/piwallet
+    run touch /var/lib/piwallet/radio-purge.pending
+    run rm -f /var/lib/piwallet/radio-purge.done
+    run systemctl daemon-reload
+    run systemctl enable piwallet-purge-radios.service
 }
 
 step_apt_purge() {
@@ -505,10 +497,10 @@ step_seal_device() {
     fi
     log "seal device for shipping (disable network + SSH)"
     if [[ $keep_radios -eq 0 ]]; then
-        step_apt_purge_radios
         step_disable_radios_firmware
         step_modprobe_blacklist
         step_mask_radio_units
+        step_schedule_radio_purge_on_boot
     fi
     if [[ $keep_ssh -eq 0 ]]; then
         step_ssh
@@ -919,16 +911,16 @@ WITHOUT --keep-radios to produce the actual sealed image.
 EOF
     else
         cat <<'EOF'
-SEALED MODE — radios firmware-disabled. After reboot the device has
-no network. Verify on the bonnet display itself, or by attaching a
-USB keyboard + HDMI before rebooting and switching to a tty:
+SEALED MODE — radios firmware-disabled. Radio packages purge on the
+next boot (piwallet-purge-radios.service) — do not purge over Wi-Fi SSH.
+After reboot the device has no network. Verify on the bonnet display:
 
-  * rfkill list                           # nothing or all blocked
-  * lsmod | grep -E 'brcmfmac|bluetooth'  # empty
-  * ip link                               # only 'lo'
-  * systemctl status piwallet-bonnet      # active (running)
+  * systemctl status piwallet-purge-radios  # exited successfully once
+  * systemctl status piwallet-bonnet        # active (running)
+  * cat /var/lib/piwallet/radio-purge.done  # exists after first boot
 
-There is no SSH path back into a sealed device — that's the point.
+For image capture: reboot after seal, wait for bonnet disclaimer, power
+off, then dd (packages are purged during that first boot).
 EOF
     fi
     cat <<'EOF'
