@@ -423,6 +423,7 @@ step_disable_radios_firmware() {
     [[ -f "$BOOT_CFG" ]] || fail "$BOOT_CFG missing"
     ensure_line "dtoverlay=disable-wifi" "$BOOT_CFG"
     ensure_line "dtoverlay=disable-bt"   "$BOOT_CFG"
+}
 
 step_modprobe_blacklist() {
     if [[ $keep_radios -eq 1 ]]; then
