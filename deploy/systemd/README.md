@@ -4,7 +4,7 @@ This directory ships **two** unit files for two deployment modes:
 
 | File | Use it when | User | App location | Hardening |
 | ---- | ----------- | ---- | ------------ | --------- |
-| `piwallet-bonnet.service` | SD-card image (`provision-pi.sh` installs this) | `pwsv` | `/opt/piwallet` | Full (`ProtectSystem=strict`, `MemoryDenyWriteExecute`, capability set emptied, `PrivateNetwork=yes`, `ReadWritePaths=/home/pwsv/.piwallet /mnt/piwallet-usb`) |
+| `piwallet-bonnet.service` | SD-card image (`provision-pi.sh` installs this) | `pwsv` | `/opt/piwallet` | Full (`ProtectSystem=strict`, no `MemoryDenyWriteExecute` — libcamera needs it, capability set emptied, `PrivateNetwork=yes`, `ReadWritePaths=/home/pwsv/.piwallet /mnt/piwallet-usb`) |
 | `piwallet-usb-mount.service` | SD-card image (`provision-pi.sh` → `step_usb_backup`) | `root` | `/opt/piwallet/.venv/bin/python -m piwallet.backup.usb_mount_socket` | Root-only Unix socket at `/run/piwallet/usb-mount.sock` (group `pwsv`) so the bonnet can mount FAT/exFAT sticks under `/mnt/piwallet-usb` despite `NoNewPrivileges=yes` |
 | `piwallet-bonnet.service.example` | Developer Pi where the source tree lives in `$HOME` and you run as your own user | dev's user (`pi` etc.) | `$HOME/PiWallet` | Minimal (just `Restart=always` + log-level env vars) |
 

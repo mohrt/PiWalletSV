@@ -1112,6 +1112,25 @@ def diag_gpio() -> None:
 
 
 @diag.command(
+    "camera",
+    help=(
+        "Capture one entropy JPEG still via Picamera2 (preview + capture_array). "
+        "Use as pwsv on the Pi to verify the camera before testing bonnet Photo entropy."
+    ),
+)
+def diag_camera() -> None:
+    from piwallet.bonnet.camera_still import capture_still_jpeg_bytes
+
+    try:
+        blob = capture_still_jpeg_bytes()
+    except RuntimeError as exc:
+        click.echo(f"FAIL  {exc}", err=True)
+        sys.exit(1)
+    click.echo(f"PASS  captured {len(blob)} byte JPEG")
+    sys.exit(0)
+
+
+@diag.command(
     "vault",
     help=(
         "Check that the vault file is present, CBOR-parseable, and at a "

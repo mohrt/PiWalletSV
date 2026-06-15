@@ -2,6 +2,25 @@
   "schema": 1,
   "releases": [
     {
+      "version": "0.1.0-r3",
+      "tag": "v0.1.0-r3",
+      "channel": "round1-zero-w",
+      "hardware": "Raspberry Pi Zero W / Zero WH (32-bit armv6)",
+      "bonnet": "Adafruit 4506",
+      "camera": "ArduCam OV5647",
+      "github_release": "https://github.com/mohrt/PiWalletSV/releases/tag/v0.1.0-r3",
+      "assets": {
+        "image_xz": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/piwalletsv-0.1.0-r3.img.xz",
+        "image_asc": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/piwalletsv-0.1.0-r3.img.xz.asc",
+        "sha256sums": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/SHA256SUMS",
+        "sha256sums_asc": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/SHA256SUMS.asc"
+      },
+      "sha256": null,
+      "image_id": null,
+      "published_at": null,
+      "notes": "Alpha test build — 8 GB-compatible image (PiShrink after capture). Fill sha256 and image_id after local build; set published_at when GitHub Release goes live."
+    },
+    {
       "version": "0.1.0-r2",
       "tag": "v0.1.0-r2",
       "channel": "round1-zero-w",

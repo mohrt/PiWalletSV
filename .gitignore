@@ -50,6 +50,9 @@ enclosure/
 local_*.cbor
 scratch/
 
+# Captured SD images (local alpha/beta builds — publish via GitHub Releases)
+images/
+
 companion/node_modules/
 companion/dist/
 node_modules/

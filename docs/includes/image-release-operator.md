@@ -8,7 +8,8 @@ flash from [Download](../download.md) on GitHub Releases.
 - **Hardware:** Raspberry Pi **Zero W / Zero WH** + Adafruit **4506** bonnet + **OV5647**
 - **OS base:** Raspberry Pi OS **Lite 32-bit** (Bookworm or Trixie)
 - **Provisioner:** [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
-- **Version tag:** `0.1.0-r1` → Git tag `v0.1.0-r1`
+- **Published image:** ≤ 8 GiB uncompressed (fits 8 GB microSD; burns to larger cards too)
+- **Version tag:** `0.1.0-r3` → Git tag `v0.1.0-r3`
 
 ## Payload rules (dev and production)
 
@@ -57,7 +58,7 @@ On the Pi:
 cd ~/PiWallet
 sudo deploy/provision-pi.sh \
   --src "$(pwd)" \
-  --release-version 0.1.0-r1 \
+  --release-version 0.1.0-r3 \
   --image-channel round1-zero-w \
   --keep-ssh --keep-radios
 sudo reboot
@@ -83,10 +84,12 @@ Re-flash a **fresh** SD (or wipe and re-provision) **without** builder flags:
 # sync again if needed, then on the Pi:
 sudo deploy/provision-pi.sh \
   --src ~/PiWallet \
-  --release-version 0.1.0-r1 \
+  --release-version 0.1.0-r3 \
   --image-channel round1-zero-w
 sudo reboot
 # Bonnet shows disclaimer on tty1; no SSH; radios off.
+# Provision scrubs Imager Wi-Fi/network files; ~/PiWallet dev copy removed
+# (runtime is /opt/piwallet only); login user kept for console.
 ```
 
 Note **Image ID** from `/etc/piwalletsv-release` (or
@@ -97,19 +100,40 @@ Note **Image ID** from `/etc/piwalletsv-release` (or
 Power off the Pi. Insert the SD into **your** reader on Mac/Linux:
 
 ```bash
-# macOS example — replace rdiskN with the raw SD device
-sudo dd if=/dev/rdiskN bs=4m conv=sync,noerror status=progress \
-  | xz -T0 > piwalletsv-0.1.0-r1.img.xz
+# macOS — replace rdiskN with the raw whole-disk device
+diskutil unmountDisk /dev/diskN
+sudo dd if=/dev/rdiskN of=piwalletsv-0.1.0-r3.img bs=4m conv=sync,noerror status=progress
+```
 
-shasum -a 256 piwalletsv-0.1.0-r1.img.xz | tee SHA256SUMS
-gpg --armor --detach-sign piwalletsv-0.1.0-r1.img.xz
+Capture to an uncompressed `.img` first (not straight to `.xz`) so the shrink
+step can resize partitions.
+
+## 2b. Shrink for 8 GB compatibility
+
+```bash
+chmod +x scripts/shrink-sd-image.sh
+./scripts/shrink-sd-image.sh piwalletsv-0.1.0-r3.img
+# Replaces input in-place with a shrunk copy (or use -o other.img)
+
+xz -T0 piwalletsv-0.1.0-r3.img
+xz -l piwalletsv-0.1.0-r3.img.xz    # uncompressed must be ≤ ~8 GiB
+```
+
+On **macOS**, the shrink script runs PiShrink inside Docker (`--privileged`).
+On **Linux**, install PiShrink natively or set `PISHRINK=/path/to/pishrink`.
+
+## 2c. Checksum and sign
+
+```bash
+shasum -a 256 piwalletsv-0.1.0-r3.img.xz | tee SHA256SUMS
+gpg --armor --detach-sign piwalletsv-0.1.0-r3.img.xz
 gpg --armor --detach-sign SHA256SUMS
 ```
 
 ## 3. Publish GitHub Release
 
-1. Tag the source commit: `git tag -s v0.1.0-r1 -m "Pi Zero W round-one image"`
-2. Create a [GitHub Release](https://github.com/mohrt/PiWalletSV/releases) `v0.1.0-r1`
+1. Tag the source commit: `git tag -s v0.1.0-r3 -m "Pi Zero W alpha r3 image"`
+2. Create a [GitHub Release](https://github.com/mohrt/PiWalletSV/releases) `v0.1.0-r3`
 3. Upload: `.img.xz`, `.img.xz.asc`, `SHA256SUMS`, `SHA256SUMS.asc`
 4. Update [`docs/security.md`](../security.md#release-key) with the release-key fingerprint
 5. Update [`releases/releases.json`](../../releases/releases.json) `sha256` field after upload
@@ -121,7 +145,7 @@ asset URLs (see mkdocs `firmware_release_base` in `mkdocs.yml`).
 
 For each kit microSD (after the GitHub release is live):
 
-1. Flash `piwalletsv-0.1.0-r1.img.xz` with Raspberry Pi Imager (**Use custom**)
+1. Flash `piwalletsv-0.1.0-r3.img.xz` with Raspberry Pi Imager (**Use custom**)
 2. Optional spot-check: boot once, run smoke test, then re-flash if you booted
 3. Ship with **SD adapter** (customer uses **their own** USB reader to re-flash)
 4. Print kit insert with **Firmware version** + **Image ID** matching the release
@@ -137,4 +161,4 @@ see [Verify your SD card](../user-manual.md#verify-sd-card-on-arrival).
 | Excludes | `rsync-pi-excludes.txt` | same file |
 | Verify | `verify-pi-payload.sh` after rsync | after rsync/prune, before pip |
 | SSH / Wi‑Fi | unchanged | off unless `--keep-ssh` / `--keep-radios` |
-| User | your login | `pwsv` (locked, no shell) |
+| User | your login | `pwsv` (locked, no shell) + Imager login for console (e.g. `pisv`) |

@@ -583,6 +583,14 @@ def run_bonnet(
 
     prepare_runtime_for_bonnet()
 
+    # Pre-warm libcamera on the main thread before any worker opens Picamera2
+    # (see piwallet.bonnet.sign_scan._preflight_camera_imports).
+    try:
+        import libcamera  # type: ignore[import-not-found]  # noqa: F401
+        import picamera2  # type: ignore[import-not-found]  # noqa: F401
+    except ImportError:
+        log.warning("camera stack not importable at bonnet startup")
+
     if not _acquire_display_lock():
         log.error(
             "Another piwallet bonnet process is already running "
