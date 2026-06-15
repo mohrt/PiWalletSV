@@ -428,6 +428,18 @@ step_boot_config() {
     # Hardware enables.
     ensure_line "dtparam=spi=on"        "$BOOT_CFG"
     ensure_line "dtparam=i2c_arm=on"    "$BOOT_CFG"
+    # Force HDMI output even if no monitor detected at boot — needed on
+    # Pi Zero W for tty2 (HDMI keyboard debug console) to work reliably.
+    ensure_line "hdmi_force_hotplug=1"  "$BOOT_CFG"
+    # Switch full KMS (vc4-kms-v3d) to fake/transitional KMS (vc4-fkms-v3d).
+    # Full KMS requires a monitor connected at DRM driver init time; without
+    # one it logs "Cannot find any crtc or sizes" and leaves no /dev/fb0,
+    # making tty2 on HDMI unusable. fkms uses the firmware framebuffer path
+    # so /dev/fb0 is always present and hotplug works reliably on Pi Zero W.
+    sed -i 's/dtoverlay=vc4-kms-v3d/dtoverlay=vc4-fkms-v3d/' "$BOOT_CFG"
+    # disable_fw_kms_setup=1 is a full-KMS companion; fkms doesn't need it
+    # and leaving it in can suppress the firmware framebuffer setup.
+    remove_boot_config_line "disable_fw_kms_setup=1" "$BOOT_CFG"
     # Camera: use libcamera auto-detect (matches a stock Imager SD and the
     # kit OV5647 on Pi Zero W in practice). Do NOT append camera_auto_detect=0
     # on top of Imager's camera_auto_detect=1 — the last line wins and forced
