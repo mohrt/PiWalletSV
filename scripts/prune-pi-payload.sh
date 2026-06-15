@@ -20,8 +20,13 @@ prune_literal() {
     local rel=$1
     local target="$ROOT/$rel"
     if [[ -e "$target" ]]; then
-        rm -rf "$target"
-        echo "prune-pi-payload: removed $rel"
+        if rm -rf "$target" 2>/dev/null; then
+            echo "prune-pi-payload: removed $rel"
+        elif command -v sudo &>/dev/null && sudo -n rm -rf "$target" 2>/dev/null; then
+            echo "prune-pi-payload: removed (sudo) $rel"
+        else
+            echo "prune-pi-payload: skip (permission denied) $rel" >&2
+        fi
     fi
 }
 
@@ -29,8 +34,11 @@ prune_glob() {
     local pattern=$1
     local count=0
     while IFS= read -r -d '' path; do
-        rm -rf "$path"
-        count=$((count + 1))
+        if rm -rf "$path" 2>/dev/null; then
+            count=$((count + 1))
+        elif command -v sudo &>/dev/null && sudo -n rm -rf "$path" 2>/dev/null; then
+            count=$((count + 1))
+        fi
     done < <(find "$ROOT" -name "$pattern" -print0 2>/dev/null)
     if [[ $count -gt 0 ]]; then
         echo "prune-pi-payload: removed $count path(s) matching $pattern"

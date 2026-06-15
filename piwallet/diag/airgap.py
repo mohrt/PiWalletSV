@@ -56,6 +56,20 @@ list. The other five checks see the host through namespaced-but-
 unrestricted paths (``/proc/modules``, ``/sys/class/rfkill``,
 ``/etc/modprobe.d``, ``/boot/firmware/config.txt``, and ``systemctl``
 over AF_UNIX), so they're honest from either context.
+
+Note on ``/sys/class/rfkill``: when the radio firmware overlays
+(``dtoverlay=disable-wifi``, ``dtoverlay=disable-bt``) completely
+prevent the radio hardware from being registered, the kernel never
+creates any ``rfkill*`` entries. ``_read_rfkill()`` returns an empty
+list, which ``check_rfkill_all_blocked`` correctly treats as PASS
+("no rfkill devices registered"). The bonnet screen aggregates rfkill
+with the modules, services, boot_config, and blacklist checks — if
+all of those pass, the aggregate is ``ok=True`` (shown as ``OK``).
+The ``--`` display means at least one sub-check returned ``None``
+(data source unavailable), which happens when ``/sys/class/rfkill``
+is not accessible from inside the bonnet's network namespace on some
+kernel/systemd versions.  Adding ``/sys/class/rfkill`` to
+``ReadOnlyPaths`` in the unit file resolves this.
 """
 
 from __future__ import annotations

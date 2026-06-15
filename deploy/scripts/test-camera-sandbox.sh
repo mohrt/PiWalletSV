@@ -10,6 +10,12 @@ if [[ ! -x "$PIWALLET" ]]; then
   exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=camera-exclusive-access.sh
+source "$SCRIPT_DIR/camera-exclusive-access.sh"
+prepare_camera_exclusive_access
+trap restore_camera_exclusive_access EXIT
+
 _run() {
   local label="$1"
   shift

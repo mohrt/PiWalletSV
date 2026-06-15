@@ -72,7 +72,7 @@ set -euo pipefail
 readonly RUNTIME_USER="pwsv"
 readonly RUNTIME_HOME="/home/${RUNTIME_USER}"
 readonly RUNTIME_STATE_DIR="${RUNTIME_HOME}/.piwallet"
-readonly RUNTIME_GROUPS="spi,gpio,video,i2c,dialout"
+readonly RUNTIME_GROUPS="spi,gpio,video,i2c,dialout,render"
 readonly APP_DIR="/opt/piwallet"
 readonly APP_VENV="${APP_DIR}/.venv"
 readonly APP_REPO="https://github.com/mohrt/PiWalletSV.git"
@@ -751,6 +751,7 @@ step_install_udev() {
     run udevadm control --reload-rules
     run udevadm trigger -c add -s spidev || true
     run udevadm trigger -c add -s gpio || true
+    run udevadm trigger -c add -s dma_heap || true
     # Apply immediately when nodes already exist (builder images).
     if [[ -e /dev/spidev0.0 ]] && [[ $dry_run -eq 0 ]]; then
         chgrp spi /dev/spidev0.0 2>/dev/null || true

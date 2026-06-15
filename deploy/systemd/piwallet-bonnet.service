@@ -41,12 +41,20 @@ StartLimitBurst=5
 Type=simple
 User=pwsv
 Group=pwsv
+# Run on tty1 so the bonnet UI owns the primary console. TTYVTDisallocate=no
+# keeps the VT framebuffer alive when the service exits/restarts — without
+# this the vc4 HDMI driver blanks tty2 on some Pi Zero W kernels because
+# the console is reset during VT deallocation.
+TTYPath=/dev/tty1
+TTYReset=no
+TTYVHangup=no
+TTYVTDisallocate=no
 # Supplementary groups for hardware access. spi/gpio for the bonnet
 # panel + buttons, video for /dev/video0 (camera), i2c for the
 # joystick controller, dialout sometimes shows up on rpi-imager
 # images for serial UARTs the user never uses — kept to avoid
 # surprises if someone enables UART for diagnostics.
-SupplementaryGroups=spi gpio video i2c dialout
+SupplementaryGroups=spi gpio video i2c dialout render
 
 WorkingDirectory=/home/pwsv
 
@@ -126,6 +134,11 @@ ProtectHostname=yes
 # restrict to AF_UNIX only or Picamera2 may see no camera (IndexError).
 PrivateNetwork=yes
 RestrictAddressFamilies=AF_UNIX AF_NETLINK
+# piwallet diag airgap reads /sys/class/rfkill and /proc/modules from inside
+# this unit to show Wi-Fi/BT status on the bonnet screen. PrivateNetwork=yes
+# can hide /sys/class/rfkill on some kernel versions; explicitly allow it
+# read-only so the airgap check returns OK (not inconclusive "--").
+ReadOnlyPaths=/sys/class/rfkill /proc/modules /etc/modprobe.d /boot/firmware/config.txt
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
