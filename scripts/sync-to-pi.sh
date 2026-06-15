@@ -45,16 +45,27 @@ done
 
 [[ -n "$REMOTE" ]] || usage
 
+CTRL=$(mktemp -u "${TMPDIR:-/tmp}/sync-to-pi.XXXX")
+cleanup_ssh() {
+    ssh -S "$CTRL" -O exit "$REMOTE" 2>/dev/null || true
+}
+trap cleanup_ssh EXIT
+
+# One SSH login for mkdir, rsync, prune, and verify (password or key once).
+ssh -M -S "$CTRL" -f -N "$REMOTE"
+export SYNC_PI_SSH_SOCKET="$CTRL"
+export RSYNC_RSH="ssh -S ${CTRL}"
+
 echo "rsync → ${REMOTE}:${REMOTE_PATH}/ (allowlist)"
 bash "$ROOT/scripts/rsync-pi-payload.sh" "$ROOT" "${REMOTE}:${REMOTE_PATH}/"
 
 echo "prune stale payload artifacts on Pi..."
-ssh -t "$REMOTE" "sudo bash ${REMOTE_PATH}/scripts/prune-pi-payload.sh ${REMOTE_PATH}"
+ssh -S "$CTRL" "$REMOTE" "bash ${REMOTE_PATH}/scripts/prune-pi-payload.sh ${REMOTE_PATH}"
 
 echo "verify remote payload..."
-ssh "$REMOTE" "bash ${REMOTE_PATH}/scripts/verify-pi-payload.sh ${REMOTE_PATH}"
+ssh -S "$CTRL" "$REMOTE" "bash ${REMOTE_PATH}/scripts/verify-pi-payload.sh ${REMOTE_PATH}"
 
 if [[ $DO_BOOTSTRAP -eq 1 ]]; then
     echo "bootstrap on Pi..."
-    ssh "$REMOTE" "cd ${REMOTE_PATH} && bash scripts/bootstrap-pi-dev.sh ${BOOTSTRAP_ARGS[*]:-}"
+    ssh -S "$CTRL" "$REMOTE" "cd ${REMOTE_PATH} && bash scripts/bootstrap-pi-dev.sh ${BOOTSTRAP_ARGS[*]:-}"
 fi
