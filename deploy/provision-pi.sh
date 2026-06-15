@@ -30,13 +30,17 @@
 #   * SPI / I2C / camera enabled.
 #   * piwallet-bonnet.service installed, enabled, owns tty1.
 #   * journald bounded so a misbehaving log can't fill the SD card.
+#   * Sealed builds (no --keep-ssh / --keep-radios) scrub Imager
+#     Wi-Fi/cloud-init network artifacts from the boot partition and
+#     rootfs. The Imager login user (e.g. pisv) is kept for local
+#     HDMI/keyboard troubleshooting; SSH stays off and radios stay off.
 #
 # Usage:
 #   sudo deploy/provision-pi.sh [--src PATH] [--release-version VER]
 #                 [--image-channel CH] [--keep-ssh] [--keep-radios] [--dry-run]
 #
 #   --release-version VER   Baked into /etc/piwalletsv-release (default:
-#                           PIWALLETSV_RELEASE_VERSION or 0.1.0-r2).
+#                           PIWALLETSV_RELEASE_VERSION or 0.1.0-r3).
 #   --image-channel CH      Image channel label (default:
 #                           PIWALLETSV_IMAGE_CHANNEL or round1-zero-w).
 #
@@ -157,6 +161,7 @@ readonly RADIO_MODULES=(
 # would fight the bonnet for tty1 regardless of network state).
 readonly MASK_RADIO_UNITS=(
     wpa_supplicant.service
+    NetworkManager.service
     hciuart.service
     bluetooth.service
     avahi-daemon.service
@@ -172,7 +177,7 @@ readonly MASK_ALWAYS_UNITS=(
 # ============================================================
 
 src_dir=""
-release_version="${PIWALLETSV_RELEASE_VERSION:-0.1.0-r2}"
+release_version="${PIWALLETSV_RELEASE_VERSION:-0.1.0-r3}"
 image_channel="${PIWALLETSV_IMAGE_CHANNEL:-round1-zero-w}"
 keep_ssh=0
 keep_radios=0
@@ -232,6 +237,34 @@ ensure_line() {
         return 0
     fi
     printf '%s\n' "$line" >> "$file"
+}
+
+# Set or replace a single key=value line in config.txt (last key wins in
+# firmware parser — do not leave duplicate camera_auto_detect= entries).
+set_boot_config_key() {
+    local key=$1 value=$2 file=$3
+    if [[ ! -f "$file" ]]; then
+        return 0
+    fi
+    if [[ $dry_run -eq 1 ]]; then
+        printf '%s DRY: set %s=%s in %s\n' "$LOG_PREFIX" "$key" "$value" "$file"
+        return 0
+    fi
+    sed -i "/^${key}=/d" "$file"
+    printf '%s=%s\n' "$key" "$value" >> "$file"
+}
+
+# Remove an exact line from config.txt if present (idempotent).
+remove_boot_config_line() {
+    local line=$1 file=$2
+    if [[ ! -f "$file" ]]; then
+        return 0
+    fi
+    if [[ $dry_run -eq 1 ]]; then
+        printf '%s DRY: remove %q from %s\n' "$LOG_PREFIX" "$line" "$file"
+        return 0
+    fi
+    sed -i "/^$(printf '%s' "$line" | sed 's/[[\.*^$()+?{|]/\\&/g')$/d" "$file"
 }
 
 # ============================================================
@@ -345,7 +378,8 @@ step_schedule_radio_purge_on_boot() {
         log "  DRY: install purge script + piwallet-purge-radios.service"
         return 0
     fi
-    run install -m 0755 "$script_src" "${APP_DIR}/deploy/purge-radio-packages.sh"
+    # Script already lives under APP_DIR after rsync; just ensure executable.
+    run chmod 0755 "$script_src"
     run install -m 0644 "$unit_src" "$UNIT_DST_DIR/piwallet-purge-radios.service"
     run install -d -m 0755 /var/lib/piwallet
     run touch /var/lib/piwallet/radio-purge.pending
@@ -394,10 +428,13 @@ step_boot_config() {
     # Hardware enables.
     ensure_line "dtparam=spi=on"        "$BOOT_CFG"
     ensure_line "dtparam=i2c_arm=on"    "$BOOT_CFG"
-    # Arducam OV5647 Mini (kit camera) has no EEPROM — disable auto-detect
-    # and load the ov5647 overlay explicitly.
-    ensure_line "camera_auto_detect=0"  "$BOOT_CFG"
-    ensure_line "dtoverlay=ov5647"      "$BOOT_CFG"
+    # Camera: use libcamera auto-detect (matches a stock Imager SD and the
+    # kit OV5647 on Pi Zero W in practice). Do NOT append camera_auto_detect=0
+    # on top of Imager's camera_auto_detect=1 — the last line wins and forced
+    # ov5647-only mode has produced "No cameras available" on sealed images.
+    # DIY no-EEPROM sensors: see docs/build.md for manual dtoverlay=ov5647.
+    set_boot_config_key "camera_auto_detect" "1" "$BOOT_CFG"
+    remove_boot_config_line "dtoverlay=ov5647" "$BOOT_CFG"
 
     # Audio off. dtparam=audio=off matches raspi-config; setting
     # it twice is harmless because ensure_line is idempotent.
@@ -456,6 +493,20 @@ step_mask_console_units() {
     done
 }
 
+step_enable_tty2_getty() {
+    log "enable getty@tty2 for HDMI/keyboard console (tty1 is bonnet-only)"
+    # Pi OS Lite normally logs in on tty1. We mask that so piwallet-bonnet
+    # owns tty1 without fighting a login prompt. Without an explicit
+    # getty@tty2, Ctrl+Alt+F2 lands on an empty VT — black HDMI even
+    # though the cable is connected.
+    if systemctl cat getty@tty2.service >/dev/null 2>&1; then
+        run systemctl enable getty@tty2.service
+        run systemctl start getty@tty2.service || true
+    else
+        warn "getty@tty2.service not present — skip HDMI console enable"
+    fi
+}
+
 step_mask_radio_units() {
     log "mask radio / mDNS units"
     local unit
@@ -470,6 +521,7 @@ step_mask_radio_units() {
 
 step_mask_units() {
     step_mask_console_units
+    step_enable_tty2_getty
     if [[ $keep_radios -eq 1 ]]; then
         log "  radio units: SKIPPED (--keep-radios)"
     else
@@ -759,6 +811,142 @@ step_cleanup() {
     fi
 }
 
+# Remove Raspberry Pi Imager Wi-Fi / cloud-init network secrets before
+# image capture. Login users (e.g. pisv) are kept for local console
+# troubleshooting. Only runs in full sealed mode (no --keep-* flags).
+step_scrub_builder_secrets() {
+    if [[ $keep_ssh -eq 1 || $keep_radios -eq 1 ]]; then
+        log "skip Imager network-secret scrub (--keep-ssh and/or --keep-radios)"
+        return 0
+    fi
+    log "scrub Imager Wi-Fi/network secrets (login users retained)"
+
+    local boot="/boot/firmware"
+    local legacy_boot="/boot"
+
+    for f in \
+        "$boot/userconf" "$boot/userconf.txt" \
+        "$legacy_boot/userconf" "$legacy_boot/userconf.txt" \
+        "$boot/firstrun.sh" "$legacy_boot/firstrun.sh" \
+        "$boot/wpa_supplicant.conf" "$legacy_boot/wpa_supplicant.conf"
+    do
+        if [[ -e "$f" ]]; then
+            run rm -f "$f"
+        fi
+    done
+
+    # Replace cloud-init boot files with minimal sealed content — no
+    # Wi-Fi SSID/PSK, no chpasswd, no ssh_authorized_keys.
+    if [[ $dry_run -eq 1 ]]; then
+        log "  DRY: write sealed user-data / network-config / meta-data"
+    else
+        cat > "$boot/user-data" <<EOF
+#cloud-config
+# PiWalletSV sealed image — no builder Wi-Fi, passwords, or SSH keys.
+hostname: ${HOSTNAME_NEW}
+manage_etc_hosts: true
+EOF
+        chmod 0644 "$boot/user-data"
+
+        cat > "$boot/network-config" <<'EOF'
+version: 2
+ethernets:
+  eth0:
+    optional: true
+    dhcp4: true
+EOF
+        chmod 0644 "$boot/network-config"
+
+        cat > "$boot/meta-data" <<EOF
+instance-id: piwalletsv-sealed
+local-hostname: ${HOSTNAME_NEW}
+EOF
+        chmod 0644 "$boot/meta-data"
+    fi
+
+    run rm -f /etc/NetworkManager/system-connections/*.nmconnection
+    run rm -f /etc/netplan/*.yaml /etc/netplan/*.yml 2>/dev/null || true
+    run rm -f /etc/wpa_supplicant/wpa_supplicant.conf
+
+    if command -v cloud-init >/dev/null 2>&1; then
+        run cloud-init clean --logs --seed 2>/dev/null || true
+    fi
+    if [[ $dry_run -eq 1 ]]; then
+        log "  DRY: rm -rf /var/lib/cloud/{instances,instance,data}"
+    else
+        rm -rf /var/lib/cloud/instances /var/lib/cloud/instance /var/lib/cloud/data \
+            2>/dev/null || true
+    fi
+    run rm -f /var/log/cloud-init*.log
+
+    # Drop dev checkout and remote-login keys; production runs from
+    # /opt/piwallet only. Keep the login account for HDMI/keyboard access.
+    if [[ $dry_run -eq 1 ]]; then
+        log "  DRY: rm -rf /home/*/PiWallet and builder ~/.ssh"
+    else
+        for u in pisv pi ${SUDO_USER:-}; do
+            [[ -z "$u" || "$u" == root || "$u" == "$RUNTIME_USER" ]] && continue
+            if [[ -d "/home/$u/PiWallet" ]]; then
+                log "  remove /home/$u/PiWallet (not used in production)"
+                rm -rf "/home/$u/PiWallet"
+            fi
+            rm -rf "/home/$u/.ssh" 2>/dev/null || true
+        done
+    fi
+
+    run rm -rf /root/.ssh
+    if [[ $dry_run -eq 0 ]]; then
+        : > /root/.bash_history 2>/dev/null || true
+        journalctl --rotate >/dev/null 2>&1 || true
+        journalctl --vacuum-time=1s >/dev/null 2>&1 || true
+    fi
+
+    step_verify_no_builder_secrets
+}
+
+step_verify_no_builder_secrets() {
+    if [[ $keep_ssh -eq 1 || $keep_radios -eq 1 ]]; then
+        return 0
+    fi
+    log "verify Imager network secrets scrubbed"
+    local problems=()
+
+    for f in \
+        /boot/firmware/userconf /boot/firmware/userconf.txt \
+        /boot/userconf /boot/userconf.txt
+    do
+        [[ -e "$f" ]] && problems+=("boot credential file still present: $f")
+    done
+
+    if [[ -f /boot/firmware/network-config ]] && \
+       grep -qiE '(access-points:|password:|psk:)' /boot/firmware/network-config 2>/dev/null; then
+        problems+=("network-config still contains Wi-Fi credentials")
+    fi
+
+    if [[ -f /boot/firmware/user-data ]] && \
+       grep -qiE '(password:|passwd:|ssh_authorized_keys|chpasswd|access-points:)' \
+           /boot/firmware/user-data 2>/dev/null; then
+        problems+=("user-data still contains user or Wi-Fi secrets")
+    fi
+
+    if compgen -G '/etc/NetworkManager/system-connections/*.nmconnection' >/dev/null; then
+        problems+=("NetworkManager connection profiles still present")
+    fi
+
+    if [[ -f /etc/wpa_supplicant/wpa_supplicant.conf ]] && \
+       grep -q 'network=' /etc/wpa_supplicant/wpa_supplicant.conf 2>/dev/null; then
+        problems+=("wpa_supplicant.conf still has networks configured")
+    fi
+
+    if [[ ${#problems[@]} -gt 0 ]]; then
+        for p in "${problems[@]}"; do
+            warn "$p"
+        done
+        fail "Imager network-secret verification failed — re-flash and re-provision"
+    fi
+    log "  OK — no Imager Wi-Fi/network credentials on boot or rootfs"
+}
+
 step_release_metadata() {
     log "write release metadata (${release_version}, ${image_channel})"
     [[ -d "$APP_DIR" ]] || fail "APP_DIR missing — run step_install_app first"
@@ -882,6 +1070,7 @@ main() {
     step_swap_off
     step_rng
     step_cleanup
+    step_scrub_builder_secrets
 
     log "done."
     cat <<EOF
@@ -919,8 +1108,10 @@ After reboot the device has no network. Verify on the bonnet display:
   * systemctl status piwallet-bonnet        # active (running)
   * cat /var/lib/piwallet/radio-purge.done  # exists after first boot
 
+Imager Wi-Fi/network files are scrubbed automatically before you reboot.
+The Imager login user (e.g. pisv) is kept for local HDMI/keyboard access.
 For image capture: reboot after seal, wait for bonnet disclaimer, power
-off, then dd (packages are purged during that first boot).
+off, then dd (radio packages purge during that first boot).
 EOF
     fi
     cat <<'EOF'

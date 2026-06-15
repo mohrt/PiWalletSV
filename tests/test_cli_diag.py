@@ -110,3 +110,28 @@ def test_diag_airgap_help_lists_under_main(monkeypatch: pytest.MonkeyPatch) -> N
     res = runner.invoke(main, ["diag", "--help"])
     assert res.exit_code == 0
     assert "airgap" in res.output
+    assert "camera" in res.output
+
+
+def test_diag_camera_pass_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "piwallet.bonnet.camera_still.capture_still_jpeg_bytes",
+        lambda **_: b"\xff\xd8fake",
+    )
+    runner = CliRunner()
+    res = runner.invoke(main, ["diag", "camera"])
+    assert res.exit_code == 0, res.output
+    assert "PASS" in res.output
+    assert "byte JPEG" in res.output
+
+
+def test_diag_camera_fail_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(**_: object) -> bytes:
+        raise RuntimeError("no sensor")
+
+    monkeypatch.setattr("piwallet.bonnet.camera_still.capture_still_jpeg_bytes", _boom)
+    runner = CliRunner()
+    res = runner.invoke(main, ["diag", "camera"])
+    assert res.exit_code == 1, res.output
+    assert "FAIL" in res.output
+    assert "no sensor" in res.output

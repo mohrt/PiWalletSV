@@ -72,7 +72,7 @@ class CameraEntropyScreen:
             cam.open()
             self._dual = cam
         except Exception:
-            log.exception("dual-stream camera open failed; falling back to still-only capture")
+            log.exception("entropy camera open failed; falling back to still-only capture")
             self._dual_failed = True
             self._dual = None
 
@@ -114,7 +114,13 @@ class CameraEntropyScreen:
                 self.done = True
             except Exception as exc:
                 log.exception("camera capture failed")
-                self.error = str(exc)
+                if isinstance(exc, IndexError):
+                    self.error = (
+                        "Camera unavailable (no sensor). "
+                        "Try Random entropy or restart bonnet."
+                    )
+                else:
+                    self.error = str(exc)
             else:
                 self._close_dual()
             finally:

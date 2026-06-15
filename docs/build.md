@@ -118,7 +118,7 @@ focus). That is the kit minimum and the only combination tested for v1.
 
 | Sensor / module | Typical overlay | Notes |
 |-----------------|-----------------|-------|
-| **OV5647** (ArduCam kit) | `dtoverlay=ov5647` | Sealed image default. Fixed focus (~30 cm / ~1 ft for phone-screen QRs). |
+| **OV5647** (ArduCam kit) | `camera_auto_detect=1` (sealed image default) or `dtoverlay=ov5647` | Sealed images use auto-detect like a stock Pi OS SD. For no-EEPROM DIY modules, set `camera_auto_detect=0` and add `dtoverlay=ov5647` manually. |
 | IMX219 (Pi Camera v2) | `dtoverlay=imx219` | Fixed focus. |
 | IMX477 (HQ Camera) | `dtoverlay=imx477` | Fixed focus. |
 | IMX708 (Pi Camera Module 3) | `dtoverlay=imx708` or `camera_auto_detect=1` | Autofocus sensor; hold at a consistent distance. |
@@ -291,7 +291,9 @@ note any non-backwards-compatible changes per release.
 
 The sealed image is built with
 [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
-on **Raspberry Pi OS Lite 32-bit** (Pi Zero W / Zero WH). Signed `.img.xz`
+on **Raspberry Pi OS Lite 32-bit** (Pi Zero W / Zero WH), captured with `dd`,
+shrunk with [`scripts/shrink-sd-image.sh`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/shrink-sd-image.sh)
+so it fits **8 GB** microSD cards, then compressed and signed. Signed `.img.xz`
 artifacts are published on **GitHub Releases** — see [Download](download.md).
 
 Operator workflow (sync → provision → capture → sign → publish):

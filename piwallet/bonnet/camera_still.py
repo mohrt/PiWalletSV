@@ -3,9 +3,9 @@
 Separate from QR scanning: no pyzbar, just raw sensor bytes hashed by
 :mod:`piwallet.core.mnemonic`.
 
-The bonnet preview flow (:class:`~piwallet.bonnet.entropy_camera.EntropyDualStreamCamera`)
-keeps ``main`` full-res for hashing while ``lores`` feeds the TFT thumbnail
-— this module captures one **main-stream** JPEG in a disposable session.
+Uses the same preview-mode + ``capture_array`` path as
+``scripts/camera_qr_test.py`` (factory smoke). Still-mode ``capture_file``
+is less reliable on OV5647 and can fail inside the hardened bonnet unit.
 """
 
 from __future__ import annotations
@@ -13,9 +13,18 @@ from __future__ import annotations
 import io
 import logging
 import time
-from typing import BinaryIO
+
+from PIL import Image
 
 log = logging.getLogger(__name__)
+
+
+def _camera_unavailable(exc: BaseException) -> RuntimeError:
+    return RuntimeError(
+        "Pi camera not available. Check ribbon cable and that /dev/video0 "
+        "is readable by the bonnet user (video group). "
+        f"Detail: {exc}"
+    )
 
 
 def capture_still_jpeg_bytes(
@@ -31,6 +40,10 @@ def capture_still_jpeg_bytes(
 
     Blocking call — runs on-device only.
     """
+    from piwallet.runtime_logging import prepare_runtime_for_cli_camera_scan
+
+    prepare_runtime_for_cli_camera_scan()
+
     try:
         from picamera2 import Picamera2  # type: ignore[import-not-found]
     except ImportError as exc:
@@ -40,10 +53,26 @@ def capture_still_jpeg_bytes(
             "`pip install --system-site-packages -e '.[camera]'`.",
         ) from exc
 
-    cam = Picamera2()
+    info = Picamera2.global_camera_info()
+    if not info:
+        raise RuntimeError(
+            "Pi camera not detected (libcamera sees 0 cameras). "
+            "On tty2: stop bonnet, run "
+            "'sudo -u pwsv rpicam-hello --list-cameras', check ribbon cable, "
+            "and verify /boot/firmware/config.txt has "
+            "camera_auto_detect=0 and dtoverlay=ov5647."
+        )
+
+    try:
+        cam = Picamera2()
+    except IndexError as exc:
+        raise _camera_unavailable(exc) from exc
+
     try:
         cam.configure(
-            cam.create_still_configuration(main={"size": (width, height)}),
+            cam.create_preview_configuration(
+                main={"format": "RGB888", "size": (width, height)},
+            ),
         )
         cam.start()
         try:
@@ -51,12 +80,15 @@ def capture_still_jpeg_bytes(
         except Exception as exc:  # pragma: no cover (interrupted sleep is rare)
             log.debug("capture_still: settle sleep interrupted: %s", exc)
         try:
-            cam.options["quality"] = quality  # type: ignore[index]
-        except Exception as exc:  # some picamera2 versions lack writable options
-            log.debug("capture_still: cannot set jpeg quality option: %s", exc)
-        buf: BinaryIO = io.BytesIO()
-        cam.capture_file(buf, format="jpeg")
-        return buf.getvalue()
+            frame = cam.capture_array("main")
+        except IndexError as exc:
+            raise _camera_unavailable(exc) from exc
+        buf = io.BytesIO()
+        Image.fromarray(frame).save(buf, format="JPEG", quality=quality)
+        blob = buf.getvalue()
+        if not blob:
+            raise RuntimeError("empty JPEG after capture_array encode")
+        return blob
     finally:
         try:
             cam.stop()

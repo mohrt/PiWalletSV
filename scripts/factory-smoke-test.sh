@@ -140,13 +140,29 @@ else
 fi
 
 if [[ $SKIP_CAMERA -eq 0 && -x "$REPO_ROOT/scripts/run_camera_qr_test.sh" ]]; then
-    log "== camera QR smoke =="
-    if timeout 20 bash "$REPO_ROOT/scripts/run_camera_qr_test.sh" --once 2>/dev/null; then
-        log "PASS camera QR"
-    elif timeout 20 bash "$REPO_ROOT/scripts/run_camera_qr_test.sh" 2>/dev/null; then
-        log "PASS camera QR (default mode)"
+    log "== camera QR smoke (as pwsv, bonnet stopped) =="
+    bonnet_was=0
+    if systemctl is-active -q piwallet-bonnet.service 2>/dev/null; then
+        bonnet_was=1
+        systemctl stop piwallet-bonnet.service
+    fi
+    cam_rc=0
+    if id pwsv &>/dev/null; then
+        if ! timeout 25 sudo -u pwsv bash "$REPO_ROOT/scripts/run_camera_qr_test.sh" --once 2>/dev/null; then
+            cam_rc=$?
+        fi
+    elif ! timeout 25 bash "$REPO_ROOT/scripts/run_camera_qr_test.sh" --once 2>/dev/null; then
+        cam_rc=$?
+        warn "pwsv missing — camera smoke ran as root (not production-like)"
+    fi
+    if [[ $bonnet_was -eq 1 ]]; then
+        systemctl start piwallet-bonnet.service 2>/dev/null || \
+            warn "failed to restart piwallet-bonnet"
+    fi
+    if [[ $cam_rc -eq 0 ]]; then
+        log "PASS camera QR (pwsv)"
     else
-        fail_step "camera QR — run manually: bash scripts/run_camera_qr_test.sh"
+        fail_step "camera QR — run: sudo systemctl stop piwallet-bonnet && sudo -u pwsv bash scripts/run_camera_qr_test.sh --once"
     fi
 else
     log "SKIP camera"

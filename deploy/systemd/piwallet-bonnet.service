@@ -57,6 +57,8 @@ WorkingDirectory=/home/pwsv
 Environment=LIBCAMERA_LOG_LEVELS=*:WARN
 Environment=PICAMERA2_LOG_LEVEL=0
 Environment=PIWALLET_LOG_LEVEL=WARNING
+# Redirect libcamera cache out of read-only $HOME (ProtectHome=read-only).
+Environment=XDG_CACHE_HOME=/var/cache/piwallet-bonnet/libcamera
 
 # `piwallet bonnet` defaults to ~/.piwallet/vault.bin under the
 # invoking user's $HOME. Spelt out here so the unit reads cleanly
@@ -96,6 +98,10 @@ ProtectSystem=strict
 # read-only and other users' homes are completely hidden.
 ProtectHome=read-only
 ReadWritePaths=/home/pwsv/.piwallet /mnt/piwallet-usb
+# libcamera IPA may write tuning cache; $HOME/.cache is read-only under
+# ProtectHome=read-only. CacheDirectory= whitelists a path under /var/cache
+# and sets $CACHE_DIRECTORY (see Environment= below).
+CacheDirectory=libcamera
 
 # /tmp and /var/tmp become a private tmpfs invisible to other
 # services. Picamera2 writes a few transient files; this isolates
@@ -113,21 +119,22 @@ ProtectControlGroups=yes
 ProtectClock=yes
 ProtectHostname=yes
 
-# We need /dev/spidev*, /dev/video0, /dev/i2c-*, /dev/gpiochip* —
-# everything else (network sockets, /dev/mem, /dev/kmsg) is denied.
-# `closed` is the strictest setting that still allows AF_UNIX,
-# which the bonnet uses for the picamera2 -> libcamera handshake.
+# We need /dev/spidev*, /dev/video0, /dev/media*, /dev/v4l-subdev*,
+# /dev/i2c-*, /dev/gpiochip* — everything else (network sockets,
+# /dev/mem, /dev/kmsg) is denied.
+# libcamera uses AF_UNIX + AF_NETLINK alongside V4L/media nodes; do not
+# restrict to AF_UNIX only or Picamera2 may see no camera (IndexError).
 PrivateNetwork=yes
-RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 
-# Block exec stacks / mmap-rwx — defence in depth against Python's
-# ctypes being abused as a write+execute primitive. cffi and
-# libcamera's Python shim do not require RWX pages.
-MemoryDenyWriteExecute=yes
+# Block exec stacks / mmap-rwx — defence in depth for most of the bonnet.
+# libcamera / Picamera2 + numpy frame buffers need writable mappings the
+# camera pipeline allocates; keep this off so Photo entropy and QR scan work.
+#MemoryDenyWriteExecute=yes
 
 # Pi is 64-bit ARM only. Refuse to enter a 32-bit syscall personality
 # (would be a red flag from a memory-corruption point of view).
