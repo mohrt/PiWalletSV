@@ -57,6 +57,32 @@ ensure_dest_exists() {
 
 ensure_dest_exists
 
+remote_clean_junk() {
+    local remote=$1
+    local remote_path=$2
+    ssh_cmd "$remote" "bash -s" -- "$remote_path" <<'EOF'
+set -euo pipefail
+ROOT=${1:?}
+for sub in piwallet scripts deploy; do
+    [[ -d "$ROOT/$sub" ]] || continue
+    find "$ROOT/$sub" \( -type d -name __pycache__ -o -name '*.pyc' -o -name '*.pyo' \) -print0 2>/dev/null |
+        while IFS= read -r -d '' p; do
+            rm -rf "$p" 2>/dev/null || sudo -n rm -rf "$p" 2>/dev/null || true
+        done
+done
+EOF
+}
+
+case "$DEST" in
+    *:*)
+        remote="${DEST%%:*}"
+        remote_path="${DEST#*:}"
+        remote_path="${remote_path%/}"
+        echo "rsync-pi-payload: clean remote junk under ${remote_path}"
+        remote_clean_junk "$remote" "$remote_path"
+        ;;
+esac
+
 # One rsync (one SSH session). Filter order matters: broad "***" includes must
 # come AFTER exclude-from, or __pycache__/*.pyc from the Mac get re-sent every sync.
 FILTER=()
@@ -91,7 +117,9 @@ for f in "${FILE_INCLUDES[@]:-}"; do
 done
 FILTER+=(--exclude '*')
 
-RSYNC_ARGS=(-a --delete --delete-excluded "${FILTER[@]}" "${SRC}/" "${DEST}")
+# --delete keeps remote in sync with transferred files; do not use --delete-excluded —
+# root-owned __pycache__ on the Pi (from sudo provision) cannot be unlinked by pisv.
+RSYNC_ARGS=(-a --delete "${FILTER[@]}" "${SRC}/" "${DEST}")
 if [[ -n "${RSYNC_RSH:-}" ]]; then
     rsync -e "$RSYNC_RSH" "${RSYNC_ARGS[@]}"
 else

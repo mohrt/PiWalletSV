@@ -29,6 +29,7 @@ REQUIRED=(
     scripts/rsync-pi-payload.sh
     scripts/rsync-pi-excludes.txt
     scripts/prune-pi-payload.sh
+    scripts/clean-pi-payload-junk.sh
     scripts/verify-pi-payload.sh
 )
 
@@ -50,8 +51,11 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -z "$line" ]] && continue
 
     if [[ "$line" == *"*"* ]]; then
-        if find "$ROOT" -name "$line" -print -quit 2>/dev/null | grep -q .; then
-            fail "forbidden glob present: $line"
+        # Scope glob checks to synced source dirs only — .venv/ and other runtime
+        # directories legitimately contain *.pyc and should not trigger a failure.
+        if find "$ROOT/piwallet" "$ROOT/scripts" "$ROOT/deploy" \
+               -name "$line" -print -quit 2>/dev/null | grep -q .; then
+            fail "forbidden glob present in source dirs: $line"
         fi
         continue
     fi

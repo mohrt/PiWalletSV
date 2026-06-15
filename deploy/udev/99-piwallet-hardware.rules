@@ -9,3 +9,9 @@ KERNEL=="gpiomem", GROUP="gpio", MODE="0660"
 
 # libgpiod character devices (preferred on newer Pi OS images)
 SUBSYSTEM=="gpio", GROUP="gpio", MODE="0660"
+
+# DMA heap — libcamera/Picamera2 allocates camera frame buffers here.
+# On Pi OS Trixie these nodes are group "render"; pwsv must be in that group
+# (see provision-pi.sh RUNTIME_GROUPS). The udev rule below ensures the nodes
+# stay accessible even if a kernel update changes the default mode.
+SUBSYSTEM=="dma_heap", GROUP="render", MODE="0660"

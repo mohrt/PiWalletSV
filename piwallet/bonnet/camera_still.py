@@ -57,10 +57,10 @@ def capture_still_jpeg_bytes(
     if not info:
         raise RuntimeError(
             "Pi camera not detected (libcamera sees 0 cameras). "
-            "On tty2: stop bonnet, run "
-            "'sudo -u pwsv rpicam-hello --list-cameras', check ribbon cable, "
-            "and verify /boot/firmware/config.txt has "
-            "camera_auto_detect=0 and dtoverlay=ov5647."
+            "Stop bonnet, re-seat the ribbon cable, reboot once, then run "
+            "'sudo bash deploy/scripts/diag-camera-offline.sh'. "
+            "Sealed images use camera_auto_detect=1; for DIY modules without "
+            "EEPROM, set camera_auto_detect=0 and dtoverlay=ov5647 in config.txt."
         )
 
     try:

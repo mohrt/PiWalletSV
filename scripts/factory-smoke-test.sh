@@ -139,30 +139,40 @@ else
     log "SKIP display demo"
 fi
 
-if [[ $SKIP_CAMERA -eq 0 && -x "$REPO_ROOT/scripts/run_camera_qr_test.sh" ]]; then
-    log "== camera QR smoke (as pwsv, bonnet stopped) =="
-    bonnet_was=0
-    if systemctl is-active -q piwallet-bonnet.service 2>/dev/null; then
-        bonnet_was=1
-        systemctl stop piwallet-bonnet.service
-    fi
-    cam_rc=0
-    if id pwsv &>/dev/null; then
-        if ! timeout 25 sudo -u pwsv bash "$REPO_ROOT/scripts/run_camera_qr_test.sh" --once 2>/dev/null; then
-            cam_rc=$?
+if [[ $SKIP_CAMERA -eq 0 ]]; then
+    log "== camera (pwsv path via diag-camera-offline.sh) =="
+    if [[ -f "$REPO_ROOT/deploy/scripts/diag-camera-offline.sh" ]]; then
+        if bash "$REPO_ROOT/deploy/scripts/diag-camera-offline.sh"; then
+            log "PASS camera (diag-camera-offline)"
+        else
+            fail_step "camera — see deploy/scripts/diag-camera-offline.sh output above"
         fi
-    elif ! timeout 25 bash "$REPO_ROOT/scripts/run_camera_qr_test.sh" --once 2>/dev/null; then
-        cam_rc=$?
-        warn "pwsv missing — camera smoke ran as root (not production-like)"
-    fi
-    if [[ $bonnet_was -eq 1 ]]; then
-        systemctl start piwallet-bonnet.service 2>/dev/null || \
-            warn "failed to restart piwallet-bonnet"
-    fi
-    if [[ $cam_rc -eq 0 ]]; then
-        log "PASS camera QR (pwsv)"
+    elif [[ -x "$REPO_ROOT/scripts/run_camera_qr_test.sh" ]]; then
+        # shellcheck source=../deploy/scripts/camera-exclusive-access.sh
+        source "$REPO_ROOT/deploy/scripts/camera-exclusive-access.sh"
+        prepare_camera_exclusive_access
+        cam_err="$(mktemp)"
+        cam_rc=0
+        if id pwsv &>/dev/null; then
+            if ! timeout 30 sudo -u pwsv bash "$REPO_ROOT/scripts/run_camera_qr_test.sh" --once 2>"$cam_err"; then
+                cam_rc=$?
+            fi
+        elif ! timeout 30 bash "$REPO_ROOT/scripts/run_camera_qr_test.sh" --once 2>"$cam_err"; then
+            cam_rc=$?
+            warn "pwsv missing — camera smoke ran as root (not production-like)"
+        fi
+        if [[ $cam_rc -ne 0 && -s "$cam_err" ]]; then
+            warn "camera output: $(tail -5 "$cam_err" | tr '\n' ' ')"
+        fi
+        rm -f "$cam_err"
+        restore_camera_exclusive_access
+        if [[ $cam_rc -eq 0 ]]; then
+            log "PASS camera QR (pwsv)"
+        else
+            fail_step "camera QR"
+        fi
     else
-        fail_step "camera QR — run: sudo systemctl stop piwallet-bonnet && sudo -u pwsv bash scripts/run_camera_qr_test.sh --once"
+        fail_step "camera — missing deploy/scripts/diag-camera-offline.sh"
     fi
 else
     log "SKIP camera"

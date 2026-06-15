@@ -56,16 +56,22 @@ ssh -M -S "$CTRL" -f -N "$REMOTE"
 export SYNC_PI_SSH_SOCKET="$CTRL"
 export RSYNC_RSH="ssh -S ${CTRL}"
 
-echo "rsync → ${REMOTE}:${REMOTE_PATH}/ (allowlist)"
-bash "$ROOT/scripts/rsync-pi-payload.sh" "$ROOT" "${REMOTE}:${REMOTE_PATH}/"
+# Resolve tilde in REMOTE_PATH once on the remote so all subsequent commands use an
+# absolute path (tilde inside single/double quotes does not expand on the remote).
+REMOTE_ABS=$(ssh -S "$CTRL" "$REMOTE" "eval echo \"${REMOTE_PATH}\"")
+
+echo "rsync → ${REMOTE}:${REMOTE_ABS}/ (allowlist)"
+bash "$ROOT/scripts/rsync-pi-payload.sh" "$ROOT" "${REMOTE}:${REMOTE_ABS}/"
 
 echo "prune stale payload artifacts on Pi..."
-ssh -S "$CTRL" "$REMOTE" "bash ${REMOTE_PATH}/scripts/prune-pi-payload.sh ${REMOTE_PATH}"
+# Root-owned .pyc files from sudo provision require sudo to remove. Use -t so sudo can
+# prompt for the Pi user password if NOPASSWD is not configured.
+ssh -S "$CTRL" -t "$REMOTE" "sudo bash \"${REMOTE_ABS}/scripts/clean-pi-payload-junk.sh\" \"${REMOTE_ABS}\" && sudo bash \"${REMOTE_ABS}/scripts/prune-pi-payload.sh\" \"${REMOTE_ABS}\""
 
 echo "verify remote payload..."
-ssh -S "$CTRL" "$REMOTE" "bash ${REMOTE_PATH}/scripts/verify-pi-payload.sh ${REMOTE_PATH}"
+ssh -S "$CTRL" "$REMOTE" "bash \"${REMOTE_ABS}/scripts/verify-pi-payload.sh\" \"${REMOTE_ABS}\""
 
 if [[ $DO_BOOTSTRAP -eq 1 ]]; then
     echo "bootstrap on Pi..."
-    ssh -S "$CTRL" "$REMOTE" "cd ${REMOTE_PATH} && bash scripts/bootstrap-pi-dev.sh ${BOOTSTRAP_ARGS[*]:-}"
+    ssh -S "$CTRL" "$REMOTE" "cd \"${REMOTE_ABS}\" && bash scripts/bootstrap-pi-dev.sh ${BOOTSTRAP_ARGS[*]:-}"
 fi

@@ -69,7 +69,7 @@ class EntropyDualStreamCamera:
                 if not info:
                     raise RuntimeError(
                         "libcamera sees 0 cameras — check ribbon, reboot, "
-                        "and config.txt (camera_auto_detect=0, dtoverlay=ov5647)."
+                        "and config.txt (sealed default: camera_auto_detect=1)."
                     )
                 try:
                     picam = Picamera2()
