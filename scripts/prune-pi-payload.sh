@@ -27,13 +27,14 @@ prune_literal() {
 
 prune_glob() {
     local pattern=$1
-    local found=0
+    local count=0
     while IFS= read -r -d '' path; do
         rm -rf "$path"
-        echo "prune-pi-payload: removed ${path#"$ROOT"/}"
-        found=1
+        count=$((count + 1))
     done < <(find "$ROOT" -name "$pattern" -print0 2>/dev/null)
-    return 0
+    if [[ $count -gt 0 ]]; then
+        echo "prune-pi-payload: removed $count path(s) matching $pattern"
+    fi
 }
 
 while IFS= read -r line || [[ -n "$line" ]]; do
