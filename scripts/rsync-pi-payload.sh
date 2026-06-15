@@ -57,27 +57,41 @@ ensure_dest_exists() {
 
 ensure_dest_exists
 
-# One rsync (one SSH session) instead of per-path rsync invocations.
+# One rsync (one SSH session). Filter order matters: broad "***" includes must
+# come AFTER exclude-from, or __pycache__/*.pyc from the Mac get re-sent every sync.
 FILTER=()
+FILE_INCLUDES=()
 while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line%%#*}"
     line="${line%"${line##*[![:space:]]}"}"
     [[ -z "$line" ]] && continue
-
     [[ -e "$SRC/$line" ]] || {
         echo "rsync-pi-payload: missing include path: $line" >&2
         exit 1
     }
-
     if [[ "$line" == */ ]]; then
-        FILTER+=(--include "${line}" --include "${line}***")
+        FILTER+=(--include "${line}")
     else
-        FILTER+=(--include "$line")
+        FILE_INCLUDES+=("$line")
     fi
 done < "$INCLUDES"
-FILTER+=(--exclude-from="$EXCLUDES" --exclude '*')
 
-RSYNC_ARGS=(-a --delete "${FILTER[@]}" "${SRC}/" "${DEST}")
+FILTER+=(--exclude-from="$EXCLUDES")
+while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" ]] && continue
+    [[ -e "$SRC/$line" ]] || continue
+    if [[ "$line" == */ ]]; then
+        FILTER+=(--include "${line}***")
+    fi
+done < "$INCLUDES"
+for f in "${FILE_INCLUDES[@]:-}"; do
+    FILTER+=(--include "$f")
+done
+FILTER+=(--exclude '*')
+
+RSYNC_ARGS=(-a --delete --delete-excluded "${FILTER[@]}" "${SRC}/" "${DEST}")
 if [[ -n "${RSYNC_RSH:-}" ]]; then
     rsync -e "$RSYNC_RSH" "${RSYNC_ARGS[@]}"
 else
