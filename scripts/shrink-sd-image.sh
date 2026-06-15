@@ -16,7 +16,7 @@
 set -euo pipefail
 
 readonly LOG_PREFIX="[shrink-sd]"
-readonly PISHRINK_URL="https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink"
+readonly PISHRINK_URL="https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh"
 
 INPUT=""
 OUTPUT=""
