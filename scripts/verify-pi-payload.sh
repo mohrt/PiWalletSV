@@ -25,6 +25,8 @@ REQUIRED=(
     scripts/install-piwallet-deps.sh
     scripts/setup-bonnet-hardware.sh
     scripts/factory-smoke-test.sh
+    scripts/rsync-pi-includes.txt
+    scripts/rsync-pi-payload.sh
     scripts/rsync-pi-excludes.txt
     scripts/prune-pi-payload.sh
     scripts/verify-pi-payload.sh

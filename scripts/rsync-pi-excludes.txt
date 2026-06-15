@@ -1,8 +1,10 @@
 # Canonical Pi payload excludes — used by:
-#   scripts/sync-to-pi.sh       (workstation → Pi dev tree)
-#   deploy/provision-pi.sh      (--src rsync → /opt/piwallet)
-#   scripts/prune-pi-payload.sh (after git clone fallback)
-#   scripts/verify-pi-payload.sh (post-sync / post-provision gate)
+#   scripts/rsync-pi-payload.sh   (junk filters within allowlisted paths)
+#   scripts/prune-pi-payload.sh   (after git clone fallback)
+#   scripts/verify-pi-payload.sh  (post-sync / post-provision gate)
+#
+# Dev sync and provision --src both use the allowlist in
+# scripts/rsync-pi-includes.txt via scripts/rsync-pi-payload.sh.
 #
 # Runtime paths that MUST remain: piwallet/, scripts/, deploy/, pyproject.toml
 
@@ -41,6 +43,9 @@ vault.bin.bak
 *.vault
 local_*.cbor
 scratch
+
+# Captured SD images — workstation only (publish via GitHub Releases)
+images
 
 # Not needed on the Pi (bonnet runtime / image build)
 companion
