@@ -138,7 +138,7 @@ RestrictAddressFamilies=AF_UNIX AF_NETLINK
 # this unit to show Wi-Fi/BT status on the bonnet screen. PrivateNetwork=yes
 # can hide /sys/class/rfkill on some kernel versions; explicitly allow it
 # read-only so the airgap check returns OK (not inconclusive "--").
-ReadOnlyPaths=/sys/class/rfkill /proc/modules /etc/modprobe.d /boot/firmware/config.txt
+ReadOnlyPaths=-/sys/class/rfkill -/proc/modules -/etc/modprobe.d -/boot/firmware/config.txt
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
