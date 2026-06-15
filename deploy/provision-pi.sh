@@ -368,24 +368,40 @@ step_apt_purge_audio() {
     fi
 }
 
-step_schedule_radio_purge_on_boot() {
-    log "schedule radio package purge on first boot (not over live Wi-Fi SSH)"
+step_purge_radio_packages() {
+    # Purge radio userspace packages. If running over SSH (SSH_CONNECTION is
+    # set), deferring is unsafe because dpkg stops wpa_supplicant synchronously
+    # and will drop the connection mid-run. Instead, schedule a one-shot service
+    # to run on the next boot when no live SSH association exists.
+    # If running from a local console (tty2/HDMI or serial), purge inline now
+    # so first boot is clean — no extra service, no wait.
     local script_src="${APP_DIR}/deploy/purge-radio-packages.sh"
     local unit_src="${APP_DIR}/deploy/systemd/piwallet-purge-radios.service"
     [[ -f "$script_src" ]] || fail "missing $script_src"
     [[ -f "$unit_src" ]] || fail "missing $unit_src"
+
     if [[ $dry_run -eq 1 ]]; then
-        log "  DRY: install purge script + piwallet-purge-radios.service"
+        log "  DRY: purge radio packages (inline or scheduled)"
         return 0
     fi
-    # Script already lives under APP_DIR after rsync; just ensure executable.
-    run chmod 0755 "$script_src"
-    run install -m 0644 "$unit_src" "$UNIT_DST_DIR/piwallet-purge-radios.service"
+
     run install -d -m 0755 /var/lib/piwallet
-    run touch /var/lib/piwallet/radio-purge.pending
-    run rm -f /var/lib/piwallet/radio-purge.done
-    run systemctl daemon-reload
-    run systemctl enable piwallet-purge-radios.service
+    run chmod 0755 "$script_src"
+
+    if [[ -n "${SSH_CONNECTION:-}" ]]; then
+        log "radio package purge: over SSH — scheduling for first boot"
+        run install -m 0644 "$unit_src" "$UNIT_DST_DIR/piwallet-purge-radios.service"
+        run touch /var/lib/piwallet/radio-purge.pending
+        run rm -f /var/lib/piwallet/radio-purge.done
+        run systemctl daemon-reload
+        run systemctl enable piwallet-purge-radios.service
+    else
+        log "radio package purge: local console — purging inline now"
+        run bash "$script_src"
+        # Install the unit anyway (idempotent guard) but do NOT enable it.
+        run install -m 0644 "$unit_src" "$UNIT_DST_DIR/piwallet-purge-radios.service"
+        run systemctl daemon-reload
+    fi
 }
 
 step_apt_purge() {
@@ -564,7 +580,7 @@ step_seal_device() {
         step_disable_radios_firmware
         step_modprobe_blacklist
         step_mask_radio_units
-        step_schedule_radio_purge_on_boot
+        step_purge_radio_packages
     fi
     if [[ $keep_ssh -eq 0 ]]; then
         step_ssh
@@ -1114,13 +1130,12 @@ WITHOUT --keep-radios to produce the actual sealed image.
 EOF
     else
         cat <<'EOF'
-SEALED MODE — radios firmware-disabled. Radio packages purge on the
-next boot (piwallet-purge-radios.service) — do not purge over Wi-Fi SSH.
-After reboot the device has no network. Verify on the bonnet display:
+SEALED MODE — radios firmware-disabled.
+Radio packages were purged inline (local console) or will purge on next
+boot (piwallet-purge-radios.service, SSH path). After reboot verify:
 
-  * systemctl status piwallet-purge-radios  # exited successfully once
   * systemctl status piwallet-bonnet        # active (running)
-  * cat /var/lib/piwallet/radio-purge.done  # exists after first boot
+  * cat /var/lib/piwallet/radio-purge.done  # exists (inline or post-boot)
 
 Imager Wi-Fi/network files are scrubbed automatically before you reboot.
 The Imager login user (e.g. pisv) is kept for local HDMI/keyboard access.
