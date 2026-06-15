@@ -37,10 +37,11 @@ class DisclaimerPage:
 
 DEFAULT_DISCLAIMER_PAGES: tuple[DisclaimerPage, ...] = (
     DisclaimerPage(
-        title="Alpha software",
+        title="Beta software",
         body=(
-            "PiWalletSV is alpha. Expect bugs. Use only with funds "
-            "you can afford to lose."
+            "PiWalletSV is beta. Expect bugs. Your funds are always "
+            "recoverable from any BIP39 wallet using your seed phrase — "
+            "PiWalletSV is not required."
         ),
         footer="JOYSTICK > next",
     ),

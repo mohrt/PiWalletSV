@@ -26,7 +26,7 @@ just signs.
 </div>
 </div>
 
-!!! warning "Alpha software"
+!!! warning "Beta software"
     PiWalletSV is in active development. There is no warranty and no
     custodial backup. Read the [Disclaimer](disclaimer.md) and
     [Security briefing](security.md) before storing real funds on a

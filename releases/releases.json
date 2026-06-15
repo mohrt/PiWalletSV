@@ -18,7 +18,7 @@
       "sha256": null,
       "image_id": null,
       "published_at": null,
-      "notes": "Alpha test build — 8 GB-compatible image (PiShrink after capture). Fill sha256 and image_id after local build; set published_at when GitHub Release goes live."
+      "notes": "Beta test build — 8 GB-compatible image (PiShrink after capture). Fill sha256 and image_id after local build; set published_at when GitHub Release goes live."
     },
     {
       "version": "0.1.0-r2",

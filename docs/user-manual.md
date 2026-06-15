@@ -8,8 +8,8 @@ some of these steps is part of Phase 2 and is noted in each section;
 until it ships, the CLI on the Pi (and the companion web app on the
 phone) provides the same workflows.
 
-!!! warning "Alpha software"
-    PiWalletSV is alpha-quality. Until v1.0, exercise these flows
+!!! warning "Beta software"
+    PiWalletSV is beta-quality. Until v1.0, exercise these flows
     with **testnet-scale amounts only**. The [Disclaimer](disclaimer.md)
     and [Security policy](security.md) describe the risks and your
     responsibilities.
@@ -38,7 +38,7 @@ When you first boot the Pi with PiWalletSV installed, the bonnet shows
 the **PiWalletSV logo** briefly, then walks you through a three-page
 disclaimer:
 
-1. **Alpha software.** A short statement that this is pre-release
+1. **Beta software.** A short statement that this is pre-release
    code with no warranty.
 2. **You are your own custodian.** A reminder that nobody can
    recover funds for you if the seed is lost.

@@ -1,7 +1,8 @@
 # PiWalletSV
 
-> **Alpha software — read [`DISCLAIMER.md`](DISCLAIMER.md) before use.**
-> No warranty. Non-custodial: lose your seed and your funds are gone.
+> **Beta software — read [`DISCLAIMER.md`](DISCLAIMER.md) before use.**
+> No warranty. Non-custodial: your funds are always recoverable from any
+> BIP39-compatible wallet using your seed phrase; PiWalletSV is not required.
 > Report security issues per [`SECURITY.md`](SECURITY.md).
 
 Air-gapped **Bitcoin SV** wallet built on a **Raspberry Pi**, a **TFT bonnet** (joystick + buttons), and an **ArduCam OV5647** camera. Signing is performed entirely offline; a companion web app on your phone or laptop handles all on-chain work.
