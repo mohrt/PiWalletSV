@@ -45,14 +45,8 @@ done
 
 [[ -n "$REMOTE" ]] || usage
 
-EXCLUDE_FILE="$ROOT/scripts/rsync-pi-excludes.txt"
-[[ -f "$EXCLUDE_FILE" ]] || {
-    echo "missing exclude list: $EXCLUDE_FILE" >&2
-    exit 1
-}
-
-echo "rsync → ${REMOTE}:${REMOTE_PATH}/"
-rsync -av --delete --exclude-from="$EXCLUDE_FILE" "$ROOT/" "${REMOTE}:${REMOTE_PATH}/"
+echo "rsync → ${REMOTE}:${REMOTE_PATH}/ (allowlist)"
+bash "$ROOT/scripts/rsync-pi-payload.sh" "$ROOT" "${REMOTE}:${REMOTE_PATH}/"
 
 echo "prune stale payload artifacts on Pi..."
 ssh -t "$REMOTE" "sudo bash ${REMOTE_PATH}/scripts/prune-pi-payload.sh ${REMOTE_PATH}"

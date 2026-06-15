@@ -1,4 +1,4 @@
-"""Pi payload exclude manifest — dev sync and production image must match."""
+"""Pi payload allowlist — dev sync and production provision must match."""
 
 from __future__ import annotations
 
@@ -11,24 +11,29 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _rsync_payload(dest: Path) -> None:
+def _rsync_payload_allowlist(dest: Path) -> None:
+    """Simulate sync-to-pi.sh and provision-pi.sh --src."""
     dest.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [
-            "rsync",
-            "-a",
-            "--delete",
-            f"--exclude-from={REPO_ROOT / 'scripts' / 'rsync-pi-excludes.txt'}",
-            f"{REPO_ROOT}/",
+            "bash",
+            str(REPO_ROOT / "scripts" / "rsync-pi-payload.sh"),
+            str(REPO_ROOT),
             f"{dest}/",
         ],
         check=True,
+        cwd=REPO_ROOT,
     )
 
 
-def test_pi_payload_excludes_after_rsync(tmp_path: Path) -> None:
+def test_pi_payload_allowlist_passes_verify(tmp_path: Path) -> None:
     payload = tmp_path / "payload"
-    _rsync_payload(payload)
+    _rsync_payload_allowlist(payload)
+    subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts" / "prune-pi-payload.sh"), str(payload)],
+        check=True,
+        cwd=REPO_ROOT,
+    )
     subprocess.run(
         ["bash", str(REPO_ROOT / "scripts" / "verify-pi-payload.sh"), str(payload)],
         check=True,
@@ -45,12 +50,13 @@ def test_pi_payload_excludes_after_rsync(tmp_path: Path) -> None:
         "tests",
         "releases",
         "site",
+        "images",
         ".pytest_cache",
     ],
 )
 def test_pi_payload_forbidden_dirs_not_synced(tmp_path: Path, forbidden: str) -> None:
     payload = tmp_path / "payload"
-    _rsync_payload(payload)
+    _rsync_payload_allowlist(payload)
     assert not (payload / forbidden).exists(), f"{forbidden}/ must not be in Pi payload"
 
 

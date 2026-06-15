@@ -20,7 +20,10 @@ Every Pi tree — dev checkout (`~/PiWallet`) and sealed install (`/opt/piwallet
 |----------|----------|
 | `piwallet/`, `scripts/`, `deploy/`, `pyproject.toml` | `companion/`, `hardware/`, `docs/`, `tests/`, `releases/`, `site/`, dev caches, local vault state |
 
-Canonical exclude list:
+Canonical allowlist:
+[`scripts/rsync-pi-includes.txt`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/rsync-pi-includes.txt)
+(copied by [`scripts/rsync-pi-payload.sh`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/rsync-pi-payload.sh)).
+Forbidden-path checks:
 [`scripts/rsync-pi-excludes.txt`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/rsync-pi-excludes.txt)
 
 | Step | Tool | What it does |
@@ -29,7 +32,8 @@ Canonical exclude list:
 | `--src` → `/opt/piwallet` | [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh) | Same excludes + verify before venv install |
 | Git clone fallback | `provision-pi.sh` | `prune-pi-payload.sh` then verify |
 
-**Never** raw `rsync` without `--exclude-from=scripts/rsync-pi-excludes.txt`.
+**Never** raw `rsync` the whole repo — use `sync-to-pi.sh` or
+`scripts/rsync-pi-payload.sh` (allowlist).
 **Never** provision from a tree that still contains `docs/`, `tests/`, or `companion/`.
 
 ## 1. Build the sealed root filesystem
@@ -158,7 +162,7 @@ see [Verify your SD card](../user-manual.md#verify-sd-card-on-arrival).
 | | Dev (`sync-to-pi.sh`) | Production (`provision-pi.sh`) |
 |--|----------------------|-------------------------------|
 | Destination | `~/PiWallet` | `/opt/piwallet` |
-| Excludes | `rsync-pi-excludes.txt` | same file |
+| Excludes | `rsync-pi-includes.txt` + `rsync-pi-payload.sh` | same allowlist |
 | Verify | `verify-pi-payload.sh` after rsync | after rsync/prune, before pip |
 | SSH / Wi‑Fi | unchanged | off unless `--keep-ssh` / `--keep-radios` |
 | User | your login | `pwsv` (locked, no shell) + Imager login for console (e.g. `pisv`) |

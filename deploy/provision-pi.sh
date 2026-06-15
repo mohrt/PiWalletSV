@@ -586,14 +586,13 @@ step_install_app() {
     log "install app at $APP_DIR"
 
     if [[ -n "$src_dir" ]]; then
-        local exclude_file="${src_dir%/}/scripts/rsync-pi-excludes.txt"
-        [[ -f "$exclude_file" ]] || \
-            fail "missing $exclude_file — sync with scripts/sync-to-pi.sh or copy the full scripts/ tree"
-        log "  rsync from $src_dir (exclude-from scripts/rsync-pi-excludes.txt)"
-        run rsync -a --delete \
-            --exclude-from="$exclude_file" \
-            "${src_dir%/}/" "$APP_DIR/"
-        log "  prune non-runtime paths (rsync --delete skips excluded dest files)"
+        local payload_rsync="${src_dir%/}/scripts/rsync-pi-payload.sh"
+        [[ -x "$payload_rsync" ]] || \
+            fail "missing $payload_rsync — sync with scripts/sync-to-pi.sh or copy the full scripts/ tree"
+        log "  rsync from $src_dir (allowlist via scripts/rsync-pi-payload.sh)"
+        run install -d "$APP_DIR"
+        run bash "$payload_rsync" "${src_dir%/}" "$APP_DIR/"
+        log "  prune stale non-runtime paths (allowlist rsync does not delete them)"
         run bash "$APP_DIR/scripts/prune-pi-payload.sh" "$APP_DIR"
     else
         if [[ -d "$APP_DIR/.git" ]]; then
@@ -608,6 +607,8 @@ step_install_app() {
         run bash "$APP_DIR/scripts/prune-pi-payload.sh" "$APP_DIR"
     fi
 
+    [[ -x "$APP_DIR/scripts/rsync-pi-payload.sh" ]] || \
+        chmod 0755 "$APP_DIR/scripts/rsync-pi-payload.sh" 2>/dev/null || true
     [[ -x "$APP_DIR/scripts/verify-pi-payload.sh" ]] || \
         chmod 0755 "$APP_DIR/scripts/verify-pi-payload.sh" 2>/dev/null || true
     [[ -x "$APP_DIR/scripts/prune-pi-payload.sh" ]] || \

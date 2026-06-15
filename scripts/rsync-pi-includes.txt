@@ -1,0 +1,12 @@
+# Canonical Pi payload includes — used by:
+#   scripts/rsync-pi-payload.sh  (allowlist rsync)
+#   scripts/sync-to-pi.sh         (workstation → Pi dev tree)
+#   deploy/provision-pi.sh        (--src → /opt/piwallet)
+#
+# Only these paths are copied. Everything else stays on the workstation.
+# Forbidden-path checks still use scripts/rsync-pi-excludes.txt (verify + prune).
+
+piwallet/
+scripts/
+deploy/
+pyproject.toml
