@@ -24,14 +24,16 @@
 
 ---
 
-## ⚠ Alpha software — read this first
+## ⚠ Beta software — read this first
 
-PiWalletSV is **pre-release (alpha) software**. There is **no warranty**
+PiWalletSV is **pre-release (beta) software**. There is **no warranty**
 and **no recovery service** if you lose your seed phrase or PIN.
 
 - Use **testnet** and **small amounts** until you are confident.
-- **You** are the custodian. Nobody can restore your funds without your
-  **12- or 24-word seed phrase** written on paper or steel.
+- **Your funds are always recoverable** from any BIP39-compatible wallet
+  using your seed phrase. PiWalletSV is not required to access your funds.
+- **You** are the custodian. Write down your **12- or 24-word seed phrase**
+  on paper or steel and store it safely.
 - Read the full disclaimer on first boot (bonnet screen) and at
   https://piwalletsv.com/disclaimer/
 
@@ -328,7 +330,7 @@ This insert is a summary. The authoritative manual lives at
 
 ---
 
-**PiWalletSV** — Non-custodial. Alpha software. MIT licensed.  
+**PiWalletSV** — Non-custodial. Beta software. MIT licensed.  
 © PiWalletSV contributors. Save this card with your seed backup records.
 
 <div style="page-break-after: always;"></div>

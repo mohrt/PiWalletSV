@@ -13,10 +13,10 @@ including the USB backup mount daemon, FAT/exFAT tools, and bonnet
 `ReadWritePaths` for `/mnt/piwallet-usb`
 ([Operate § USB vault backup](operate.md#usb-vault-backup)).
 
-!!! warning "Alpha software"
+!!! warning "Beta software"
 
-    PiWalletSV is alpha. Use TESTNET and small amounts only. The image
-    artifact described here is published as a community alpha — there
+    PiWalletSV is beta. Use TESTNET and small amounts only. The image
+    artifact described here is published as a community beta — there
     is no commercial support behind it, and you remain responsible
     for verifying signatures and reading the [Disclaimer](disclaimer.md).
 
