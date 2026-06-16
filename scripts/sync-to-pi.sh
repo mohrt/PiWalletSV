@@ -3,11 +3,17 @@
 #
 # Usage:
 #   ./scripts/sync-to-pi.sh user@piwallet.local
+#   ./scripts/sync-to-pi.sh user@piwallet.local --prepare
 #   ./scripts/sync-to-pi.sh user@piwallet.local --bootstrap
 #   ./scripts/sync-to-pi.sh user@host --path /opt/piwallet --bootstrap
 #
 # Options:
 #   --path DIR       remote directory (default: ~/PiWallet)
+#   --prepare        after sync, enable getty@tty2 on the Pi and reboot it.
+#                    Use this when building a sealed image: after reboot,
+#                    plug in HDMI + USB keyboard, log in on tty2, and run
+#                    provision from there so radio packages purge inline
+#                    without an SSH connection.
 #   --bootstrap      run bootstrap-pi-dev.sh on the Pi after rsync
 #   --resume         pass --resume to bootstrap (with --bootstrap)
 set -euo pipefail
@@ -16,10 +22,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REMOTE=""
 REMOTE_PATH='~/PiWallet'
 DO_BOOTSTRAP=0
+DO_PREPARE=0
 BOOTSTRAP_ARGS=()
 
 usage() {
-    sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
 }
 
@@ -27,6 +34,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --path)        REMOTE_PATH=${2:?}; shift ;;
         --path=*)      REMOTE_PATH=${1#--path=} ;;
+        --prepare)     DO_PREPARE=1 ;;
         --bootstrap)   DO_BOOTSTRAP=1 ;;
         --resume)      BOOTSTRAP_ARGS+=(--resume) ;;
         -h|--help)     usage ;;
@@ -70,6 +78,14 @@ ssh -S "$CTRL" -t "$REMOTE" "sudo bash \"${REMOTE_ABS}/scripts/clean-pi-payload-
 
 echo "verify remote payload..."
 ssh -S "$CTRL" "$REMOTE" "bash \"${REMOTE_ABS}/scripts/verify-pi-payload.sh\" \"${REMOTE_ABS}\""
+
+if [[ $DO_PREPARE -eq 1 ]]; then
+    echo "prepare: enabling getty@tty2 for local HDMI/keyboard provisioning..."
+    ssh -S "$CTRL" -t "$REMOTE" "sudo systemctl enable getty@tty2.service"
+    echo "prepare: rebooting Pi — plug in HDMI + USB keyboard, log in on tty2, then run:"
+    echo "  sudo bash ~/PiWallet/deploy/provision-pi.sh --src ~/PiWallet"
+    ssh -S "$CTRL" -t "$REMOTE" "sudo reboot" 2>/dev/null || true
+fi
 
 if [[ $DO_BOOTSTRAP -eq 1 ]]; then
     echo "bootstrap on Pi..."
