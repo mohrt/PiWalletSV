@@ -676,6 +676,26 @@ For shell access on a development Pi (or scripted backups), see
 
 ## 13. Troubleshooting { #troubleshooting }
 
+**Accessing a local debug console (tty2) via HDMI + USB keyboard.**
+
+The sealed image keeps a second virtual terminal on tty2 for local
+troubleshooting — it is never accessible over the network. To use it:
+
+1. Plug a USB keyboard and micro-HDMI cable into the Pi.
+2. Power on (or reboot) the device.
+3. Once the bonnet shows the boot splash or disclaimer, press
+   **Ctrl + Alt + F2** on the keyboard. The HDMI output switches to tty2
+   and shows a login prompt.
+4. Log in as `pisv` with your device password.
+5. To return to tty1 (bonnet display output) press **Ctrl + Alt + F1**.
+
+This console has no network access and is intended for reading logs
+(`sudo journalctl -u piwallet-bonnet -f`), running the factory smoke
+test, or other local diagnostics. It does not interfere with the bonnet
+UI running on tty1.
+
+---
+
 **Send says "no spendable UTXOs" or "only confirmed coins can be sent"
 but Balance shows a non-zero total.**
 
