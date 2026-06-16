@@ -32,7 +32,7 @@ def start_camera_preview_worker(
     def run() -> None:
         cam = None
         try:
-            picamera_cls, _controls = _import_camera_stack()
+            picamera_cls = _import_camera_stack()
             w, h = _parse_size(size)
             cam = picamera_cls()
             cam.configure(
