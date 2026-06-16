@@ -52,6 +52,10 @@ scratch/
 
 # Captured SD images (local alpha/beta builds — publish via GitHub Releases)
 images/
+*.img
+*.img.gz
+*.img.xz
+*.shrunk.img.gz
 
 companion/node_modules/
 companion/dist/
