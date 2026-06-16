@@ -411,6 +411,9 @@ step_purge_radio_packages() {
         run systemctl enable piwallet-purge-radios.service
     else
         log "radio package purge: local console — purging inline now"
+        # The purge script requires the pending flag to be present even when
+        # called directly; create it so the script proceeds, then call it.
+        run touch /var/lib/piwallet/radio-purge.pending
         run bash "$script_src"
         # Install the unit anyway (idempotent guard) but do NOT enable it.
         run install -m 0644 "$unit_src" "$UNIT_DST_DIR/piwallet-purge-radios.service"
@@ -925,12 +928,12 @@ EOF
     # Mask cloud-init units so they don't run on every boot and timeout
     # waiting for a network that will never exist on a sealed device.
     # Hostname and hosts file are already set by this script; cloud-init
-    # provides no value on the shipped image.
+    # provides no value on the shipped image. Mask unconditionally — if
+    # the unit doesn't exist systemctl mask creates a stub symlink that
+    # is harmless and prevents the unit from being added back by an upgrade.
     for _ci_unit in cloud-init-local.service cloud-init.service \
                     cloud-config.service cloud-final.service; do
-        if systemctl cat "$_ci_unit" >/dev/null 2>&1; then
-            run systemctl mask "$_ci_unit"
-        fi
+        run systemctl mask "$_ci_unit" 2>/dev/null || true
     done
     unset _ci_unit
 
