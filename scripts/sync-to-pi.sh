@@ -9,11 +9,11 @@
 #
 # Options:
 #   --path DIR       remote directory (default: ~/PiWallet)
-#   --prepare        after sync, enable getty@tty2 on the Pi and reboot it.
-#                    Use this when building a sealed image: after reboot,
-#                    plug in HDMI + USB keyboard, log in on tty2, and run
-#                    provision from there so radio packages purge inline
-#                    without an SSH connection.
+#   --prepare        after sync, enable getty@tty2 on the Pi.
+#                    Use this when building a sealed image: after sync,
+#                    power OFF the Pi, plug in HDMI + USB keyboard, then
+#                    power ON. Log in on tty2 and run provision from there
+#                    so radio packages purge inline without an SSH session.
 #   --bootstrap      run bootstrap-pi-dev.sh on the Pi after rsync
 #   --resume         pass --resume to bootstrap (with --bootstrap)
 set -euo pipefail
@@ -82,9 +82,13 @@ ssh -S "$CTRL" "$REMOTE" "bash \"${REMOTE_ABS}/scripts/verify-pi-payload.sh\" \"
 if [[ $DO_PREPARE -eq 1 ]]; then
     echo "prepare: enabling getty@tty2 for local HDMI/keyboard provisioning..."
     ssh -S "$CTRL" -t "$REMOTE" "sudo systemctl enable getty@tty2.service"
-    echo "prepare: rebooting Pi — plug in HDMI + USB keyboard, log in on tty2, then run:"
-    echo "  sudo bash ~/PiWallet/deploy/provision-pi.sh --src ~/PiWallet"
-    ssh -S "$CTRL" -t "$REMOTE" "sudo reboot" 2>/dev/null || true
+    echo ""
+    echo "Ready. Next steps:"
+    echo "  1. Power OFF the Pi (unplug power)"
+    echo "  2. Plug in HDMI + USB keyboard"
+    echo "  3. Power ON — tty2 login prompt will appear on HDMI"
+    echo "  4. Log in and run:"
+    echo "       sudo bash ~/PiWallet/deploy/provision-pi.sh --src ~/PiWallet"
 fi
 
 if [[ $DO_BOOTSTRAP -eq 1 ]]; then
