@@ -45,6 +45,7 @@ body {
   background: var(--bg);
   color: var(--text);
   min-height: 100%;
+  overflow-x: hidden;
 }
 
 #app {
@@ -417,8 +418,7 @@ button:hover:not(:disabled) {
 .camera-scanner-video {
   background: #000;
   border-radius: 8px;
-  width: 360px;
-  max-width: 100%;
+  width: min(360px, 100%);
   aspect-ratio: 4 / 3;
   object-fit: cover;
   flex: 0 0 auto;
