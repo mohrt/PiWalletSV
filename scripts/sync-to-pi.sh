@@ -80,28 +80,17 @@ echo "verify remote payload..."
 ssh -S "$CTRL" "$REMOTE" "bash \"${REMOTE_ABS}/scripts/verify-pi-payload.sh\" \"${REMOTE_ABS}\""
 
 if [[ $DO_PREPARE -eq 1 ]]; then
-    echo "prepare: configuring HDMI + getty@tty2, then rebooting..."
-    ssh -S "$CTRL" -t "$REMOTE" "
-        set -e
-        CFG=/boot/firmware/config.txt
-        # Force HDMI output even when no monitor is detected at boot.
-        if ! grep -q 'hdmi_force_hotplug' \"\$CFG\" 2>/dev/null; then
-            echo 'hdmi_force_hotplug=1' | sudo tee -a \"\$CFG\"
-        fi
-        # Switch full KMS -> fake/transitional KMS so the firmware
-        # framebuffer is used for console output. Full KMS (vc4-kms-v3d)
-        # can produce a blank console on Pi Zero W before provision runs.
-        sudo sed -i 's/dtoverlay=vc4-kms-v3d/dtoverlay=vc4-fkms-v3d/' \"\$CFG\"
-        # Remove full-KMS companion flag if present.
-        sudo sed -i '/disable_fw_kms_setup=1/d' \"\$CFG\"
-        sudo systemctl enable getty@tty2.service
-        echo 'Rebooting...'
-        sudo reboot
-    " 2>/dev/null || true
+    echo "prepare: HDMI console (fkms + hotplug + tty2)..."
+    ssh -S "$CTRL" -t "$REMOTE" "sudo bash \"${REMOTE_ABS}/deploy/scripts/prepare-hdmi-console.sh\""
     echo ""
-    echo "Pi is rebooting with HDMI fixes applied."
-    echo "Plug in HDMI + USB keyboard if not already connected."
-    echo "After reboot, press Ctrl+Alt+F2 for tty2, log in, then run:"
+    echo "Reboot the Pi (power cycle with HDMI already plugged in is fine):"
+    echo "  ssh ${REMOTE} 'sudo reboot'"
+    echo ""
+    echo "After reboot, verify from SSH:"
+    echo "  ls -la /dev/fb*     # must show /dev/fb0"
+    echo "  sudo chvt 2         # or Ctrl+Alt+F2 on the keyboard"
+    echo ""
+    echo "Then log in on tty2 and provision:"
     echo "  sudo bash ~/PiWallet/deploy/provision-pi.sh --src ~/PiWallet"
 fi
 
