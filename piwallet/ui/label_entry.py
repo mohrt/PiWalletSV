@@ -18,8 +18,9 @@ RIGHT       Move cursor one slot right; can land on a "new slot" past the
             buffer is already full).
 B PRESS     Delete the letter under the cursor and move back one slot
             (repeatable). At least one letter always remains.
-B LONG      Optional: cancel (rename), skip to suggested default (create),
-            or ignored (restore naming — accidental hold must not abort).
+B LONG      Clear the entire label back to a single "a". If the label is
+            already at minimum ("a"), falls through to cancel (rename) or
+            skip-to-default (create). Ignored in restore-naming mode.
 A           Save the typed name (result = stripped buffer). Blocked when
             blank after stripping.
 ==========  ================================================================
@@ -189,8 +190,16 @@ class WalletLabelEntryScreen:
         elif b == Button.B and k in (EventKind.PRESS, EventKind.REPEAT):
             self._delete_and_back()
         elif b == Button.B and k == EventKind.LONG and not self.ignore_hold_b_long:
-            self.done = True
-            self.result = None
+            label_is_minimum = self.buffer == ["a"] and self.cursor == 0
+            if not label_is_minimum:
+                # First long-press clears the label — faster than tapping B.
+                self.buffer = ["a"]
+                self.cursor = 0
+                self.transient_error = None
+            else:
+                # Already at minimum: cancel (rename) or skip to default (create).
+                self.done = True
+                self.result = None
         elif b == Button.A and k == EventKind.PRESS:
             self._try_save()
 
@@ -338,12 +347,14 @@ class WalletLabelEntryScreen:
         if self.ignore_hold_b_long:
             footer_line = "A save   B del"
         else:
-            if self.cancel_on_hold_b:
-                hold_hint = "hold B cancel"
-            elif self.suggested_default:
-                hold_hint = "hold B skip = default"
+            label_is_minimum = self.buffer == ["a"] and self.cursor == 0
+            if label_is_minimum:
+                if self.cancel_on_hold_b or not self.suggested_default:
+                    hold_hint = "hold B cancel"
+                else:
+                    hold_hint = "hold B default"
             else:
-                hold_hint = "hold B cancel"
+                hold_hint = "hold B clear"
             footer_line = f"A OK   B del   {hold_hint}"
         draw_text(
             fb,
