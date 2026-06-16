@@ -37,7 +37,8 @@
 #
 # Usage:
 #   sudo deploy/provision-pi.sh [--src PATH] [--release-version VER]
-#                 [--image-channel CH] [--keep-ssh] [--keep-radios] [--dry-run]
+#                 [--image-channel CH] [--keep-ssh] [--keep-radios]
+#                 [--local] [--dry-run]
 #
 #   --release-version VER   Baked into /etc/piwalletsv-release (default:
 #                           PIWALLETSV_RELEASE_VERSION or 0.1.0-r3).
@@ -57,6 +58,12 @@
 #                 worked. Re-flash and provision without this flag
 #                 to produce the actual sealed image. The shipped
 #                 public image MUST NOT use this flag.
+#   --local       Force radio package purge to run inline now even when
+#                 SSH_CONNECTION is set in the environment. Use this when
+#                 provisioning from tty2/HDMI on a Pi that was previously
+#                 accessed via SSH (sudo can inherit SSH_CONNECTION). For
+#                 image-capture builds where first-boot radio purge would
+#                 add 30–120 s to the end-user boot experience.
 #   --dry-run     Print what would happen without making changes.
 #
 # Idempotency: every step checks state before mutating, so running
@@ -182,6 +189,7 @@ image_channel="${PIWALLETSV_IMAGE_CHANNEL:-round1-zero-w}"
 keep_ssh=0
 keep_radios=0
 dry_run=0
+local_provision=0  # force inline radio purge even when SSH_CONNECTION is set
 
 usage() {
     sed -n '2,40p' "$0" | sed 's|^# *||'
@@ -198,6 +206,7 @@ while [[ $# -gt 0 ]]; do
         --image-channel=*) image_channel=${1#--image-channel=} ;;
         --keep-ssh)    keep_ssh=1 ;;
         --keep-radios) keep_radios=1 ;;
+        --local)       local_provision=1 ;;
         --dry-run)     dry_run=1 ;;
         -h|--help)     usage 0 ;;
         *)             echo "error: unknown arg '$1'" >&2; usage ;;
@@ -318,6 +327,7 @@ preflight() {
 
     log "  keep_ssh:    ${keep_ssh}"
     log "  keep_radios: ${keep_radios}"
+    log "  local:       ${local_provision}"
     log "  release:     ${release_version} (${image_channel})"
     log "  dry-run:     ${dry_run}"
 
@@ -388,7 +398,11 @@ step_purge_radio_packages() {
     run install -d -m 0755 /var/lib/piwallet
     run chmod 0755 "$script_src"
 
-    if [[ -n "${SSH_CONNECTION:-}" ]]; then
+    # Purge inline if: on a local console (no SSH_CONNECTION), OR --local
+    # flag was passed. When provisioning from tty2/HDMI, sudo can inherit
+    # SSH_CONNECTION from an earlier login session — use --local to force
+    # inline purge in that case (important for image-capture builds).
+    if [[ -n "${SSH_CONNECTION:-}" && $local_provision -eq 0 ]]; then
         log "radio package purge: over SSH — scheduling for first boot"
         run install -m 0644 "$unit_src" "$UNIT_DST_DIR/piwallet-purge-radios.service"
         run touch /var/lib/piwallet/radio-purge.pending
@@ -908,6 +922,17 @@ EOF
             2>/dev/null || true
     fi
     run rm -f /var/log/cloud-init*.log
+    # Mask cloud-init units so they don't run on every boot and timeout
+    # waiting for a network that will never exist on a sealed device.
+    # Hostname and hosts file are already set by this script; cloud-init
+    # provides no value on the shipped image.
+    for _ci_unit in cloud-init-local.service cloud-init.service \
+                    cloud-config.service cloud-final.service; do
+        if systemctl cat "$_ci_unit" >/dev/null 2>&1; then
+            run systemctl mask "$_ci_unit"
+        fi
+    done
+    unset _ci_unit
 
     # Drop dev checkout and remote-login keys; production runs from
     # /opt/piwallet only. Keep the login account for HDMI/keyboard access.

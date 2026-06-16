@@ -53,7 +53,7 @@ def load_logo(max_w: int = _LOGO_MAX_W, max_h: int = _LOGO_MAX_H) -> Image.Image
 class BootSplashScreen:
     """Interactive boot logo — hold B for diagnostics or continue setup."""
 
-    idle_timeout_ms: int = 3000
+    idle_timeout_ms: int = 1500
     diagnostics_hold_ms: int = BOOT_DIAGNOSTICS_HOLD_MS
     clock_ms: Callable[[], int] = field(default=_default_clock_ms)
     done: bool = False
