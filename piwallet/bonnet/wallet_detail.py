@@ -126,20 +126,20 @@ class WalletDetailScreen:
             color=COLOR_ACCENT,
             anchor="mm",
         )
+        # Receive index — right-aligned inside the title bar so it's always
+        # visible against the dark title background (not the QR matte).
+        draw_text(
+            fb,
+            DISPLAY_WIDTH - 6,
+            title_h // 2,
+            f"#{self.index}",
+            size=11,
+            color=COLOR_DIM,
+            anchor="rm",
+        )
 
         matte_rgb = qr_background_rgb(self.qr_background)
         fill_qr_panel_background(fb, top_y=title_h, matte_color=matte_rgb)
-
-        # Receive index subtitle.
-        draw_text(
-            fb,
-            DISPLAY_WIDTH // 2,
-            title_h + 10,
-            f"receive #{self.index}",
-            size=11,
-            color=COLOR_DIM,
-            anchor="mm",
-        )
 
         # QR (centered horizontally, below subtitle).
         try:
