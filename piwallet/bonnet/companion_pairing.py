@@ -67,7 +67,7 @@ class OfferCompanionPairingScreen:
             title=title,
             items=[
                 ListItem(label="Show companion QR", value=True),
-                ListItem(label="Not now", value=False),
+                ListItem(label="Skip (do later)", value=False),
             ],
         )
 
