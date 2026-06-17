@@ -9,11 +9,9 @@
 #
 # Options:
 #   --path DIR       remote directory (default: ~/PiWallet)
-#   --prepare        after sync, enable hdmi_force_hotplug + getty@tty2,
-#                    then reboot. Use this when building a sealed image:
-#                    plug in HDMI + USB keyboard, wait for reboot, log in
-#                    on tty2 (Ctrl+Alt+F2), and run provision from there
-#                    so radio packages purge inline without an SSH session.
+#   --prepare        after sync, apply Pi Zero W HDMI/tty2 boot settings and
+#                    reboot. Use when building a sealed image from a fresh
+#                    Pi OS Lite SD card: log in on tty2, then run provision.
 #   --bootstrap      run bootstrap-pi-dev.sh on the Pi after rsync
 #   --resume         pass --resume to bootstrap (with --bootstrap)
 set -euo pipefail
@@ -80,17 +78,19 @@ echo "verify remote payload..."
 ssh -S "$CTRL" "$REMOTE" "bash \"${REMOTE_ABS}/scripts/verify-pi-payload.sh\" \"${REMOTE_ABS}\""
 
 if [[ $DO_PREPARE -eq 1 ]]; then
-    echo "prepare: HDMI console (fkms + hotplug + tty2)..."
-    ssh -S "$CTRL" -t "$REMOTE" "sudo bash \"${REMOTE_ABS}/deploy/scripts/prepare-hdmi-console.sh\""
+    echo "prepare: Pi Zero W HDMI + tty2 (reboot required)..."
+    ssh -S "$CTRL" -t "$REMOTE" 'sudo bash -s' <<'EOF'
+set -euo pipefail
+CFG=/boot/firmware/config.txt
+[[ -f "$CFG" ]] || CFG=/boot/config.txt
+grep -q '^hdmi_force_hotplug=1' "$CFG" || echo 'hdmi_force_hotplug=1' >> "$CFG"
+sed -i 's/dtoverlay=vc4-kms-v3d/dtoverlay=vc4-fkms-v3d/' "$CFG"
+sed -i '/^disable_fw_kms_setup=1/d' "$CFG"
+systemctl enable getty@tty2.service
+reboot
+EOF
     echo ""
-    echo "Reboot the Pi (power cycle with HDMI already plugged in is fine):"
-    echo "  ssh ${REMOTE} 'sudo reboot'"
-    echo ""
-    echo "After reboot, verify from SSH:"
-    echo "  ls -la /dev/fb*     # must show /dev/fb0"
-    echo "  sudo chvt 2         # or Ctrl+Alt+F2 on the keyboard"
-    echo ""
-    echo "Then log in on tty2 and provision:"
+    echo "Pi is rebooting. After boot: Ctrl+Alt+F2 (Mac: Ctrl+Fn+Option+F2), log in, then:"
     echo "  sudo bash ~/PiWallet/deploy/provision-pi.sh --src ~/PiWallet"
 fi
 

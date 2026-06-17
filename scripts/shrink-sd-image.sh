@@ -12,6 +12,8 @@
 # Environment:
 #   PISHRINK   path to pishrink script (Linux native)
 #   PISHRINK_DOCKER_IMAGE  Docker image for macOS (default: debian:bookworm-slim)
+#   PISHRINK_AUTOEXPAND=1  enable PiShrink first-boot expand (adds one reboot on
+#                          flash; default is off — shrunk image already fits 8 GB)
 #
 set -euo pipefail
 
@@ -59,6 +61,12 @@ fi
 INPUT=$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")
 OUTPUT=$(cd "$(dirname "$OUTPUT")" && pwd)/$(basename "$OUTPUT")
 
+PISHRINK_FLAGS=()
+if [[ "${PISHRINK_AUTOEXPAND:-0}" != 1 ]]; then
+    PISHRINK_FLAGS=(-s)
+    log "PiShrink: skip first-boot auto-expand (no flash-time reboot; set PISHRINK_AUTOEXPAND=1 to fill larger cards)"
+fi
+
 run_pishrink_native() {
     local pishrink_bin="${PISHRINK:-}"
     if [[ -z "$pishrink_bin" ]]; then
@@ -70,7 +78,7 @@ run_pishrink_native() {
     fi
     [[ -n "$pishrink_bin" && -x "$pishrink_bin" ]] || return 1
     log "PiShrink (native): $pishrink_bin"
-    sudo "$pishrink_bin" -z "$INPUT" "$OUTPUT"
+    sudo "$pishrink_bin" "${PISHRINK_FLAGS[@]}" "$INPUT" "$OUTPUT"
 }
 
 run_pishrink_docker() {
@@ -90,7 +98,7 @@ run_pishrink_docker() {
             apt-get install -y -qq e2fsprogs parted kpartx mount util-linux ca-certificates wget >/dev/null
             wget -q -O /usr/local/bin/pishrink '$PISHRINK_URL'
             chmod +x /usr/local/bin/pishrink
-            pishrink -z '/workdir/$(basename "$INPUT")' '/workdir/$(basename "$OUTPUT")'
+            pishrink ${PISHRINK_FLAGS[*]:-} '/workdir/$(basename "$INPUT")' '/workdir/$(basename "$OUTPUT")'
         "
 }
 

@@ -6,8 +6,9 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from io import BytesIO
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from piwallet.bonnet.camera_still import capture_still_jpeg_bytes
 from piwallet.bonnet.entropy_camera import EntropyDualStreamCamera
@@ -204,6 +205,91 @@ class CameraEntropyScreen:
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 12,
             "Preview = aim   JPEG = entropy",
+            size=9,
+            color=COLOR_OK,
+            anchor="mm",
+        )
+
+
+def _jpeg_preview_thumb(jpeg: bytes, *, max_edge: int = 200) -> Image.Image:
+    """Decode a captured entropy JPEG for the TFT confirmation screen."""
+    img = Image.open(BytesIO(jpeg)).convert("RGB")
+    return ImageOps.contain(img, (max_edge, max_edge), Image.Resampling.BILINEAR)
+
+
+@dataclass
+class CameraEntropyConfirmScreen:
+    """Show the captured still and wait for operator acknowledgement."""
+
+    jpeg: bytes
+    title: str = "Photo captured"
+    done: bool = False
+    confirmed: bool | None = None
+    preview_thumb_max_edge: int = 200
+    _thumb: Image.Image = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._thumb = _jpeg_preview_thumb(
+            self.jpeg, max_edge=self.preview_thumb_max_edge
+        )
+
+    def _size_label(self) -> str:
+        n = len(self.jpeg)
+        if n >= 1024:
+            return f"{n // 1024} KB saved"
+        return f"{n} B saved"
+
+    def on_event(self, event: Event) -> None:
+        if self.done:
+            return
+        if event.button == Button.B and event.kind in (EventKind.PRESS, EventKind.LONG):
+            self.done = True
+            self.confirmed = None
+            return
+        if event.button == Button.A and event.kind == EventKind.PRESS:
+            self.done = True
+            self.confirmed = True
+
+    def draw(self, fb: FrameBuffer) -> None:
+        fb.clear(COLOR_BG)
+        fb.draw.rectangle((0, 0, DISPLAY_WIDTH, _TITLE_H), fill=(20, 20, 32))
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            _TITLE_H // 2,
+            self.title,
+            size=14,
+            color=COLOR_OK,
+            anchor="mm",
+        )
+
+        box = (0, _PREVIEW_TOP, DISPLAY_WIDTH, _PREVIEW_BOTTOM)
+        paste_cover(fb.image, self._thumb, box)
+
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            _PREVIEW_BOTTOM + 6,
+            self._size_label(),
+            size=10,
+            color=COLOR_DIM,
+            anchor="mm",
+        )
+
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            DISPLAY_HEIGHT - 28,
+            "A continue   B retake",
+            size=11,
+            color=COLOR_DIM,
+            anchor="mm",
+        )
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            DISPLAY_HEIGHT - 12,
+            "Mixed with OS random bytes",
             size=9,
             color=COLOR_OK,
             anchor="mm",

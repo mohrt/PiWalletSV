@@ -10,15 +10,15 @@
       "camera": "ArduCam OV5647",
       "github_release": "https://github.com/mohrt/PiWalletSV/releases/tag/v0.1.0-r3",
       "assets": {
-        "image_xz": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/piwalletsv-0.1.0-r3.img.xz",
-        "image_asc": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/piwalletsv-0.1.0-r3.img.xz.asc",
+        "image_xz": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/piwalletsv-0.1.0-r3-beta.img.xz",
+        "image_asc": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/piwalletsv-0.1.0-r3-beta.img.xz.asc",
         "sha256sums": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/SHA256SUMS",
         "sha256sums_asc": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3/SHA256SUMS.asc"
       },
       "sha256": null,
       "image_id": null,
       "published_at": null,
-      "notes": "Beta test build — 8 GB-compatible image (PiShrink after capture). Fill sha256 and image_id after local build; set published_at when GitHub Release goes live."
+      "notes": "Beta test build — 8 GB-compatible image (PiShrink after capture). Fill image_id after local build; set published_at when GitHub Release goes live."
     },
     {
       "version": "0.1.0-r2",
@@ -34,10 +34,10 @@
         "sha256sums": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r2/SHA256SUMS",
         "sha256sums_asc": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r2/SHA256SUMS.asc"
       },
-      "sha256": null,
+      "sha256": "4576e9331c175d9aa9211c3b826b2f0ed03547c07e11bab6166b302260b1b683",
       "image_id": null,
       "published_at": null,
-      "notes": "Pending first signed upload. Fill sha256 and image_id after capture; set published_at when GitHub Release goes live."
+      "notes": "Pending first signed upload. Fill image_id after capture; set published_at when GitHub Release goes live."
     },
     {
       "version": "0.1.0-r1",

@@ -47,12 +47,20 @@ Raspberry Pi Imager → **Pi OS Lite 32-bit** → hostname, user, Wi‑Fi, SSH k
 From your Mac at a **known commit**:
 
 ```bash
-./scripts/sync-to-pi.sh pi@piwallet-builder.local
-# adds --bootstrap to run bootstrap-pi-dev.sh after verify
+./scripts/sync-to-pi.sh pisv@piwalletsv.local --prepare
 ```
 
-This rsyncs with excludes and runs `verify-pi-payload.sh` on the Pi before
-you proceed.
+This rsyncs with the allowlist, verifies the payload, applies Pi Zero W
+HDMI/tty2 boot settings, and reboots the Pi.
+
+After reboot: plug in HDMI + USB keyboard, press **Ctrl+Alt+F2** (Mac:
+**Ctrl+Fn+Option+F2**), log in as `pisv`.
+
+For dev sync only (no image build), omit `--prepare`:
+
+```bash
+./scripts/sync-to-pi.sh pi@piwallet-builder.local --bootstrap
+```
 
 ### 1c. Builder provision (keep SSH + radios)
 
@@ -82,56 +90,106 @@ sudo bash /opt/piwallet/scripts/factory-smoke-test.sh --serial BUILD-001
 
 ### 1e. Seal the shipping image
 
-Re-flash a **fresh** SD (or wipe and re-provision) **without** builder flags:
+After sync + `--prepare` (§1b), on **tty2** (not over SSH):
 
 ```bash
-# sync again if needed, then on the Pi:
-sudo deploy/provision-pi.sh \
+sudo bash ~/PiWallet/deploy/provision-pi.sh \
   --src ~/PiWallet \
+  --local \
   --release-version 0.1.0-r3 \
   --image-channel round1-zero-w
 sudo reboot
 # Bonnet shows disclaimer on tty1; no SSH; radios off.
-# Provision scrubs Imager Wi-Fi/network files; ~/PiWallet dev copy removed
-# (runtime is /opt/piwallet only); login user kept for console.
+# --local forces inline radio purge even if SSH_CONNECTION is inherited on tty2.
 ```
+
+Provision from a local console so radio packages purge inline (purging
+over SSH can hang). Re-flash a **fresh** SD if you previously ran a
+builder provision with `--keep-ssh --keep-radios` (§1c).
 
 Note **Image ID** from `/etc/piwalletsv-release` (or
 `/opt/piwallet/RELEASE.json`) for kit insert printing.
 
-## 2. Capture the image (workstation)
+## 2. Capture, shrink, compress, and checksum (workstation)
 
-Power off the Pi. Insert the SD into **your** reader on Mac/Linux:
+Power off the Pi. Insert the SD into **your** reader on Mac/Linux, then run
+the all-in-one script (capture → PiShrink → `xz` → `SHA256SUMS`):
 
 ```bash
-# macOS — replace rdiskN with the raw whole-disk device
-diskutil unmountDisk /dev/diskN
-sudo dd if=/dev/rdiskN of=piwalletsv-0.1.0-r3.img bs=4m conv=sync,noerror status=progress
+# Beta (GitHub pre-release) — adds -beta to filename
+./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity beta diskN
+
+# Alpha (local only, never GitHub) — lands in images/alpha/
+./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity alpha diskN
+
+# GA / full release — no suffix (default)
+./scripts/capture-sd-image.sh --version 1.0.0 diskN
+
+# Already captured a raw .img? Skip dd:
+./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity beta --from path/to/capture.img
+
+# Add GPG detach-signatures for GitHub upload:
+./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity beta diskN --sign
 ```
 
-Capture to an uncompressed `.img` first (not straight to `.xz`) so the shrink
-step can resize partitions.
+### Filename convention
 
-## 2b. Shrink for 8 GB compatibility
+Same firmware revision (`0.1.0-r3`) can produce multiple captures. Use
+**maturity in the filename** on your workstation; use **Image ID** on the card
+(`/etc/piwalletsv-release`) to tell builds apart.
+
+| Maturity | Filename | GitHub? |
+|----------|----------|---------|
+| `alpha` | `piwalletsv-0.1.0-r3-alpha.img.xz` | Never — local QA only |
+| `beta` | `piwalletsv-0.1.0-r3-beta.img.xz` | Pre-release / community beta |
+| `release` | `piwalletsv-1.0.0.img.xz` | GA — no suffix |
+
+Alpha builds skip `releases/SHA256SUMS` and `releases.json` updates.
+
+Output lands in `images/` by default (`images/alpha/` for alpha):
+
+| File | Purpose |
+|------|---------|
+| `piwalletsv-0.1.0-r3-beta.img.xz` | Published image (example beta name) |
+| `images/SHA256SUMS` | **Single-line** checksum file — upload this to the GitHub Release |
+| `releases/SHA256SUMS` | **Cumulative** checksums for all releases — committed to the repo |
+| `releases/releases.json` | `sha256` field updated automatically for the built version |
+| `*.asc` | Detached signatures (with `--sign`) |
+
+Each GitHub Release gets its own `SHA256SUMS` asset with one line (that release's
+`.img.xz` only). The repo-root `releases/SHA256SUMS` lists every published image
+so older versions stay verifiable from source control.
+
+The script captures to an uncompressed `.img` first (not straight to `.xz`) so
+PiShrink can resize partitions, then removes the `.img` after `xz` unless you
+pass `--keep-img`.
+
+PiShrink uses **`-s`** by default (no first-flash filesystem expand, so no
+automatic reboot after Imager write). The shrunk image already fits 8 GB cards.
+Set ``PISHRINK_AUTOEXPAND=1`` when shrinking if you want larger cards to expand
+on first boot (one reboot, slower UX).
+
+**Baked into the captured image** (buyer's first boot should be fast):
+
+| Done at provision (before `dd`) | Skipped on buyer first boot |
+|--------------------------------|-----------------------------|
+| Radio package purge inline (tty2 / `--local`) | No `apt purge` wait |
+| cloud-init units masked | No cloud-init timeouts |
+| Wi-Fi/BT firmware disabled + units masked | RF already off |
+| Bonnet app + venv in `/opt/piwallet` | No install step |
+
+If provision ran over SSH without `--local`, ``radio-purge.pending`` may still
+be in the image → first boot runs ``apt purge`` (60–120 s, no reboot).
+
+On **macOS**, shrink runs PiShrink inside Docker (`--privileged`). On **Linux**,
+install PiShrink natively or set `PISHRINK=/path/to/pishrink`.
+
+Individual steps (if you need them):
 
 ```bash
-chmod +x scripts/shrink-sd-image.sh
-./scripts/shrink-sd-image.sh piwalletsv-0.1.0-r3.img
-# Replaces input in-place with a shrunk copy (or use -o other.img)
-
-xz -T0 piwalletsv-0.1.0-r3.img
-xz -l piwalletsv-0.1.0-r3.img.xz    # uncompressed must be ≤ ~8 GiB
-```
-
-On **macOS**, the shrink script runs PiShrink inside Docker (`--privileged`).
-On **Linux**, install PiShrink natively or set `PISHRINK=/path/to/pishrink`.
-
-## 2c. Checksum and sign
-
-```bash
-shasum -a 256 piwalletsv-0.1.0-r3.img.xz | tee SHA256SUMS
-gpg --armor --detach-sign piwalletsv-0.1.0-r3.img.xz
-gpg --armor --detach-sign SHA256SUMS
+./scripts/shrink-sd-image.sh images/piwalletsv-0.1.0-r3.img
+xz -f -T0 images/piwalletsv-0.1.0-r3.img
+shasum -a 256 images/piwalletsv-0.1.0-r3.img.xz | tee images/SHA256SUMS
 ```
 
 ## 3. Publish GitHub Release

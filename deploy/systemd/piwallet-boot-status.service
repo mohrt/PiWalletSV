@@ -1,0 +1,36 @@
+# PiWalletSV early boot panel — "Booting…" while systemd finishes startup.
+#
+# First boot after a sealed image can spend 60–120 s purging Wi-Fi/BT packages
+# before piwallet-bonnet.service is allowed to start. Without this unit the TFT
+# stays dark even though the backlight may already be on.
+#
+# piwallet-bonnet.service stops this unit in ExecStartPre before taking over
+# the SPI panel.
+[Unit]
+Description=PiWalletSV boot status (bonnet)
+Documentation=https://piwalletsv.com/operate/
+DefaultDependencies=no
+After=local-fs.target
+Before=piwallet-purge-radios.service piwallet-bonnet.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=pwsv
+Group=pwsv
+SupplementaryGroups=spi gpio
+WorkingDirectory=/home/pwsv
+Environment=PIWALLET_LOG_LEVEL=WARNING
+ExecStart=/opt/piwallet/.venv/bin/python -m piwallet.bonnet.boot_status
+Restart=no
+TimeoutStopSec=5
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

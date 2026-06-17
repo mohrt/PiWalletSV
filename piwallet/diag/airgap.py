@@ -66,10 +66,12 @@ list, which ``check_rfkill_all_blocked`` correctly treats as PASS
 with the modules, services, boot_config, and blacklist checks — if
 all of those pass, the aggregate is ``ok=True`` (shown as ``OK``).
 The ``--`` display means at least one sub-check returned ``None``
-(data source unavailable), which happens when ``/sys/class/rfkill``
-is not accessible from inside the bonnet's network namespace on some
-kernel/systemd versions.  Adding ``/sys/class/rfkill`` to
-``ReadOnlyPaths`` in the unit file resolves this.
+(data source unavailable). Inside the bonnet unit this is usually
+``/sys/class/rfkill`` (``PrivateNetwork=yes``). When every *conclusive*
+sub-check passes, the bonnet row still shows ``OK`` — inconclusive
+rfkill alone does not downgrade Wi-Fi / Bluetooth to ``--``.
+Adding ``/sys/class/rfkill`` to ``ReadOnlyPaths`` in the unit file
+still helps the full six-row CLI report from the same process.
 """
 
 from __future__ import annotations
@@ -186,12 +188,21 @@ class CheckResult:
 
     @property
     def status(self) -> str:
-        """Three-letter glyph for compact rendering on the LCD."""
+        """Three-letter glyph for compact rendering (CLI / logs)."""
         if self.ok is True:
             return "OK"
         if self.ok is False:
             return "!!"
         return "--"
+
+    @property
+    def bonnet_status(self) -> str:
+        """Plain label for Settings → Airgap status on the bonnet LCD."""
+        if self.ok is True:
+            return "Disabled"
+        if self.ok is False:
+            return "Active"
+        return "Unknown"
 
 
 @dataclass(frozen=True)
@@ -459,16 +470,27 @@ def checks_for_bonnet_display() -> tuple[CheckResult, ...]:
 
 
 def _aggregate_radio_check(name: str, *parts: CheckResult) -> CheckResult:
+    """Roll sub-checks into one Wi-Fi or Bluetooth row for the bonnet LCD."""
     if any(c.ok is False for c in parts):
-        ok: bool | None = False
-        detail = next(c.detail for c in parts if c.ok is False)
-    elif all(c.ok is True for c in parts):
-        ok = True
-        detail = "ok"
-    else:
-        ok = None
-        detail = next((c.detail for c in parts if c.ok is None), "unavailable")
-    return CheckResult(name, ok, detail)
+        return CheckResult(
+            name, False, next(c.detail for c in parts if c.ok is False)
+        )
+    conclusive = [c for c in parts if c.ok is not None]
+    if not conclusive:
+        return CheckResult(
+            name,
+            None,
+            next((c.detail for c in parts if c.ok is None), "unavailable"),
+        )
+    if all(c.ok is True for c in conclusive):
+        # e.g. rfkill sysfs unreadable inside PrivateNetwork=yes but modules,
+        # boot overlays, services, and blacklist all pass conclusively.
+        return CheckResult(name, True, "ok")
+    return CheckResult(
+        name,
+        None,
+        next((c.detail for c in parts if c.ok is None), "unavailable"),
+    )
 
 
 def _split_rfkill_checks() -> tuple[CheckResult, CheckResult]:

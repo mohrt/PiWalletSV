@@ -8,7 +8,7 @@ from typing import Any, ClassVar
 import numpy as np
 from PIL import Image
 
-from piwallet.bonnet.entropy_screens import CameraEntropyScreen
+from piwallet.bonnet.entropy_screens import CameraEntropyConfirmScreen, CameraEntropyScreen
 from piwallet.ui.display import FrameBuffer
 from piwallet.ui.input import Button, Event, EventKind
 
@@ -67,6 +67,25 @@ def test_camera_entropy_capture_closes_camera() -> None:
     assert screen.done
     assert screen.result == tiny_jpeg()
     assert cam.closed
+
+
+def test_camera_entropy_confirm_a_continues() -> None:
+    screen = CameraEntropyConfirmScreen(jpeg=tiny_jpeg())
+    screen.on_event(Event(button=Button.A, kind=EventKind.PRESS, at_ms=0))
+    assert screen.done
+    assert screen.confirmed is True
+
+
+def test_camera_entropy_confirm_b_retakes() -> None:
+    screen = CameraEntropyConfirmScreen(jpeg=tiny_jpeg())
+    screen.on_event(Event(button=Button.B, kind=EventKind.PRESS, at_ms=0))
+    assert screen.done
+    assert screen.confirmed is None
+
+
+def test_camera_entropy_confirm_draw_smoke() -> None:
+    screen = CameraEntropyConfirmScreen(jpeg=tiny_jpeg())
+    screen.draw(FrameBuffer())
 
 
 def test_camera_entropy_short_b_press_cancels_and_closes_camera() -> None:
