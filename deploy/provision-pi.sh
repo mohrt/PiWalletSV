@@ -742,17 +742,21 @@ step_install_unit() {
         unit_root="$APP_DIR/$UNIT_SRC_DIR"
     fi
     local svc_src="$unit_root/piwallet-bonnet.service"
+    local boot_src="$unit_root/piwallet-boot-status.service"
     local jrn_src="$unit_root/journald-piwallet.conf.example"
 
     [[ -f "$svc_src" ]] || fail "missing $svc_src"
+    [[ -f "$boot_src" ]] || fail "missing $boot_src"
     [[ -f "$jrn_src" ]] || fail "missing $jrn_src"
 
     run install -m 0644 "$svc_src" "$UNIT_DST_DIR/piwallet-bonnet.service"
+    run install -m 0644 "$boot_src" "$UNIT_DST_DIR/piwallet-boot-status.service"
     run install -d -m 0755 "$(dirname "$JOURNALD_CONF")"
     run install -m 0644 "$jrn_src" "$JOURNALD_CONF"
 
     run systemctl daemon-reload
     run systemctl restart systemd-journald
+    run systemctl enable piwallet-boot-status.service
     run systemctl enable piwallet-bonnet.service
 }
 
@@ -1005,6 +1009,30 @@ step_verify_no_builder_secrets() {
     log "  OK — no Imager Wi-Fi/network credentials on boot or rootfs"
 }
 
+step_verify_sealed_for_capture() {
+    if [[ $keep_radios -eq 1 ]]; then
+        return 0
+    fi
+    log "verify sealed image is capture-ready (no first-boot apt purge)"
+    local problems=()
+    if [[ -f /var/lib/piwallet/radio-purge.pending ]]; then
+        problems+=("radio-purge.pending still set — purge will run on buyer first boot")
+    fi
+    if [[ ! -f /var/lib/piwallet/radio-purge.done ]]; then
+        problems+=("radio-purge.done missing — radio packages not purged inline")
+    fi
+    if systemctl is-enabled piwallet-purge-radios.service >/dev/null 2>&1; then
+        problems+=("piwallet-purge-radios.service is enabled — defer purge to first boot")
+    fi
+    if [[ ${#problems[@]} -gt 0 ]]; then
+        for p in "${problems[@]}"; do
+            warn "$p"
+        done
+        fail "sealed image not capture-ready — provision from tty2 with --local (inline radio purge)"
+    fi
+    log "  OK — radio purge baked in; buyer first boot skips apt"
+}
+
 step_release_metadata() {
     log "write release metadata (${release_version}, ${image_channel})"
     [[ -d "$APP_DIR" ]] || fail "APP_DIR missing — run step_install_app first"
@@ -1129,6 +1157,7 @@ main() {
     step_rng
     step_cleanup
     step_scrub_builder_secrets
+    step_verify_sealed_for_capture
 
     log "done."
     cat <<EOF
@@ -1168,7 +1197,13 @@ boot (piwallet-purge-radios.service, SSH path). After reboot verify:
 Imager Wi-Fi/network files are scrubbed automatically before you reboot.
 The Imager login user (e.g. pisv) is kept for local HDMI/keyboard access.
 For image capture: reboot after seal, wait for bonnet disclaimer, power
-off, then dd (radio packages purge during that first boot).
+off, then dd. Provision from **tty2** with inline radio purge so the
+captured image does **not** run apt on the buyer's first boot.
+
+PiShrink runs with **`-s`** (no first-flash expand/reboot) by default.
+The shrunk rootfs already fits 8 GB cards. Set ``PISHRINK_AUTOEXPAND=1``
+only if you need the image to grow to fill 16 GB+ cards on first boot
+(that adds one automatic reboot).
 EOF
     fi
     cat <<'EOF'

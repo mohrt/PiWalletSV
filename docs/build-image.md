@@ -199,9 +199,14 @@ automatically so you don't need to unzip first.
    cable connector under the bonnet, near the SD slot edge).
 4. Plug the 5&nbsp;V power supply into the bonnet's PWR-IN.
 
-The first boot takes 30&ndash;45 seconds. The panel stays dark for the
-first 15&ndash;20 seconds while systemd brings up local-fs.target, then
-lights up with the disclaimer screen.
+The **first boot after flashing** can take up to a minute on a Pi Zero W while
+systemd starts services. You may see **one automatic reboot** on older images
+that used PiShrink auto-expand (filesystem grow); current builds skip that.
+The bonnet should then show **PiWalletSV / Booting…** (if present) and the
+beta disclaimer.
+
+If the panel stays blank for more than **3–5 minutes** after the second boot,
+check HDMI tty2 or re-flash.
 
 ## Step 4 &mdash; Accept the disclaimer
 

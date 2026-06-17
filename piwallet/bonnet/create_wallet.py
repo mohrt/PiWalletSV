@@ -11,7 +11,11 @@ import logging
 from dataclasses import dataclass
 
 from piwallet.bonnet.choosers import EntropySourceChooser, WordCountChooser
-from piwallet.bonnet.entropy_screens import CameraEntropyScreen, DiceEntropyScreen
+from piwallet.bonnet.entropy_screens import (
+    CameraEntropyConfirmScreen,
+    CameraEntropyScreen,
+    DiceEntropyScreen,
+)
 from piwallet.bonnet.hd_path_chooser import run_hd_path_chooser
 from piwallet.bonnet.network_chooser import run_network_chooser
 from piwallet.core import derivation as deriv
@@ -112,11 +116,26 @@ def run_create_wallet(
         if src == "csr":
             phrase = mnem.generate(wc)
         elif src == "camera":
-            caps = CameraEntropyScreen()
-            run_screen(display, input_mgr, caps, target_fps=target_fps, idle_wake=idle_wake)
-            if caps.result is None:
-                return CreateWalletOutcome(cancelled=True)
-            phrase = mnem.mnemonic_from_camera_jpeg(bytes(caps.result), wc)
+            jpeg: bytes | None = None
+            while True:
+                caps = CameraEntropyScreen()
+                run_screen(
+                    display, input_mgr, caps, target_fps=target_fps, idle_wake=idle_wake
+                )
+                if caps.result is None:
+                    return CreateWalletOutcome(cancelled=True)
+                confirm = CameraEntropyConfirmScreen(jpeg=bytes(caps.result))
+                run_screen(
+                    display,
+                    input_mgr,
+                    confirm,
+                    target_fps=target_fps,
+                    idle_wake=idle_wake,
+                )
+                if confirm.confirmed is True:
+                    jpeg = bytes(caps.result)
+                    break
+            phrase = mnem.mnemonic_from_camera_jpeg(jpeg, wc)
         elif src == "dice":
             dex = DiceEntropyScreen(word_count=wc)
             run_screen(display, input_mgr, dex, target_fps=target_fps, idle_wake=idle_wake)

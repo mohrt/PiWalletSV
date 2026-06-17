@@ -463,6 +463,26 @@ def test_aggregate_radio_check_fails_when_any_part_fails() -> None:
     assert "phy0" in wifi.detail
 
 
+def test_bonnet_status_uses_plain_labels() -> None:
+    assert ag.CheckResult("wifi", True, "").bonnet_status == "Disabled"
+    assert ag.CheckResult("wifi", False, "").bonnet_status == "Active"
+    assert ag.CheckResult("wifi", None, "").bonnet_status == "Unknown"
+    assert ag.CheckResult("wifi", True, "").status == "OK"
+
+
+def test_aggregate_radio_check_ok_when_rfkill_inconclusive_but_rest_pass() -> None:
+    wifi = ag._aggregate_radio_check(
+        "wifi",
+        ag.CheckResult("modules", True, "none loaded"),
+        ag.CheckResult("rfkill", None, "/sys/class/rfkill unavailable"),
+        ag.CheckResult("services", True, "no apps running"),
+        ag.CheckResult("boot_config", True, "disable-wifi set"),
+        ag.CheckResult("blacklist", True, "blocked from reloading"),
+    )
+    assert wifi.ok is True
+    assert wifi.bonnet_status == "Disabled"
+
+
 def test_check_display_names_use_plain_vocabulary() -> None:
     assert ag.CheckResult("wifi", True, "x").display_name == "Wi-Fi"
     assert ag.CheckResult("bluetooth", True, "x").display_name == "Bluetooth"

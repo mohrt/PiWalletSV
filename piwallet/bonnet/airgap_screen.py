@@ -146,7 +146,7 @@ class AirgapScreen:
                 fb,
                 DISPLAY_WIDTH - 12,
                 y,
-                c.status,
+                c.bonnet_status,
                 size=12,
                 color=row_color,
                 anchor="rm",

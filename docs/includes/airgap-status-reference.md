@@ -7,16 +7,22 @@ The title band at the top is the overall verdict:
 | **Air-gapped** (green) | Every check that could run passed. Safe to proceed. |
 | **BREACH** (red) | At least one check failed conclusively. **Do not sign** until the leak is understood and fixed. |
 
-### Status column
+### Status column (bonnet)
 
-Each row shows a friendly label on the left and a three-letter status on
+Each row shows a friendly label on the left and a plain-English status on
 the right:
 
-| Glyph | Meaning |
-|-------|---------|
-| `OK` | Pass — this area looks quiet. |
-| `!!` | Fail — a concrete leak was found. Treat as **BREACH**. |
-| `--` | Inconclusive — the check could not run (missing sysfs node, wrong OS, etc.). Unusual on a real Pi. |
+| Status | Meaning |
+|--------|---------|
+| **Disabled** (green) | That radio or network path looks off — no leak found. |
+| **Active** (red) | Something is live — treat as **BREACH**. |
+| **Unknown** (grey) | Could not verify from the bonnet app alone. Re-flash or run the shell diagnostic below. |
+
+On a healthy sealed device you should see **Disabled** on all three rows
+and a green **Air-gapped** header.
+
+The CLI still uses compact glyphs (`OK`, `!!`, `--`) in
+``piwallet diag airgap`` output.
 
 ### Check rows (bonnet UI)
 
@@ -32,6 +38,11 @@ technical checks so you do not need to read kernel module names:
 A green **Network** row confirms the bonnet sandbox is intact. It does
 **not** by itself prove the host Pi has no other interfaces — for that,
 run the full six-check report from a shell (below).
+
+On some older images, **Wi-Fi** and **Bluetooth** could show **Unknown**
+when rfkill sysfs was unreadable inside the bonnet sandbox even though
+radios were actually disabled. Current firmware shows **Disabled** when
+every conclusive sub-check passes.
 
 ### Full report from a shell
 
@@ -59,7 +70,7 @@ See [Operate § Airgap diagnostic](operate.md#airgap-diagnostic) and
 
 1. **Stop.** Do not sign transactions on this device until the report
    is all-green.
-2. Note which rows show `!!` — **Wi-Fi** or **Bluetooth** failures map
+2. Note which rows show **Active** — **Wi-Fi** or **Bluetooth** failures map
    to drivers, radios, services, boot overlays, or blacklists;
    **Network** failures usually mean the bonnet sandbox is broken.
 3. If you flashed a prebuilt image, re-verify the download signature
