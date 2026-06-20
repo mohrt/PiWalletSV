@@ -61,27 +61,39 @@ the chain; the Pi just signs.
 The system is intentionally split into two pieces that never share a
 trust boundary:
 
-```mermaid
-flowchart LR
-  subgraph air["Air-gapped signer (Pi)"]
-    seed["BIP39 seed<br/>encrypted vault"]
-    verify["verify_proposal<br/>(BEEF + Merkle + anchors)"]
-    sign["sign_transaction"]
-    seed --> verify --> sign
-  end
+<div class="pwsv-split-flow" markdown>
 
-  subgraph online["Online companion (web app)"]
-    woc["WhatsOnChain<br/>or other backend"]
-    select["UTXO + coin selection"]
-    proposal["unsigned_proposal<br/>builder"]
-    broadcast["broadcast"]
-    woc --> select --> proposal
-    broadcast --> woc
-  end
+<div class="pwsv-flow-box pwsv-flow-offline" markdown>
 
-  proposal -- "QR (PW1 multipart)" --> verify
-  sign -- "QR (PW1 multipart)" --> broadcast
-```
+#### Pi — air-gapped
+
+- Your keys never leave the device
+- You confirm the recipient on screen
+- Press a button to sign
+
+</div>
+
+<div class="pwsv-flow-bridge" markdown>
+
+:material-qrcode-scan:{ .pwsv-flow-icon }
+
+**QR codes**
+
+Proposals in · signed transactions out
+
+</div>
+
+<div class="pwsv-flow-box pwsv-flow-online" markdown>
+
+#### Companion — in your browser
+
+- Finds your coins on chain
+- Builds unsigned transactions
+- Broadcasts after you sign
+
+</div>
+
+</div>
 
 The Pi has no Wi-Fi, no Bluetooth, no Ethernet — nothing reaches the
 network from the device that holds the keys. The companion runs in
