@@ -80,7 +80,6 @@ Environment=XDG_CACHE_HOME=/var/cache/piwallet-bonnet/libcamera
 # + FakeInputBackend and the panel stays dark with no journal trace.
 # Forcing the real backends turns a silent boot-into-blackness into a
 # loud Restart= cycle that an admin can actually see.
-ExecStartPre=-/bin/systemctl stop piwallet-boot-status.service
 ExecStart=/opt/piwallet/.venv/bin/piwallet bonnet \
     --vault-path /home/pwsv/.piwallet/vault.bin \
     --display st7789 \

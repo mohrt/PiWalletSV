@@ -8,7 +8,11 @@ from typing import Any, ClassVar
 import numpy as np
 from PIL import Image
 
-from piwallet.bonnet.entropy_screens import CameraEntropyConfirmScreen, CameraEntropyScreen
+from piwallet.bonnet.entropy_screens import (
+    CameraEntropyConfirmScreen,
+    CameraEntropyScreen,
+    _jpeg_preview_thumb,
+)
 from piwallet.ui.display import FrameBuffer
 from piwallet.ui.input import Button, Event, EventKind
 
@@ -56,7 +60,11 @@ def test_camera_entropy_thumb_updates_on_draw() -> None:
     assert screen._cached_thumb is not None
 
 
-def test_camera_entropy_capture_closes_camera() -> None:
+def test_camera_entropy_capture_closes_camera(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "piwallet.bonnet.entropy_screens.capture_still_jpeg_bytes",
+        lambda **_: tiny_jpeg(),
+    )
     TrackCam.constructed.clear()
     screen = CameraEntropyScreen(camera_cls=TrackCam)
     fb = FrameBuffer()
@@ -74,6 +82,7 @@ def test_camera_entropy_confirm_a_continues() -> None:
     screen.on_event(Event(button=Button.A, kind=EventKind.PRESS, at_ms=0))
     assert screen.done
     assert screen.confirmed is True
+    assert screen.result is True
 
 
 def test_camera_entropy_confirm_b_retakes() -> None:
@@ -81,11 +90,21 @@ def test_camera_entropy_confirm_b_retakes() -> None:
     screen.on_event(Event(button=Button.B, kind=EventKind.PRESS, at_ms=0))
     assert screen.done
     assert screen.confirmed is None
+    assert screen.result is None
 
 
-def test_camera_entropy_confirm_draw_smoke() -> None:
+def test_camera_entropy_confirm_draw_shows_thumb() -> None:
     screen = CameraEntropyConfirmScreen(jpeg=tiny_jpeg())
+    assert screen._thumb is None
     screen.draw(FrameBuffer())
+    assert screen._thumb is not None
+
+
+def test_jpeg_preview_thumb_downscales_large_capture() -> None:
+    buf = BytesIO()
+    Image.new("RGB", (1280, 960), color=(90, 120, 30)).save(buf, format="JPEG", quality=85)
+    thumb = _jpeg_preview_thumb(buf.getvalue(), max_edge=200)
+    assert max(thumb.size) <= 200
 
 
 def test_camera_entropy_short_b_press_cancels_and_closes_camera() -> None:

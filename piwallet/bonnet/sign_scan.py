@@ -670,35 +670,10 @@ class ConfirmProposalScreen:
 
 
 def _preflight_camera_imports() -> str | None:
-    """Force-import picamera2 + libcamera on the **main** thread.
+    """Backward-compatible alias — see :mod:`piwallet.bonnet.camera_preflight`."""
+    from piwallet.bonnet.camera_preflight import preflight_camera_imports
 
-    Returns ``None`` on success or a short human-readable error
-    string on failure.
-
-    Why this exists: on Raspberry Pi OS the libcamera Python binding
-    initialises a C-side logger and ipa proxy on first import, and
-    a few users have reported that step failing when the *first*
-    import happens inside a freshly-spawned worker thread (entropy
-    capture works fine because that flow imports from the main UI
-    thread). Pre-warming ``sys.modules`` here means the worker's
-    later ``from libcamera import controls`` lands a cached module
-    object, never re-triggering the C init.
-
-    Doubles as an early-failure surface for venvs missing
-    ``--system-site-packages`` or the ``python3-picamera2`` apt
-    package — the operator sees a single targeted modal instead of
-    a worker-thread crash mid-scan.
-    """
-    try:
-        import libcamera  # type: ignore[import-not-found]  # noqa: F401
-        import picamera2  # type: ignore[import-not-found]  # noqa: F401
-    except ImportError:
-        return (
-            "Camera stack missing.\n"
-            "sudo apt install python3-picamera2\n"
-            "venv needs --system-site-packages"
-        )
-    return None
+    return preflight_camera_imports()
 
 
 def _make_default_worker(

@@ -31,6 +31,7 @@ copy deploy/scripts/apply-camera-hotfix.sh
 copy piwallet/bonnet/entropy_camera.py
 copy piwallet/bonnet/camera_still.py
 copy piwallet/bonnet/entropy_screens.py
+copy piwallet/bonnet/create_wallet.py
 copy piwallet/cli.py
 
 chmod 0755 "$OUT/deploy/scripts/apply-camera-hotfix.sh"
@@ -58,6 +59,8 @@ On the Pi (Ctrl+Alt+F2 → login as pisv):
 
 If diag camera passes but bonnet Photo entropy still fails, restart bonnet:
   sudo systemctl restart piwallet-bonnet
+
+This hotfix includes photo-entropy OOM fixes (armv6 capture size, thumbnail decode).
 EOF
 
 echo "Wrote $OUT"

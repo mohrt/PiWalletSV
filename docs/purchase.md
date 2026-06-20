@@ -41,7 +41,7 @@ Bring your own parts, flash the official image, print or buy a case.
 
 **Steps:**
 
-1. [Download](download.md) the signed `piwalletsv-{{ firmware_version }}.img.xz` from GitHub
+1. [Download](download.md) the signed `{{ firmware_image_file }}` from GitHub
 2. GPG + SHA-256 verify ([Security § Release key](security.md#release-key))
 3. Flash with [Raspberry Pi Imager](https://www.raspberrypi.com/software/) —
    see [Flash and first run](build-image.md)

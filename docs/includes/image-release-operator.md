@@ -50,11 +50,23 @@ From your Mac at a **known commit**:
 ./scripts/sync-to-pi.sh pisv@piwalletsv.local --prepare
 ```
 
-This rsyncs with the allowlist, verifies the payload, applies Pi Zero W
-HDMI/tty2 boot settings, and reboots the Pi.
+This rsyncs with the allowlist, verifies the payload, optionally enables
+getty@tty2, and reboots. **Does not change** ``config.txt`` — on a fresh
+Imager SD card use **tty1** (default HDMI login) or SSH until seal.
 
-After reboot: plug in HDMI + USB keyboard, press **Ctrl+Alt+F2** (Mac:
-**Ctrl+Fn+Option+F2**), log in as `pisv`.
+```bash
+./scripts/sync-to-pi.sh pisv@piwalletsv.local --prepare
+```
+
+Or skip ``--prepare`` and sync over SSH only:
+
+```bash
+./scripts/sync-to-pi.sh pisv@piwalletsv.local
+```
+
+After sync, provision from **tty1 or SSH** on a fresh card; use **tty2**
+(``Ctrl+Alt+F2``) for the sealed ``--local`` provision step if you prefer
+it over SSH.
 
 For dev sync only (no image build), omit `--prepare`:
 
@@ -69,10 +81,10 @@ On the Pi:
 ```bash
 cd ~/PiWallet
 sudo deploy/provision-pi.sh \
-  --src "$(pwd)" \
-  --release-version 0.1.0-r3 \
-  --image-channel round1-zero-w \
-  --keep-ssh --keep-radios
+ --src "$(pwd)" \
+ --release-version 0.1.0-r3 \
+ --image-channel round1-zero-w \
+ --keep-ssh --keep-radios
 sudo reboot
 ```
 
@@ -94,10 +106,10 @@ After sync + `--prepare` (§1b), on **tty2** (not over SSH):
 
 ```bash
 sudo bash ~/PiWallet/deploy/provision-pi.sh \
-  --src ~/PiWallet \
-  --local \
-  --release-version 0.1.0-r3 \
-  --image-channel round1-zero-w
+ --src ~/PiWallet \
+ --local \
+ --release-version 0.1.0-r3 \
+ --image-channel round1-zero-w
 sudo reboot
 # Bonnet shows disclaimer on tty1; no SSH; radios off.
 # --local forces inline radio purge even if SSH_CONNECTION is inherited on tty2.
@@ -116,33 +128,49 @@ Power off the Pi. Insert the SD into **your** reader on Mac/Linux, then run
 the all-in-one script (capture → PiShrink → `xz` → `SHA256SUMS`):
 
 ```bash
-# Beta (GitHub pre-release) — adds -beta to filename
-./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity beta diskN
+# Beta (GitHub pre-release) — round1 Zero / Zero W = board pi0
+./scripts/capture-sd-image.sh --version 0.1.0-r3 --board pi0 --maturity beta diskN
 
 # Alpha (local only, never GitHub) — lands in images/alpha/
-./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity alpha diskN
+./scripts/capture-sd-image.sh --version 0.1.0-r3 --board pi0 --maturity alpha diskN
 
-# GA / full release — no suffix (default)
-./scripts/capture-sd-image.sh --version 1.0.0 diskN
+# GA / full release — no maturity suffix
+./scripts/capture-sd-image.sh --version 1.0.0 --board pi0 diskN
 
 # Already captured a raw .img? Skip dd:
-./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity beta --from path/to/capture.img
+./scripts/capture-sd-image.sh --version 0.1.0-r3 --board pi0 --maturity beta --from path/to/capture.img
 
 # Add GPG detach-signatures for GitHub upload:
-./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity beta diskN --sign
+./scripts/capture-sd-image.sh --version 0.1.0-r3 --board pi0 --maturity beta diskN --sign
 ```
+
+### Board slugs (filename)
+
+Board slugs identify the **processor tier**, not Wi‑Fi vs non‑W.
+
+| `--board` | Hardware |
+|-----------|----------|
+| `pi0` | Pi Zero v1.3, Pi Zero W, Pi Zero WH — **round1 kits** |
+| `pi02w` | Pi Zero 2 W, Pi 3 Model B *(future)* |
+| `pi2` | Pi 2 Model B *(future)* |
+| `pi4` | Pi 4 Model B, Pi 400 *(future)* |
+
+Internal channel (`--image-channel round1-zero-w`) is separate from the public
+board slug baked into the filename and `releases.json` `board` field.
 
 ### Filename convention
 
-Same firmware revision (`0.1.0-r3`) can produce multiple captures. Use
-**maturity in the filename** on your workstation; use **Image ID** on the card
-(`/etc/piwalletsv-release`) to tell builds apart.
+Pattern: `piwalletsv-{version}-{board}[-{maturity}].img.xz`
 
-| Maturity | Filename | GitHub? |
-|----------|----------|---------|
-| `alpha` | `piwalletsv-0.1.0-r3-alpha.img.xz` | Never — local QA only |
-| `beta` | `piwalletsv-0.1.0-r3-beta.img.xz` | Pre-release / community beta |
-| `release` | `piwalletsv-1.0.0.img.xz` | GA — no suffix |
+Same firmware revision can produce multiple captures. Use **board + maturity** in
+the filename; use **Image ID** on the card (`/etc/piwalletsv-release`) to tell
+builds apart.
+
+| Maturity | Example (`pi0`) | GitHub? |
+|----------|-----------------|---------|
+| `alpha` | `piwalletsv-0.1.0-r3-pi0-alpha.img.xz` | Never — local QA only |
+| `beta` | `piwalletsv-0.1.0-r3-pi0-beta.img.xz` | Pre-release / community beta |
+| `release` | `piwalletsv-1.0.0-pi0.img.xz` | GA — no maturity suffix |
 
 Alpha builds skip `releases/SHA256SUMS` and `releases.json` updates.
 
@@ -150,7 +178,7 @@ Output lands in `images/` by default (`images/alpha/` for alpha):
 
 | File | Purpose |
 |------|---------|
-| `piwalletsv-0.1.0-r3-beta.img.xz` | Published image (example beta name) |
+| `piwalletsv-0.1.0-r3-pi0-beta.img.xz` | Published image (example beta name) |
 | `images/SHA256SUMS` | **Single-line** checksum file — upload this to the GitHub Release |
 | `releases/SHA256SUMS` | **Cumulative** checksums for all releases — committed to the repo |
 | `releases/releases.json` | `sha256` field updated automatically for the built version |
@@ -164,12 +192,12 @@ The script captures to an uncompressed `.img` first (not straight to `.xz`) so
 PiShrink can resize partitions, then removes the `.img` after `xz` unless you
 pass `--keep-img`.
 
-PiShrink uses **`-s`** by default (no first-flash filesystem expand, so no
-automatic reboot after Imager write). The shrunk image already fits 8 GB cards.
-Set ``PISHRINK_AUTOEXPAND=1`` when shrinking if you want larger cards to expand
-on first boot (one reboot, slower UX).
+PiShrink **expands the rootfs to the SD card on first flash** by default (one
+automatic reboot, ~1–2 minutes extra before the disclaimer). Set
+``PISHRINK_SKIP_AUTOEXPAND=1`` when capturing to skip expand (shrunk partition
+only — fine for 8 GB cards, no extra reboot).
 
-**Baked into the captured image** (buyer's first boot should be fast):
+**Baked into the captured image** (keeps the post-expand boot fast):
 
 | Done at provision (before `dd`) | Skipped on buyer first boot |
 |--------------------------------|-----------------------------|
@@ -187,9 +215,9 @@ install PiShrink natively or set `PISHRINK=/path/to/pishrink`.
 Individual steps (if you need them):
 
 ```bash
-./scripts/shrink-sd-image.sh images/piwalletsv-0.1.0-r3.img
-xz -f -T0 images/piwalletsv-0.1.0-r3.img
-shasum -a 256 images/piwalletsv-0.1.0-r3.img.xz | tee images/SHA256SUMS
+./scripts/shrink-sd-image.sh images/piwalletsv-0.1.0-r3-pi0.img
+xz -f -T0 images/piwalletsv-0.1.0-r3-pi0.img
+shasum -a 256 images/piwalletsv-0.1.0-r3-pi0-beta.img.xz | tee images/SHA256SUMS
 ```
 
 ## 3. Publish GitHub Release
@@ -207,7 +235,7 @@ asset URLs (see mkdocs `firmware_release_base` in `mkdocs.yml`).
 
 For each kit microSD (after the GitHub release is live):
 
-1. Flash `piwalletsv-0.1.0-r3.img.xz` with Raspberry Pi Imager (**Use custom**)
+1. Flash `piwalletsv-0.1.0-r3-pi0-beta.img.xz` with Raspberry Pi Imager (**Use custom**)
 2. Optional spot-check: boot once, run smoke test, then re-flash if you booted
 3. Ship with **SD adapter** (customer uses **their own** USB reader to re-flash)
 4. Print kit insert with **Firmware version** + **Image ID** matching the release

@@ -12,8 +12,8 @@
 # Environment:
 #   PISHRINK   path to pishrink script (Linux native)
 #   PISHRINK_DOCKER_IMAGE  Docker image for macOS (default: debian:bookworm-slim)
-#   PISHRINK_AUTOEXPAND=1  enable PiShrink first-boot expand (adds one reboot on
-#                          flash; default is off — shrunk image already fits 8 GB)
+#   PISHRINK_SKIP_AUTOEXPAND=1  skip PiShrink first-boot expand (no extra reboot;
+#                               rootfs stays shrunk — fine for 8 GB cards only)
 #
 set -euo pipefail
 
@@ -62,9 +62,11 @@ INPUT=$(cd "$(dirname "$INPUT")" && pwd)/$(basename "$INPUT")
 OUTPUT=$(cd "$(dirname "$OUTPUT")" && pwd)/$(basename "$OUTPUT")
 
 PISHRINK_FLAGS=()
-if [[ "${PISHRINK_AUTOEXPAND:-0}" != 1 ]]; then
+if [[ "${PISHRINK_SKIP_AUTOEXPAND:-0}" == 1 ]]; then
     PISHRINK_FLAGS=(-s)
-    log "PiShrink: skip first-boot auto-expand (no flash-time reboot; set PISHRINK_AUTOEXPAND=1 to fill larger cards)"
+    log "PiShrink: skip first-boot auto-expand (-s; set PISHRINK_SKIP_AUTOEXPAND=0 to expand to SD size)"
+else
+    log "PiShrink: first boot will expand rootfs to SD size (one automatic reboot on first flash)"
 fi
 
 run_pishrink_native() {

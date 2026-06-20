@@ -11,20 +11,34 @@ linked from **piwalletsv.com** and **dev.piwalletsv.com** — there is no
 separate “dev firmware.”
 
 !!! info "First release"
-    Release **{{ firmware_github_tag }}** (`{{ firmware_version }}`) targets
-    **Raspberry Pi Zero W / Zero WH** (32-bit). If the GitHub assets are not
-    uploaded yet, follow the operator guide in
-    [`docs/includes/image-release-operator.md`](includes/image-release-operator.md)
-    or build the same image with
-    [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
-    via [Build & deploy](build.md).
+ Release **{{ firmware_github_tag }}** (`{{ firmware_version }}`, board **{{ firmware_board }}**)
+ targets **Raspberry Pi Zero / Zero W / Zero WH** (32-bit armv6). If the GitHub
+ assets are not uploaded yet, follow the operator guide in
+ [`docs/includes/image-release-operator.md`](includes/image-release-operator.md)
+ or build the same image with
+ [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
+ via [Build & deploy](build.md).
+
+## Which image file?
+
+Each release filename includes a **board slug** for the Raspberry Pi model
+(processor tier — not Wi‑Fi vs non‑W):
+
+| Board slug | Raspberry Pi hardware |
+|------------|------------------------|
+| **pi0** | Pi Zero v1.3, Pi Zero W, Pi Zero WH |
+| **pi02w** | Pi Zero 2 W, Pi 3 Model B *(future)* |
+| **pi2** | Pi 2 Model B *(future)* |
+| **pi4** | Pi 4 Model B, Pi 400 *(future)* |
+
+For round‑1 kits use **`pi0`**.
 
 ## Files (release {{ firmware_github_tag }})
 
 | File | Download |
 |------|----------|
-| `piwalletsv-{{ firmware_version }}.img.xz` | [Image (.xz)]({{ firmware_release_base }}/piwalletsv-{{ firmware_version }}.img.xz) |
-| `piwalletsv-{{ firmware_version }}.img.xz.asc` | [OpenPGP signature]({{ firmware_release_base }}/piwalletsv-{{ firmware_version }}.img.xz.asc) |
+| `{{ firmware_image_file }}` | [Image (.xz)]({{ firmware_release_base }}/{{ firmware_image_file }}) |
+| `{{ firmware_image_file }}.asc` | [OpenPGP signature]({{ firmware_release_base }}/{{ firmware_image_file }}.asc) |
 | `SHA256SUMS` | [Checksums]({{ firmware_release_base }}/SHA256SUMS) |
 | `SHA256SUMS.asc` | [Signed checksums]({{ firmware_release_base }}/SHA256SUMS.asc) |
 
@@ -43,11 +57,11 @@ we built. **Verify the signature before you flash.**
 gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
 
 # Verify the image.
-gpg --verify piwalletsv-{{ firmware_version }}.img.xz.asc \
-    piwalletsv-{{ firmware_version }}.img.xz
+gpg --verify {{ firmware_image_file }}.asc \
+ {{ firmware_image_file }}
 
 # Cross-check the SHA-256.
-shasum -a 256 piwalletsv-{{ firmware_version }}.img.xz
+shasum -a 256 {{ firmware_image_file }}
 ```
 
 A successful verification ends with **“Good signature”** and the release-key
@@ -57,8 +71,8 @@ fingerprint pinned in [`docs/security.md`](security.md#release-key).
 ## Flash the image
 
 !!! tip "Step-by-step flashing"
-    [Flash and first run § Flash the image](build-image.md#step-2-flash-the-image)
-    covers Windows, macOS, and Linux (Raspberry Pi Imager or `dd`).
+ [Flash and first run § Flash the image](build-image.md#step-2-flash-the-image)
+ covers Windows, macOS, and Linux (Raspberry Pi Imager or `dd`).
 
 You need a **USB microSD reader/writer** on your computer. PiWalletSV kits
 include a microSD and SD adapter when a full kit is offered; **they do not
@@ -69,13 +83,13 @@ include a USB reader.**
 Once the image is verified and flashed:
 
 - **Full kit with factory-flashed card?** Before you fund, **strongly
-  recommend re-flashing** from this download page —
-  [User manual § Verify your SD card](user-manual.md#verify-sd-card-on-arrival).
+ recommend re-flashing** from this download page —
+ [User manual § Verify your SD card](user-manual.md#verify-sd-card-on-arrival).
 - Follow [Flash and first run](build-image.md) for disclaimer, vault PIN,
-  wallet creation, airgap check, and a TESTNET smoke test.
+ wallet creation, airgap check, and a TESTNET smoke test.
 - Routine use: [User manual](user-manual.md) ([USB backup](user-manual.md#usb-backup),
-  [Upgrade your device](user-manual.md#upgrade-your-device),
-  [Airgap status](user-manual.md#airgap-status)).
+ [Upgrade your device](user-manual.md#upgrade-your-device),
+ [Airgap status](user-manual.md#airgap-status)).
 
 ## Building from source
 

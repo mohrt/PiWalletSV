@@ -16,6 +16,9 @@ import time
 
 from PIL import Image
 
+from piwallet.bonnet.camera_sizes import capture_sizes_for_machine
+from piwallet.camera_lcd import PIWALLET_CAMERA_ROTATION_DEG, rotate_rgb888
+
 log = logging.getLogger(__name__)
 
 
@@ -29,8 +32,8 @@ def _camera_unavailable(exc: BaseException) -> RuntimeError:
 
 def capture_still_jpeg_bytes(
     *,
-    width: int = 1280,
-    height: int = 960,
+    width: int | None = None,
+    height: int | None = None,
     settle_s: float = 0.75,
     quality: int = 85,
 ) -> bytes:
@@ -63,35 +66,53 @@ def capture_still_jpeg_bytes(
             "EEPROM, set camera_auto_detect=0 and dtoverlay=ov5647 in config.txt."
         )
 
-    try:
-        cam = Picamera2()
-    except IndexError as exc:
-        raise _camera_unavailable(exc) from exc
+    if width is not None and height is not None:
+        sizes = [(width, height)]
+    else:
+        sizes = capture_sizes_for_machine()
 
-    try:
-        cam.configure(
-            cam.create_preview_configuration(
-                main={"format": "RGB888", "size": (width, height)},
-            ),
-        )
-        cam.start()
+    last_err: BaseException | None = None
+    for w, h in sizes:
+        picam = None
         try:
-            time.sleep(settle_s)
-        except Exception as exc:  # pragma: no cover (interrupted sleep is rare)
-            log.debug("capture_still: settle sleep interrupted: %s", exc)
-        try:
-            frame = cam.capture_array("main")
-        except IndexError as exc:
-            raise _camera_unavailable(exc) from exc
-        buf = io.BytesIO()
-        Image.fromarray(frame).save(buf, format="JPEG", quality=quality)
-        blob = buf.getvalue()
-        if not blob:
-            raise RuntimeError("empty JPEG after capture_array encode")
-        return blob
-    finally:
-        try:
-            cam.stop()
-            cam.close()
-        except Exception as exc:  # pragma: no cover (best-effort cleanup)
-            log.warning("capture_still: cleanup failed: %s", exc)
+            try:
+                picam = Picamera2()
+            except IndexError as exc:
+                raise _camera_unavailable(exc) from exc
+            picam.configure(
+                picam.create_preview_configuration(
+                    main={"format": "RGB888", "size": (w, h)},
+                ),
+            )
+            picam.start()
+            try:
+                time.sleep(settle_s)
+            except Exception as exc:  # pragma: no cover
+                log.debug("capture_still: settle sleep interrupted: %s", exc)
+            try:
+                frame = picam.capture_array("main")
+            except IndexError as exc:
+                raise _camera_unavailable(exc) from exc
+            frame = rotate_rgb888(frame, PIWALLET_CAMERA_ROTATION_DEG)
+            buf = io.BytesIO()
+            Image.fromarray(frame).save(buf, format="JPEG", quality=quality)
+            blob = buf.getvalue()
+            if not blob:
+                raise RuntimeError("empty JPEG after capture_array encode")
+            log.info("capture_still: JPEG %d bytes at %dx%d", len(blob), w, h)
+            return blob
+        except Exception as exc:
+            last_err = exc
+            log.debug("capture_still: size=%dx%d failed: %s", w, h, exc)
+        finally:
+            if picam is not None:
+                try:
+                    picam.stop()
+                    picam.close()
+                except Exception as exc:  # pragma: no cover
+                    log.warning("capture_still: cleanup failed: %s", exc)
+
+    msg = "could not capture camera still"
+    if last_err is not None:
+        msg = f"{msg}: {last_err}"
+    raise RuntimeError(msg) from last_err

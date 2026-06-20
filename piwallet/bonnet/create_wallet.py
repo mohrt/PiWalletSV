@@ -7,6 +7,7 @@ defaults); encrypts under the PIN.
 
 from __future__ import annotations
 
+import gc
 import logging
 from dataclasses import dataclass
 
@@ -134,6 +135,8 @@ def run_create_wallet(
                 )
                 if confirm.confirmed is True:
                     jpeg = bytes(caps.result)
+                    del confirm
+                    gc.collect()
                     break
             phrase = mnem.mnemonic_from_camera_jpeg(jpeg, wc)
         elif src == "dice":
