@@ -11,8 +11,8 @@ Source file: **`kit-insert.md`** — ships with PiWalletSV hardware kits.
 
 Before printing a production batch, fill in at the top of page 1:
 
-- **Firmware version** (e.g. `0.1.0-r1`)
-- **Image ID** (when published on the verify page)
+- **Firmware version** (e.g. `0.1.0-r3`)
+- **Image ID** (e.g. `c05daabb` for the first pi0 beta batch)
 
 ## Generate PDF (optional)
 

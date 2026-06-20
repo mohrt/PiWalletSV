@@ -10,14 +10,11 @@ foreground task on the device.
 linked from **piwalletsv.com** and **dev.piwalletsv.com** — there is no
 separate “dev firmware.”
 
-!!! info "First release"
- Release **{{ firmware_github_tag }}** (`{{ firmware_version }}`, board **{{ firmware_board }}**)
- targets **Raspberry Pi Zero / Zero W / Zero WH** (32-bit armv6). If the GitHub
- assets are not uploaded yet, follow the operator guide in
- [`docs/includes/image-release-operator.md`](includes/image-release-operator.md)
- or build the same image with
- [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
- via [Build & deploy](build.md).
+!!! info "Current release"
+ Release **{{ firmware_github_tag }}** (`{{ firmware_version }}`, board **{{ firmware_board }}**, beta)
+ targets **Raspberry Pi Zero / Zero W / Zero WH** (32-bit armv6). Download from
+ [GitHub Releases]({{ firmware_release_page }}) or follow
+ [Build & deploy](build.md) to reproduce the image from source.
 
 ## Which image file?
 

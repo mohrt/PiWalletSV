@@ -172,10 +172,12 @@ gpg --keyserver hkps://keys.openpgp.org --recv-keys 9E048B6E7F54C49DE2D5AEB5DA26
 gpg --verify piwalletsv-<VERSION>.img.xz.asc piwalletsv-<VERSION>.img.xz
 ```
 
-The release key is held in a hardware keystore (Yubikey, OpenPGP
-applet) that never touches a networked machine; new releases are
-signed by physically presenting the key on a build host whose only
-network exit is the upload to GitHub Releases.
+The release key fingerprint is pinned in the table above. Import it from
+`keys.openpgp.org` before verifying downloads.
+
+For **v0.1.0-r3 beta**, releases are signed on the build host with the
+software key listed here. A hardware keystore (YubiKey or OpenPGP card)
+is the long-term target for production releases.
 
 ## Verify a pre-flashed SD card
 
