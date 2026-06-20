@@ -55,8 +55,8 @@ From [Download](download.md):
 - `piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz.asc`
 - `SHA256SUMS` (+ `.asc` if provided)
 
-Your kit paperwork states which `<VERSION>` applies (e.g. round-one
-`0.1.0-r1`).
+Your kit paperwork states which `<VERSION>` applies (e.g. round-one beta
+`0.1.0-r3`, board `pi0`, Image ID `c05daabb`).
 
 #### 2. Verify signature and checksum
 

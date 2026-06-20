@@ -19,8 +19,8 @@
 | **Companion app** | https://app.piwalletsv.com |
 | **Downloads & verify** | https://piwalletsv.com/download |
 | **Full manual (online)** | https://piwalletsv.com/user-manual/ |
-| **Firmware version** | _________________________ |
-| **Image ID (batch)** | _________________________ |
+| **Firmware version** | `0.1.0-r3` (pi0 beta) |
+| **Image ID (batch)** | `c05daabb` |
 
 ---
 
