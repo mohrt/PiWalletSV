@@ -18,8 +18,8 @@
       },
       "sha256": "9adaaef2659f6a2938d43821ddc15f89090562c9492d49dcf6c5e13938542087",
       "image_id": "c05daabb",
-      "published_at": null,
-      "notes": "Beta test build \u2014 8 GB-compatible image (PiShrink after capture). Flash-tested on Pi Zero W; set published_at when GitHub Release goes live."
+      "published_at": "2026-06-20T02:28:42Z",
+      "notes": "Beta test build — 8 GB-compatible image (PiShrink after capture). Flash-tested on Pi Zero W (Image ID c05daabb)."
     },
     {
       "version": "0.1.0-r2",
