@@ -44,7 +44,7 @@ yourself. Skipping this step makes everything else meaningless.
 # In the directory where you downloaded the files:
 
 # 1. Import the PiWalletSV release key (one-time).
-gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
+gpg --keyserver hkps://keys.openpgp.org --recv-keys 9E048B6E7F54C49DE2D5AEB5DA261F4F2B0CA281
 
 # 2. Verify the signature on the image.
 gpg --verify piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz.asc \

@@ -54,7 +54,7 @@ we built. **Verify the signature before you flash.**
 
 ```bash
 # One-time: import the release key (fingerprint in docs/security.md).
-gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
+gpg --keyserver hkps://keys.openpgp.org --recv-keys 9E048B6E7F54C49DE2D5AEB5DA261F4F2B0CA281
 
 # Verify the image.
 gpg --verify {{ firmware_image_file }}.asc \
