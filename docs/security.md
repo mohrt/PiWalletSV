@@ -157,20 +157,18 @@ Pin the fingerprint here so a substituted website cannot lie about it.
 
 | Field | Value |
 |-------|-------|
-| Fingerprint | `<RELEASE_KEY_FINGERPRINT>` (published with the first signed alpha release) |
-| User ID | `PiWalletSV releases <releases@piwalletsv.com>` |
+| Fingerprint | `9E04 8B6E 7F54 C49D E2D5  AEB5  DA26  1F4F  2B0C  A281` |
+| User ID | `Monte Ohrt <monte@ohrt.com>` |
 | Keyserver | `hkps://keys.openpgp.org` |
 
-Until the first signed release ships, this fingerprint is a
-placeholder. **Do not flash an image whose signature you cannot
-verify against the fingerprint listed here.** A failed verification
-is the boundary between a sealed appliance and a compromised one;
-treat it as a stop-the-world signal.
+**Do not flash an image whose signature you cannot verify against the
+fingerprint listed here.** A failed verification is the boundary between
+a sealed appliance and a compromised one; treat it as a stop-the-world signal.
 
 If you need to verify a download manually:
 
 ```bash
-gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
+gpg --keyserver hkps://keys.openpgp.org --recv-keys 9E048B6E7F54C49DE2D5AEB5DA261F4F2B0CA281
 gpg --verify piwalletsv-<VERSION>.img.xz.asc piwalletsv-<VERSION>.img.xz
 ```
 

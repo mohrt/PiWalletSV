@@ -94,7 +94,7 @@ stronger than trying to prove the factory flash byte-for-byte.
    security page at piwalletsv.com):
 
    ```
-   gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
+   gpg --keyserver hkps://keys.openpgp.org --recv-keys 9E048B6E7F54C49DE2D5AEB5DA261F4F2B0CA281
    gpg --verify piwalletsv-<version>.img.xz.asc piwalletsv-<version>.img.xz
    ```
 

@@ -64,7 +64,7 @@ Import the release key once (fingerprint in
 [Security § Release key](security.md#release-key)):
 
 ```bash
-gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
+gpg --keyserver hkps://keys.openpgp.org --recv-keys 9E048B6E7F54C49DE2D5AEB5DA261F4F2B0CA281
 gpg --verify piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz.asc piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz
 shasum -a 256 piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz   # match SHA256SUMS
 ```
