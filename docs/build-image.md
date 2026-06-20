@@ -192,13 +192,15 @@ automatically so you don't need to unzip first.
 
 ## Step 3 &mdash; Assemble the hardware
 
-1. Insert the flashed SD card into the Pi Zero 2&nbsp;W.
+1. Insert the flashed SD card into the Pi Zero&nbsp;W.
 2. Plug the bonnet onto the Pi's GPIO header. The bonnet's PWR-IN
    micro-USB port is the one **farther from the SD slot**; that's
    where you'll connect power.
 3. Connect the Pi Camera ribbon to the Pi's CSI port (small flex
    cable connector under the bonnet, near the SD slot edge).
-4. Plug the 5&nbsp;V power supply into the bonnet's PWR-IN.
+4. *(Optional)* Install the reference 3D-printed case — see
+   [Print the reference case](#print-the-reference-case-optional) below.
+5. Plug the 5&nbsp;V power supply into the bonnet's PWR-IN.
 
 The **first boot after flashing** takes longer than normal because the image
 **expands the root partition to your SD card size**, then reboots once. Expect
@@ -216,6 +218,24 @@ may stay dark until the logo appears — that is normal on Pi Zero W.
 
 If the panel stays blank for more than **3–5 minutes** after the second boot,
 check HDMI tty2 or re-flash.
+
+### Print the reference case (optional)
+
+Round-one kits use the parametric clamshell in
+[`hardware/case/`](https://github.com/mohrt/PiWalletSV/tree/main/hardware/case).
+
+1. Download **[`piwalletsv-case-round1-all.stl`](https://github.com/mohrt/PiWalletSV/raw/main/hardware/case/stl/piwalletsv-case-round1-all.stl)**
+   (back tub + front lid + two button caps on one plate).
+2. In your slicer, **split by object** and orient:
+   - tub — open side up;
+   - lid — front face down;
+   - caps — flat (brim recommended).
+3. Print **PETG** (0.2 mm layers, 25% gyroid — full profile in
+   [`hardware/case/README.md`](https://github.com/mohrt/PiWalletSV/blob/main/hardware/case/README.md)).
+4. Assemble Pi + bonnet + camera in the tub, snap on the lid, install
+   **M2.5 × 16 mm** screws at the four corners.
+
+You can boot and complete setup without a case; print when convenient.
 
 ## Step 4 &mdash; Accept the disclaimer
 

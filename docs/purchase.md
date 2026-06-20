@@ -37,7 +37,7 @@ Bring your own parts, flash the official image, print or buy a case.
 | **microSD** 8 GB+ | Blank; you flash firmware |
 | **5 V power** + micro-USB cable | **Right** port = power only |
 | **micro-USB OTG adapter** | **Left** port + USB stick for vault backup |
-| **Case** | [Print yourself](https://github.com/mohrt/PiWalletSV/blob/main/hardware/case/README.md) or buy case-only (below) |
+| **Case** | Download [`piwalletsv-case-round1-all.stl`](https://github.com/mohrt/PiWalletSV/raw/main/hardware/case/stl/piwalletsv-case-round1-all.stl) and print PETG ([case guide](https://github.com/mohrt/PiWalletSV/blob/main/hardware/case/README.md)), or buy case-only (below) |
 
 **Steps:**
 
@@ -78,7 +78,10 @@ Already have the Pi stack? You can **buy a printed case** from the project
 instead of printing from
 [`hardware/case/`](https://github.com/mohrt/PiWalletSV/tree/main/hardware/case).
 
-- Self-print: STLs and SCAD in the repo (PETG recommended)
+- **Self-print:** [`piwalletsv-case-round1-all.stl`](https://github.com/mohrt/PiWalletSV/raw/main/hardware/case/stl/piwalletsv-case-round1-all.stl)
+  (tub + lid + button caps on one plate; split in your slicer) — PETG recommended.
+  OpenSCAD source [`case.scad`](https://github.com/mohrt/PiWalletSV/blob/main/hardware/case/case.scad)
+  if you need to tweak fit.
 - **Case-only orders:** message [@PiWalletSV on X](https://x.com/PiWalletSV)
 
 Unauthorized resale of printed case goods requires prior written permission

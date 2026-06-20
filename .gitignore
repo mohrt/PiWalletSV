@@ -45,6 +45,7 @@ enclosure/
 *.step
 *.stp
 *.stl
+!hardware/case/stl/*.stl
 *.gcode
 
 local_*.cbor

@@ -1,10 +1,10 @@
 # `hardware/case/`
 
 The PiWalletSV reference 3D-printable case — a 2-piece clamshell
-PETG enclosure. Holds a Raspberry Pi Zero 2 W, an Adafruit 1.3"
-240×240 TFT bonnet (product 4506), and an Arducam UC-346 OV5647, with
-the LCD facing the operator and the camera lens facing the back of
-the unit on the same optical axis.
+PETG enclosure. Holds a Raspberry Pi **Zero / Zero W / Zero WH**, an
+Adafruit 1.3" 240×240 TFT bonnet (product 4506), and an OV5647 camera
+module, with the LCD facing the operator and the camera lens facing the
+back of the unit on the same optical axis.
 
 **Use of the case design:** Printing a case for your own PiWalletSV
 device is fine. Commercial sale of printed shells or the case design
@@ -22,20 +22,31 @@ only (see [Disclaimer §12](../../DISCLAIMER.md#12-kits-and-case--no-unauthorize
 | [`case.scad`](case.scad) | Parametric OpenSCAD source for the two shell parts (`back_tub`, `front_lid`). All dimensions are named variables; future hardware swaps are one-line changes. |
 | `refs/` | Authoritative CAD files — Adafruit's official 4506 STEP, plus a parser that extracts component centres from it. |
 | `photos/` | Empirical reference photos from fit-tests (front, back, edge, exploded), plus the parts-layout photo that locks the orientation convention. |
-| `stl/` | Pre-rendered STLs for users without OpenSCAD. Re-rendered when `case.scad` changes; check the commit message for the source revision. |
+| [`stl/`](stl/) | **`piwalletsv-case-round1-all.stl`** — tub + lid + 2× button caps on one plate. See [`stl/README.md`](stl/README.md). |
 
-## Render an STL
+## Print from the STL (recommended)
+
+Most users should **download and slice** the pre-rendered plate — no OpenSCAD required:
+
+1. Get [`stl/piwalletsv-case-round1-all.stl`](stl/piwalletsv-case-round1-all.stl) from this repo.
+2. In your slicer, **split the plate into objects** and orient each body
+ (tub open-side up, lid front-face down, caps flat with brim if needed).
+3. Print in **PETG** using the profile below.
+4. Assemble with **M2.5 × 16 mm** screws (four corners).
+
+Full slicer notes: [`stl/README.md`](stl/README.md).
+
+## Render from OpenSCAD (optional)
 
 You'll need [OpenSCAD](https://openscad.org/downloads.html) (free,
-cross-platform). Open `case.scad`, then:
+cross-platform) only if you are editing [`case.scad`](case.scad):
 
-1. Edit the `mode` variable near the bottom of the file:
- - `mode = "tub"` — render the back tub (camera mount, Pi standoffs, lens cone, side walls, screw bosses).
- - `mode = "lid"` — render the front lid (LCD window, joystick + button cutouts, registration skirt).
- - `mode = "all"` — exploded preview for visual sanity. **Don't print this.**
-2. **Render** with `F6` (a real render, not the `F5` preview — preview
- is fine for visual checks but doesn't capture all geometry).
-3. **Export → STL** from the File menu.
+1. Set `mode = "all"` near the bottom (tub + lid + caps on one plate).
+2. **Render** with `F6` (not F5 preview).
+3. **Export → STL** → save as `stl/piwalletsv-case-round1-all.stl`.
+
+Other modes (`"tub"`, `"lid"`, `"caps"`) export single parts if you prefer
+one orientation per file.
 
 A typical print profile for PETG on a 0.4 mm nozzle:
 
@@ -100,20 +111,20 @@ service convenience:
 
 ```scad
 sd_cutout_enabled = true; // microSD slot on left short edge
-hdmi_cutout_enabled = false; // mini-HDMI on front edge
+hdmi_cutout_enabled = true; // mini-HDMI on front edge (round1 STL)
 ```
 
 | Variant | `sd_cutout_enabled` | `hdmi_cutout_enabled` | Exposed | Sealed |
 |---|---|---|---|---|
-| dev (default) | `true` | `false` | PWR + OTG + microSD | HDMI |
-| dev + HDMI | `true` | `true` | PWR + OTG + microSD + HDMI | — |
+| **round1 STL** (published) | `true` | `true` | PWR + OTG + microSD + HDMI | — |
+| dev | `true` | `false` | PWR + OTG + microSD | HDMI |
 | production | `false` | `false` | PWR + OTG only | microSD + HDMI |
 
 micro-USB PWR-IN and micro-USB OTG (data) are exposed in every
 variant because the device needs power and the OTG cutout is the
-recovery / re-flash path of last resort. Render once per variant
-and ship the matching STL. The companion `stl/` directory will
-hold `piwalletsv-case-prod-vX.Y.stl` and `piwalletsv-case-dev-vX.Y.stl`.
+recovery / re-flash path of last resort. The published round-one file is
+[`stl/piwalletsv-case-round1-all.stl`](stl/piwalletsv-case-round1-all.stl).
+Re-export after toggling cutouts and commit a new filename (e.g. `-prod-`).
 
 ## Re-using the design for other hardware
 
@@ -135,7 +146,5 @@ common modules (`screw_boss`, `through_hole_at`) stay shared.
 ## See also
 
 - `SPEC.md` — the canonical hardware datums and the assembly diagram.
-- [`docs/build-image.md`](../../docs/build-image.md) — Step 3
- ("Assemble the hardware") in the user-facing flash-and-first-run
- guide. When the case lands, that step gets a "use the reference
- case" callout.
+- [`docs/build-image.md`](../../docs/build-image.md) — assembly and optional
+ case printing in the user-facing flash-and-first-run guide.
