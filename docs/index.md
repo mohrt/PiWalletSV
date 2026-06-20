@@ -12,10 +12,9 @@ hide:
 
 # An air-gapped wallet for Bitcoin SV
 
-Built on a Raspberry Pi, a TFT bonnet, and an **ArduCam OV5647** camera. Your **keys
-never leave the device** — no Wi-Fi, no Bluetooth, no Ethernet. A
-small web app on your phone or laptop talks to the chain; the Pi
-just signs.
+Built on a Raspberry Pi with **no network radios**. Your **keys never leave
+the device**. A small web app on your phone or laptop talks to the chain;
+the Pi just signs.
 
 [Launch wallet ↗]({{ companion_url }}/){ .pwsv-cta }
 [Read the docs](getting-started.md){ .pwsv-cta-secondary }
@@ -110,17 +109,10 @@ device signs anything.
     [protocol spec](protocol/README.md). Anyone can build a
     compatible signer or companion.
 
--   :material-usb: __USB vault backup__
-
-    Export and restore the encrypted vault to a FAT32/exFAT stick from
-    **Settings → Maintenance → USB backup** — included on images built with
-    `deploy/provision-pi.sh`. See
-    [User manual § USB backup](user-manual.md#usb-backup).
-
 -   :material-shopping-outline: __Off-the-shelf parts__
 
-    Raspberry Pi, TFT bonnet, ArduCam OV5647 camera. No proprietary hardware,
-    no soldering, no signed firmware to trust.
+    Standard Raspberry Pi hardware — no proprietary signer, no soldering.
+    See [Purchase](purchase.md) for the parts list.
 
 </div>
 
@@ -140,8 +132,8 @@ device signs anything.
 
 -   :material-shopping-outline: __[Purchase a complete kit](purchase.md)__
 
-    Pre-assembled kit with Pi, bonnet, camera, and pre-flashed SD card.
-    Coming soon.
+    Pre-assembled hardware when batches are available, or build your own
+    from the parts list.
 
 </div>
 
