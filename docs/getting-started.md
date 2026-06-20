@@ -6,9 +6,12 @@ transaction in a CLI smoke test." For the user-facing journey
 
 ## What you need
 
-- A **Raspberry Pi Zero 2 WH** (the W has a wireless module the
-  enclosure design assumes; the H has the pre-soldered header the
-  bonnet plugs into).
+- A **Raspberry Pi Zero W or Zero WH** — this matches round‑1 kits and the
+  [signed firmware image](download.md) (`pi0`, 32‑bit armv6). The WH includes
+  the pre-soldered header the bonnet plugs into; on a plain Zero W, solder a
+  GPIO header first.
+- A **Pi Zero 2 W** can work for this from‑scratch path (64‑bit OS, faster
+  pip), but it is not what the official image is built for.
 - An **Adafruit 1.3" 240×240 TFT bonnet** ([product 4506](https://www.adafruit.com/product/4506)) —
   ST7789-class panel with a joystick and A/B buttons.
 - An **ArduCam OV5647** camera module (kit camera) plus the ribbon
