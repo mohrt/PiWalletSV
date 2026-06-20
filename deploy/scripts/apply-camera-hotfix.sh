@@ -20,6 +20,8 @@ install -m 0644 "$PATCH_ROOT/piwallet/bonnet/camera_still.py" \
   "$OPT_PIWALLET/piwallet/bonnet/camera_still.py"
 install -m 0644 "$PATCH_ROOT/piwallet/bonnet/entropy_screens.py" \
   "$OPT_PIWALLET/piwallet/bonnet/entropy_screens.py"
+install -m 0644 "$PATCH_ROOT/piwallet/bonnet/create_wallet.py" \
+  "$OPT_PIWALLET/piwallet/bonnet/create_wallet.py"
 install -m 0644 "$PATCH_ROOT/piwallet/cli.py" \
   "$OPT_PIWALLET/piwallet/cli.py"
 

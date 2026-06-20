@@ -47,10 +47,11 @@ yourself. Skipping this step makes everything else meaningless.
 gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
 
 # 2. Verify the signature on the image.
-gpg --verify piwalletsv-<VERSION>.img.xz.asc piwalletsv-<VERSION>.img.xz
+gpg --verify piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz.asc \
+    piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz
 
 # 3. Cross-check the SHA-256 against the published value.
-shasum -a 256 piwalletsv-<VERSION>.img.xz
+shasum -a 256 piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz
 ```
 
 The Download page lists the expected fingerprint and the SHA-256.
@@ -199,11 +200,19 @@ automatically so you don't need to unzip first.
    cable connector under the bonnet, near the SD slot edge).
 4. Plug the 5&nbsp;V power supply into the bonnet's PWR-IN.
 
-The **first boot after flashing** can take up to a minute on a Pi Zero W while
-systemd starts services. You may see **one automatic reboot** on older images
-that used PiShrink auto-expand (filesystem grow); current builds skip that.
-The bonnet should then show **PiWalletSV / Booting…** (if present) and the
-beta disclaimer.
+The **first boot after flashing** takes longer than normal because the image
+**expands the root partition to your SD card size**, then reboots once. Expect
+roughly **2–3 minutes total** on a Pi Zero W before the disclaimer (about
+**1–2 minutes longer** than everyday boots).
+
+| Phase | What you see |
+|-------|----------------|
+| Power on → ~60–90 s | Panel may stay dark while the Pi boots |
+| First boot | Automatic reboot when SD expansion finishes |
+| Second boot | Logo splash → disclaimer (~1 minute after power-on) |
+
+Every boot after that is a **single** boot (~1 minute to splash). The panel
+may stay dark until the logo appears — that is normal on Pi Zero W.
 
 If the panel stays blank for more than **3–5 minutes** after the second boot,
 check HDMI tty2 or re-flash.

@@ -600,12 +600,7 @@ def run_bonnet(
     if input_mgr is None:
         input_mgr = make_input_manager(open_input("auto"))
 
-    # Paint immediately — libcamera import and migration can take many seconds
-    # on a Pi Zero W and the panel would otherwise stay blank.
     display.set_backlight(True)
-    from piwallet.bonnet.boot_status import show_boot_status
-
-    show_boot_status(display)
 
     # One-shot migration for developer Pis that still have the legacy
     # `~/.piwallet-dev/` directory from before the rename. No-op on a
@@ -651,14 +646,6 @@ def run_bonnet(
             )
             if diag_outcome == "restart":
                 return 0
-
-        # Pre-warm libcamera on the main thread after splash (can take 30–90 s
-        # on Pi Zero W — must not block the logo from appearing).
-        try:
-            import libcamera  # type: ignore[import-not-found]  # noqa: F401
-            import picamera2  # type: ignore[import-not-found]  # noqa: F401
-        except ImportError:
-            log.warning("camera stack not importable at bonnet startup")
 
         while True:  # disclaimer → unlock → wallets; repeats after system reset
             lifecycle_reset: list[bool] = [False]

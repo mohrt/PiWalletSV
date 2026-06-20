@@ -461,18 +461,6 @@ step_boot_config() {
     # Hardware enables.
     ensure_line "dtparam=spi=on"        "$BOOT_CFG"
     ensure_line "dtparam=i2c_arm=on"    "$BOOT_CFG"
-    # Force HDMI output even if no monitor detected at boot — needed on
-    # Pi Zero W for tty2 (HDMI keyboard debug console) to work reliably.
-    ensure_line "hdmi_force_hotplug=1"  "$BOOT_CFG"
-    # Switch full KMS (vc4-kms-v3d) to fake/transitional KMS (vc4-fkms-v3d).
-    # Full KMS requires a monitor connected at DRM driver init time; without
-    # one it logs "Cannot find any crtc or sizes" and leaves no /dev/fb0,
-    # making tty2 on HDMI unusable. fkms uses the firmware framebuffer path
-    # so /dev/fb0 is always present and hotplug works reliably on Pi Zero W.
-    sed -i 's/dtoverlay=vc4-kms-v3d/dtoverlay=vc4-fkms-v3d/' "$BOOT_CFG"
-    # disable_fw_kms_setup=1 is a full-KMS companion; fkms doesn't need it
-    # and leaving it in can suppress the firmware framebuffer setup.
-    remove_boot_config_line "disable_fw_kms_setup=1" "$BOOT_CFG"
     # Camera: use libcamera auto-detect (matches a stock Imager SD and the
     # kit OV5647 on Pi Zero W in practice). Do NOT append camera_auto_detect=0
     # on top of Imager's camera_auto_detect=1 — the last line wins and forced
@@ -742,21 +730,20 @@ step_install_unit() {
         unit_root="$APP_DIR/$UNIT_SRC_DIR"
     fi
     local svc_src="$unit_root/piwallet-bonnet.service"
-    local boot_src="$unit_root/piwallet-boot-status.service"
     local jrn_src="$unit_root/journald-piwallet.conf.example"
 
     [[ -f "$svc_src" ]] || fail "missing $svc_src"
-    [[ -f "$boot_src" ]] || fail "missing $boot_src"
     [[ -f "$jrn_src" ]] || fail "missing $jrn_src"
 
     run install -m 0644 "$svc_src" "$UNIT_DST_DIR/piwallet-bonnet.service"
-    run install -m 0644 "$boot_src" "$UNIT_DST_DIR/piwallet-boot-status.service"
     run install -d -m 0755 "$(dirname "$JOURNALD_CONF")"
     run install -m 0644 "$jrn_src" "$JOURNALD_CONF"
 
+    run systemctl disable piwallet-boot-status.service 2>/dev/null || true
+    run rm -f "$UNIT_DST_DIR/piwallet-boot-status.service"
+
     run systemctl daemon-reload
     run systemctl restart systemd-journald
-    run systemctl enable piwallet-boot-status.service
     run systemctl enable piwallet-bonnet.service
 }
 
@@ -1024,6 +1011,24 @@ step_verify_sealed_for_capture() {
     if systemctl is-enabled piwallet-purge-radios.service >/dev/null 2>&1; then
         problems+=("piwallet-purge-radios.service is enabled — defer purge to first boot")
     fi
+    local cmdline=""
+    if [[ -f "$CMDLINE" ]]; then
+        cmdline="$CMDLINE"
+    elif [[ -f "$CMDLINE_LEGACY" ]]; then
+        cmdline="$CMDLINE_LEGACY"
+    fi
+    if [[ -n "$cmdline" ]] && ! grep -q "$SPI_BUFSIZ" "$cmdline" 2>/dev/null; then
+        problems+=("spidev.bufsiz=131072 missing from $cmdline — bonnet display will garble")
+    fi
+    local bufsiz
+    bufsiz="$(cat /sys/module/spidev/parameters/bufsiz 2>/dev/null || echo 0)"
+    if [[ "$bufsiz" != "131072" ]]; then
+        if [[ -n "$cmdline" ]] && grep -q "$SPI_BUFSIZ" "$cmdline" 2>/dev/null; then
+            log "  note: kernel spidev bufsiz is ${bufsiz} until reboot (cmdline already has 131072)"
+        else
+            problems+=("kernel spidev bufsiz is ${bufsiz} (need 131072 in cmdline)")
+        fi
+    fi
     if [[ ${#problems[@]} -gt 0 ]]; then
         for p in "${problems[@]}"; do
             warn "$p"
@@ -1200,10 +1205,9 @@ For image capture: reboot after seal, wait for bonnet disclaimer, power
 off, then dd. Provision from **tty2** with inline radio purge so the
 captured image does **not** run apt on the buyer's first boot.
 
-PiShrink runs with **`-s`** (no first-flash expand/reboot) by default.
-The shrunk rootfs already fits 8 GB cards. Set ``PISHRINK_AUTOEXPAND=1``
-only if you need the image to grow to fill 16 GB+ cards on first boot
-(that adds one automatic reboot).
+PiShrink **expands the rootfs to the SD size on first flash** (one automatic
+reboot). Set ``PISHRINK_SKIP_AUTOEXPAND=1`` when capturing if you want to skip
+expand (8 GB cards only; saves ~1–2 min on first flash).
 EOF
     fi
     cat <<'EOF'

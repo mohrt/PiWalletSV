@@ -51,8 +51,8 @@ card is correct.
 
 From [Download](download.md):
 
-- `piwalletsv-<VERSION>.img.xz`
-- `piwalletsv-<VERSION>.img.xz.asc`
+- `piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz` (e.g. `piwalletsv-0.1.0-r3-pi0-beta.img.xz`)
+- `piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz.asc`
 - `SHA256SUMS` (+ `.asc` if provided)
 
 Your kit paperwork states which `<VERSION>` applies (e.g. round-one
@@ -65,8 +65,8 @@ Import the release key once (fingerprint in
 
 ```bash
 gpg --keyserver hkps://keys.openpgp.org --recv-keys <RELEASE_KEY_FINGERPRINT>
-gpg --verify piwalletsv-<VERSION>.img.xz.asc piwalletsv-<VERSION>.img.xz
-shasum -a 256 piwalletsv-<VERSION>.img.xz   # match SHA256SUMS
+gpg --verify piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz.asc piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz
+shasum -a 256 piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz   # match SHA256SUMS
 ```
 
 **Stop if anything fails.** Do not flash.

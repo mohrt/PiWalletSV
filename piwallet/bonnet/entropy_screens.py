@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 import time
 from collections.abc import Callable
@@ -10,6 +11,7 @@ from io import BytesIO
 
 from PIL import Image, ImageOps
 
+from piwallet.bonnet.camera_sizes import bonnet_live_preview_enabled
 from piwallet.bonnet.camera_still import capture_still_jpeg_bytes
 from piwallet.bonnet.entropy_camera import EntropyDualStreamCamera
 from piwallet.core.mnemonic import MIN_DICE_ROLLS
@@ -30,7 +32,7 @@ from piwallet.ui.widgets import draw_text
 log = logging.getLogger(__name__)
 
 _TITLE_H: int = 26
-_FOOTER_RESERVE: int = 40
+_FOOTER_RESERVE: int = 44
 _PREVIEW_TOP: int = _TITLE_H + 2
 _PREVIEW_BOTTOM: int = DISPLAY_HEIGHT - _FOOTER_RESERVE
 
@@ -46,6 +48,7 @@ class CameraEntropyScreen:
     busy: bool = False
     preview_interval_s: float = 0.25
     preview_thumb_max_edge: int = 200
+    live_preview: bool = field(default_factory=bonnet_live_preview_enabled)
     clock_s: Callable[[], float] = field(default_factory=lambda: time.monotonic)
     camera_cls: type = EntropyDualStreamCamera
     _dual: EntropyDualStreamCamera | None = field(init=False, default=None)
@@ -106,10 +109,12 @@ class CameraEntropyScreen:
         if event.button == Button.A and event.kind == EventKind.PRESS:
             self.busy = True
             try:
-                if self._dual is not None:
-                    jpeg = self._dual.capture_entropy_jpeg()
-                else:
-                    jpeg = capture_still_jpeg_bytes()
+                # Close any preview stream before opening a fresh capture session.
+                # Holding the preview pipeline open while encoding a JPEG doubles
+                # CMA use on Pi Zero W and can OOM-kill the bonnet.
+                self._close_dual()
+                gc.collect()
+                jpeg = capture_still_jpeg_bytes()
                 self.result = jpeg
                 self.error = None
                 self.done = True
@@ -122,13 +127,11 @@ class CameraEntropyScreen:
                     )
                 else:
                     self.error = str(exc)
-            else:
-                self._close_dual()
             finally:
                 self.busy = False
 
     def draw(self, fb: FrameBuffer) -> None:
-        if not self.done and not self._dual_failed:
+        if self.live_preview and not self.done and not self._dual_failed:
             self._try_open_dual()
             self._refresh_preview_thumb()
 
@@ -158,6 +161,25 @@ class CameraEntropyScreen:
                 "Capturing...",
                 size=12,
                 color=COLOR_FG,
+                anchor="mm",
+            )
+        elif self._dual_failed and self._cached_thumb is None and not self.live_preview:
+            draw_text(
+                fb,
+                DISPLAY_WIDTH // 2,
+                (_PREVIEW_TOP + _PREVIEW_BOTTOM) // 2 - 8,
+                "Ready to capture",
+                size=11,
+                color=COLOR_DIM,
+                anchor="mm",
+            )
+            draw_text(
+                fb,
+                DISPLAY_WIDTH // 2,
+                (_PREVIEW_TOP + _PREVIEW_BOTTOM) // 2 + 10,
+                "Press A for photo",
+                size=10,
+                color=COLOR_DIM,
                 anchor="mm",
             )
         elif self._dual_failed and self._cached_thumb is None:
@@ -212,9 +234,15 @@ class CameraEntropyScreen:
 
 
 def _jpeg_preview_thumb(jpeg: bytes, *, max_edge: int = 200) -> Image.Image:
-    """Decode a captured entropy JPEG for the TFT confirmation screen."""
-    img = Image.open(BytesIO(jpeg)).convert("RGB")
-    return ImageOps.contain(img, (max_edge, max_edge), Image.Resampling.BILINEAR)
+    """Decode a captured entropy JPEG for the TFT confirmation screen.
+
+    Uses JPEG ``draft()`` so Pi Zero W does not allocate a full 1280×960 RGB
+    buffer (~3.7 MiB) just to paint a 200 px thumbnail.
+    """
+    with Image.open(BytesIO(jpeg)) as img:
+        img.draft("RGB", (max_edge, max_edge))
+        rgb = img.convert("RGB")
+    return ImageOps.contain(rgb, (max_edge, max_edge), Image.Resampling.BILINEAR)
 
 
 @dataclass
@@ -225,10 +253,14 @@ class CameraEntropyConfirmScreen:
     title: str = "Photo captured"
     done: bool = False
     confirmed: bool | None = None
+    result: bool | None = None
     preview_thumb_max_edge: int = 200
-    _thumb: Image.Image = field(init=False)
+    _thumb: Image.Image | None = field(init=False, default=None)
 
-    def __post_init__(self) -> None:
+    def _ensure_thumb(self) -> None:
+        if self._thumb is not None:
+            return
+        gc.collect()
         self._thumb = _jpeg_preview_thumb(
             self.jpeg, max_edge=self.preview_thumb_max_edge
         )
@@ -245,12 +277,15 @@ class CameraEntropyConfirmScreen:
         if event.button == Button.B and event.kind in (EventKind.PRESS, EventKind.LONG):
             self.done = True
             self.confirmed = None
+            self.result = None
             return
         if event.button == Button.A and event.kind == EventKind.PRESS:
             self.done = True
             self.confirmed = True
+            self.result = True
 
     def draw(self, fb: FrameBuffer) -> None:
+        self._ensure_thumb()
         fb.clear(COLOR_BG)
         fb.draw.rectangle((0, 0, DISPLAY_WIDTH, _TITLE_H), fill=(20, 20, 32))
         draw_text(
@@ -269,10 +304,10 @@ class CameraEntropyConfirmScreen:
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
-            _PREVIEW_BOTTOM + 6,
+            _PREVIEW_BOTTOM - 10,
             self._size_label(),
             size=10,
-            color=COLOR_DIM,
+            color=COLOR_FG,
             anchor="mm",
         )
 

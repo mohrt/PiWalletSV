@@ -34,6 +34,11 @@ A **printable version** of this section ships in the kit:
 
 ## 1. First boot
 
+On a **freshly flashed** SD card, the Pi reboots **once** while the image
+expands to the card size. The panel may stay dark for up to ~1 minute until
+the logo splash appears. After that one-time expand reboot, every boot is
+single-stage.
+
 When you first boot the Pi with PiWalletSV installed, the bonnet shows
 the **PiWalletSV logo** briefly, then walks you through a three-page
 disclaimer:

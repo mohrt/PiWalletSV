@@ -6,11 +6,14 @@
 #   ./scripts/capture-sd-image.sh --version 0.1.0-r3 /dev/rdisk4
 #   ./scripts/capture-sd-image.sh --version 0.1.0-r3 disk4 --yes
 #   ./scripts/capture-sd-image.sh --version 0.1.0-r3 --from images/raw-capture.img
-#   ./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity beta disk4
-#   ./scripts/capture-sd-image.sh --version 0.1.0-r3 --maturity alpha disk4
+#   ./scripts/capture-sd-image.sh --version 0.1.0-r3 --board pi0 --maturity beta disk4
+#   ./scripts/capture-sd-image.sh --version 0.1.0-r3 --board pi0 --maturity alpha disk4
 #
 # Options:
 #   --version VER      release version (required)
+#   --board SLUG       processor tier (required) — SeedSigner-style:
+#                      pi0 (Zero v1.3 / Zero W / WH), pi02w (Zero 2 W, Pi 3 B),
+#                      pi2 (Pi 2 B), pi4 (Pi 4 / 400)
 #   --maturity STAGE   alpha | beta | release (default: release)
 #                      alpha/beta add a suffix to the filename; alpha stays local
 #   --from PATH        skip dd — shrink/compress/checksum an existing .img capture
@@ -20,9 +23,9 @@
 #   --yes              skip interactive device confirmation
 #
 # Filenames:
-#   release → piwalletsv-0.1.0-r3.img.xz        (GitHub GA)
-#   beta    → piwalletsv-0.1.0-r3-beta.img.xz   (GitHub pre-release)
-#   alpha   → piwalletsv-0.1.0-r3-alpha.img.xz  (local only — never upload)
+#   release → piwalletsv-0.1.0-r3-pi0.img.xz           (GitHub GA)
+#   beta    → piwalletsv-0.1.0-r3-pi0-beta.img.xz      (GitHub pre-release)
+#   alpha   → piwalletsv-0.1.0-r3-pi0-alpha.img.xz     (local only — never upload)
 #
 # Requires: sudo (dd), xz, shasum/sha256sum; Docker on macOS for shrink.
 #
@@ -33,6 +36,7 @@ readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly SHRINK="$ROOT/scripts/shrink-sd-image.sh"
 
 VERSION=""
+BOARD=""
 MATURITY="release"
 DEVICE=""
 FROM_IMG=""
@@ -60,6 +64,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --version)     VERSION=${2:?--version requires a value}; shift ;;
         --version=*)   VERSION=${1#*=} ;;
+        --board)       BOARD=${2:?--board requires a value}; shift ;;
+        --board=*)     BOARD=${1#*=} ;;
         --maturity)    MATURITY=${2:?--maturity requires a value}; shift ;;
         --maturity=*)  MATURITY=${1#*=} ;;
         --from)        FROM_IMG=${2:?--from requires a path}; shift ;;
@@ -83,7 +89,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$VERSION" ]] || fail "--version is required"
+[[ -n "$BOARD" ]] || fail "--board is required (e.g. pi0 for Zero / Zero W)"
 [[ "$VERSION" != *"/"* ]] || fail "invalid version: $VERSION"
+
+case "$BOARD" in
+    pi0|pi02w|pi2|pi4) ;;
+    *) fail "--board must be pi0, pi02w, pi2, or pi4 (got '$BOARD')" ;;
+esac
 
 case "$MATURITY" in
     alpha|beta|release) ;;
@@ -109,7 +121,7 @@ mkdir -p "$OUT_DIR"
 OUT_DIR=$(cd "$OUT_DIR" && pwd)
 
 image_basename() {
-    local base="piwalletsv-${VERSION}"
+    local base="piwalletsv-${VERSION}-${BOARD}"
     case "$MATURITY" in
         alpha|beta) printf '%s-%s' "$base" "$MATURITY" ;;
         release)    printf '%s' "$base" ;;
@@ -288,27 +300,46 @@ update_releases_json() {
     local manifest="$ROOT/releases/releases.json"
     [[ -f "$manifest" ]] || return 0
 
-    python3 - "$manifest" "$VERSION" "$hash" <<'PY'
+    python3 - "$manifest" "$VERSION" "$BOARD" "$MATURITY" "$hash" <<'PY'
 import json
 import sys
 
-path, version, sha256 = sys.argv[1:4]
+path, version, board, maturity, sha256 = sys.argv[1:6]
 with open(path, encoding="utf-8") as f:
     data = json.load(f)
 
+base = f"piwalletsv-{version}-{board}"
+if maturity in ("alpha", "beta"):
+    base = f"{base}-{maturity}"
+image_xz = f"{base}.img.xz"
+
 for rel in data.get("releases", []):
-    if rel.get("version") == version:
-        rel["sha256"] = sha256
-        break
+    if rel.get("version") != version:
+        continue
+    if rel.get("board") not in (None, board):
+        continue
+    rel["board"] = board
+    rel["sha256"] = sha256
+    tag = rel.get("tag", f"v{version}")
+    base_url = f"https://github.com/mohrt/PiWalletSV/releases/download/{tag}"
+    assets = rel.setdefault("assets", {})
+    assets["image_xz"] = f"{base_url}/{image_xz}"
+    assets["image_asc"] = f"{base_url}/{image_xz}.asc"
+    assets["sha256sums"] = f"{base_url}/SHA256SUMS"
+    assets["sha256sums_asc"] = f"{base_url}/SHA256SUMS.asc"
+    break
 else:
-    print(f"[capture-sd] warn: version {version} not found in releases.json", file=sys.stderr)
+    print(
+        f"[capture-sd] warn: version {version} (board {board}) not found in releases.json",
+        file=sys.stderr,
+    )
     sys.exit(0)
 
 with open(path, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
     f.write("\n")
 PY
-    log "updated releases.json sha256 for $VERSION"
+    log "updated releases.json for $VERSION ($BOARD)"
 }
 
 run_sign() {
@@ -335,7 +366,7 @@ if [[ $DO_SIGN -eq 1 ]]; then
     run_sign
 fi
 
-log "done ($MATURITY)"
+log "done ($BOARD $MATURITY)"
 log "artifact: $XZ"
 log "checksum: $SUMS"
 [[ $DO_SIGN -eq 1 ]] && log "signatures: ${XZ}.asc ${SUMS}.asc"

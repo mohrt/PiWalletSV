@@ -16,18 +16,15 @@ from contextlib import suppress
 
 from PIL import Image
 
+from piwallet.bonnet.camera_sizes import capture_sizes_for_machine
 from piwallet.bonnet.camera_still import _camera_unavailable
 from piwallet.camera_lcd import PIWALLET_CAMERA_ROTATION_DEG, rotate_rgb888
 
 log = logging.getLogger(__name__)
 
-# Try largest first for entropy quality; fall back for picky sensors.
-_PREVIEW_SIZES: list[tuple[int, int]] = [
-    (1280, 960),
-    (640, 480),
-    (480, 360),
-    (416, 312),
-]
+
+def _preview_sizes_for_machine() -> list[tuple[int, int]]:
+    return capture_sizes_for_machine()
 
 
 class EntropyDualStreamCamera:
@@ -62,7 +59,7 @@ class EntropyDualStreamCamera:
             ) from exc
 
         last_err: BaseException | None = None
-        for prev_sz in _PREVIEW_SIZES:
+        for prev_sz in _preview_sizes_for_machine():
             picam = None
             try:
                 info = Picamera2.global_camera_info()
@@ -122,8 +119,11 @@ class EntropyDualStreamCamera:
             raise RuntimeError("camera not opened")
         frame = self.read_preview_rgb()
         buf = io.BytesIO()
-        Image.fromarray(frame).save(buf, format="JPEG", quality=self._jpeg_quality)
-        blob = buf.getvalue()
+        try:
+            Image.fromarray(frame).save(buf, format="JPEG", quality=self._jpeg_quality)
+            blob = buf.getvalue()
+        finally:
+            del frame
         if not blob:
             raise RuntimeError("empty JPEG after capture_array encode")
         return blob
