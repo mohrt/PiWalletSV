@@ -12,9 +12,9 @@ hide:
 
 # An air-gapped wallet for Bitcoin SV
 
-Built on a Raspberry Pi with **no network radios**. Your **keys never leave
-the device**. A small web app on your phone or laptop talks to the chain;
-the Pi just signs.
+Built on a Raspberry Pi that **never connects to the internet**. Your **keys
+never leave the device**. A small web app on your phone or laptop talks to
+the chain; the Pi just signs.
 
 [Launch wallet ↗]({{ companion_url }}/){ .pwsv-cta }
 [Read the docs](getting-started.md){ .pwsv-cta-secondary }
