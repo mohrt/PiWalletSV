@@ -53,7 +53,7 @@ export async function ensureTermsAccepted(): Promise<void> {
         </p>
         <ul class="terms-bullets">
           <li>
-            <strong>Alpha software.</strong> Pre-release, unaudited,
+            <strong>Beta software.</strong> Pre-release, unaudited,
             personal project. Bugs and regressions can lose funds.
             Don't store amounts you can't afford to lose.
           </li>

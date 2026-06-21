@@ -13,9 +13,9 @@ and from the companion web app's first-load acknowledgment modal.
 
 ---
 
-## 1. Alpha Software
+## 1. Beta Software
 
-PiWalletSV is **alpha-quality, pre-release software** authored as a
+PiWalletSV is **beta-quality, pre-release software** authored as a
 personal / hobbyist project. It has **not** been independently audited
 for security, correctness, or fitness for handling funds. Bugs,
 regressions, undocumented behavior changes, and incompatible breaking
