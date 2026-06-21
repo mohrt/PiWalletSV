@@ -21,8 +21,13 @@ for security, correctness, or fitness for handling funds. Bugs,
 regressions, undocumented behavior changes, and incompatible breaking
 changes may occur in any release.
 
-Do not store an amount of Bitcoin SV (BSV) in PiWalletSV that you are
-not prepared to lose entirely.
+Expect bugs, regressions, and behavior changes between releases.
+Verify new versions before relying on them.
+
+Your keys and seed phrase are generated and held on the Pi signer, not
+in the companion app or any hosted service. You can always recover
+your funds from any BIP44-compatible wallet using your seed phrase —
+PiWalletSV is not required.
 
 ## 2. Provided "As Is" — No Warranty
 

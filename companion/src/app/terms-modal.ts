@@ -53,9 +53,10 @@ export async function ensureTermsAccepted(): Promise<void> {
         </p>
         <ul class="terms-bullets">
           <li>
-            <strong>Beta software.</strong> Pre-release, unaudited,
-            personal project. Bugs and regressions can lose funds.
-            Don't store amounts you can't afford to lose.
+            <strong>Beta software.</strong> Pre-release, unaudited
+            personal project — expect bugs. Keys and seed phrase stay on
+            the Pi. Restore from any BIP44-compatible wallet with your
+            seed phrase; PiWalletSV is not required.
           </li>
           <li>
             <strong>Non-custodial.</strong> You — and only you — are

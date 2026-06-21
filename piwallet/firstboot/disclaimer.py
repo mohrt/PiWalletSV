@@ -39,9 +39,9 @@ DEFAULT_DISCLAIMER_PAGES: tuple[DisclaimerPage, ...] = (
     DisclaimerPage(
         title="Beta software",
         body=(
-            "PiWalletSV is beta. Expect bugs. Your funds are always "
-            "recoverable from any BIP39 wallet using your seed phrase — "
-            "PiWalletSV is not required."
+            "PiWalletSV is beta. Expect bugs. Keys and seed phrase "
+            "stay on the Pi. Restore from any BIP44-compatible wallet "
+            "with your seed phrase — PiWalletSV is not required."
         ),
         footer="JOYSTICK > next",
     ),
