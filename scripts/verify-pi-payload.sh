@@ -65,6 +65,14 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     fi
 done < "$EXCLUDE_FILE"
 
+if command -v python3 >/dev/null 2>&1; then
+    if ! python3 -m compileall -q "$ROOT/piwallet" 2>&1; then
+        fail "Python syntax check failed under piwallet/ (run: python3 -m compileall piwallet)"
+    fi
+else
+    fail "python3 not found — cannot verify piwallet/ syntax"
+fi
+
 if [[ $FAILURES -eq 0 ]]; then
     echo "verify-pi-payload: OK ($ROOT)"
     exit 0

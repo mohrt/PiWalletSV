@@ -1,5 +1,8 @@
 <!--
-  PiWalletSV — Kit insert (print source)
+  PiWalletSV — Kit insert (extended text source)
+
+  For the branded 2-page welcome insert, use kit-insert.html instead
+  (see README.md). This file is the long-form checklist + cut-out card.
 
   Print: US Letter or A4, black & white, double-sided recommended.
   Generate PDF: see README.md in this folder.
@@ -51,14 +54,16 @@ Typical PiWalletSV kit contents:
    (full-size). Use **your own USB microSD reader** on a PC/Mac to re-flash
    from GitHub before funding (strongly recommended — see Step 0).
 6. **5 V USB power adapter** (wall charger)
-7. **Micro-USB cable** (USB-A → micro-USB) — from the power adapter to
-   the **right** micro-USB port (**power only**)
-8. **Micro-USB OTG adapter** (micro-USB → USB-A socket) — plug into the
-   **left** micro-USB port with a **USB flash drive** to back up your
-   vault (**Settings → Maintenance → USB backup**) before you re-flash the SD card.
-   **Not** for power and **not** for connecting the Pi to a computer.
-9. **Case** (may include a tamper-evident seal)
-10. **This insert**
+7. **Micro-USB cable** (USB-A → micro-USB) — from the power adapter to the
+   **right-most** micro-USB port (**power only**)
+8. **Case** (may include a tamper-evident seal)
+9. **This insert**
+
+**Not included (bring your own for vault backup):** a **micro-USB OTG adapter**
+and **USB flash drive**. Plug the OTG adapter into the **other** (left)
+micro-USB port — **not** the right-most power port — then use
+**Settings → Maintenance → USB backup**. Never connect the Pi to a computer
+through either port.
 
 Keep the seed phrase backup **separate** from the device and SD card.
 
@@ -115,7 +120,7 @@ stronger than trying to prove the factory flash byte-for-byte.
 
 **Note:** Re-flashing **erases** the card. That is OK on a new kit.
 If you already have a wallet, **back up the vault to a USB flash drive
-first** (included OTG adapter + stick → **Settings → Maintenance → USB backup**).
+first** (your OTG adapter + stick in the **left** port → **Settings → Maintenance → USB backup**).
 After re-flash, restore from that backup or your seed phrase.
 
 **Tamper seal:** If your case has a security sticker, inspect it before
@@ -176,20 +181,21 @@ microSD matches it.
 3. Connect the **camera ribbon** to the Pi CSI port (under/near the SD
    slot — latch open, insert, latch closed).
 4. Insert the **microSD** (label side as printed on the Pi).
-5. **Two micro-USB ports** (display facing you):
-   - **Right port — POWER ONLY.** Plug the included **micro-USB cable**
+5. **Two micro-USB ports** (bonnet display facing you):
+   - **Right-most port — POWER ONLY.** Plug the included **micro-USB cable**
      (from the 5 V adapter) here. Labeled **PWR IN** on the bonnet.
      **Never** plug a flash drive or OTG adapter into this port.
-   - **Left port — USB flash drive only.** Plug the included **OTG
-     adapter** here, then a FAT/exFAT stick for **Settings → Maintenance → USB
-     backup**. **Not** for power and **not** for connecting to a
-     computer.
+   - **Other port (left) — USB backup only.** For vault backup, plug **your
+     own** **OTG adapter** and **USB flash drive** here, then use
+     **Settings → Maintenance → USB backup**. **Not included in the kit.**
+     **Not** for power and **not** for connecting the Pi to a computer.
 
    ```
    Bonnet display facing you:
-        LEFT                    RIGHT
-     flash drive               POWER
-     (OTG + stick)         (5 V adapter cable)
+        LEFT                    RIGHT-MOST
+     USB backup              POWER (included)
+     (your OTG + stick)      (5 V adapter cable)
+     not included in kit
    ```
 
 First boot: the display may stay dark **15–30 seconds**, then the
@@ -280,7 +286,7 @@ Start with **testnet** until you trust the full flow.
 |------|--------|
 | **Seed phrase (12/24 words)** | **You** write on paper/steel — **required** |
 | **Encrypted vault** | On SD card; needs **PIN** |
-| **USB backup** | OTG + flash drive → Settings → Maintenance → USB backup |
+| **USB backup** | Your OTG adapter + flash drive (left port) → Settings → Maintenance → USB backup |
 
 **Lost PIN + no seed** → funds not recoverable.  
 **Lost SD + have seed** → restore wallet on a new setup or re-flash.
@@ -346,7 +352,7 @@ This insert is a summary. The authoritative manual lives at
 │  BEFORE FUNDING:  re-flash verified image (recommended)     │
 │  RECOVERY = 12/24 words ONLY  (not PIN, not support)        │
 │  AIRGAP: Settings → Maintenance → Airgap status → all OK    │
-│  USB (display facing you): RIGHT=power  LEFT=flash drive  │
+│  USB (display facing you): RIGHT-MOST=power  LEFT=backup (BYO OTG) │
 └─────────────────────────────────────────────────────────────┘
 ```
 

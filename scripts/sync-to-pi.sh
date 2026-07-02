@@ -77,15 +77,12 @@ echo "verify remote payload..."
 ssh -S "$CTRL" "$REMOTE" "bash \"${REMOTE_ABS}/scripts/verify-pi-payload.sh\" \"${REMOTE_ABS}\""
 
 if [[ $DO_PREPARE -eq 1 ]]; then
-    echo "prepare: enable getty@tty2 (reboot required)..."
-    ssh -S "$CTRL" -t "$REMOTE" 'sudo bash -s' <<'EOF'
-set -euo pipefail
-systemctl enable getty@tty2.service
-reboot
-EOF
+    echo "prepare: HDMI console (fkms + getty@tty2) + reboot..."
+    ssh -S "$CTRL" -t "$REMOTE" "sudo bash \"${REMOTE_ABS}/deploy/scripts/prepare-hdmi-console.sh\""
+    ssh -S "$CTRL" -t "$REMOTE" 'sudo reboot'
     echo ""
-    echo "Pi is rebooting. On a fresh Imager SD card, log in on tty1 (HDMI) or SSH."
-    echo "For sealed image build from tty2: Ctrl+Alt+F2 after boot, then:"
+    echo "Pi is rebooting. After boot: ls /dev/fb0 on the Pi, then Ctrl+Alt+F2 (Mac: Ctrl+Fn+Option+F2)."
+    echo "Seal from tty2:"
     echo "  sudo bash ~/PiWallet/deploy/provision-pi.sh --src ~/PiWallet --local ..."
 fi
 
