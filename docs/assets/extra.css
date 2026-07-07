@@ -130,3 +130,27 @@
 .md-nav--primary > .md-nav__list > .md-nav__item--section:first-child > label.md-nav__link {
   margin-top: 0.25rem;
 }
+
+/* ---- Store checkout (purchase.md) ------------------------------------ */
+
+.piwalletsv-store-banner {
+  background: #3e2723;
+  border: 1px solid #ff9800;
+  border-radius: 4px;
+  color: #ffe0b2;
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem;
+}
+
+.piwalletsv-store-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0 1.25rem;
+}
+
+.piwalletsv-store-error {
+  color: var(--md-code-hl-error-color, #cf6679);
+  margin: 0.5rem 0 0;
+  width: 100%;
+}

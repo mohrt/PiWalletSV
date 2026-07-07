@@ -52,6 +52,11 @@ Or build from source: [Getting started](getting-started.md) /
 
 ### 2. Full kit (limited batches)
 
+<div id="piwalletsv-store-config"
+     data-api-url="{{ store_api_url }}"
+     data-dev-banner="{{ store_dev_banner }}"
+     hidden></div>
+
 When offered, a complete kit includes:
 
 - Raspberry Pi Zero W (header soldered), heat sink, bonnet, OV5647 camera
@@ -69,8 +74,17 @@ way to rule out tampering in transit — Pi hardware has no secure boot.
 Printable insert for full-kit boxes:
 [`docs/print/kit-insert.md`](print/kit-insert.md).
 
+<div class="piwalletsv-store-actions">
+  <button type="button" class="md-button md-button--primary" data-store-checkout="stripe" data-sku="full-kit">
+    Buy with card
+  </button>
+  <button type="button" class="md-button" data-store-checkout="bsv" data-sku="full-kit">
+    Pay with BSV
+  </button>
+</div>
+
 Contact [@PiWalletSV on X](https://x.com/PiWalletSV) for batch availability
-and pricing (limited runs; not guaranteed in stock).
+if checkout is unavailable (limited runs; not guaranteed in stock).
 
 ### 3. Case only
 
@@ -79,7 +93,18 @@ instead of printing from
 [`hardware/case/`](https://github.com/mohrt/PiWalletSV/tree/main/hardware/case).
 
 - Self-print: STLs and SCAD in the repo (PETG recommended)
-- **Case-only orders:** message [@PiWalletSV on X](https://x.com/PiWalletSV)
+- **Case-only orders:**
+
+<div class="piwalletsv-store-actions">
+  <button type="button" class="md-button md-button--primary" data-store-checkout="stripe" data-sku="case-only">
+    Buy with card
+  </button>
+  <button type="button" class="md-button" data-store-checkout="bsv" data-sku="case-only">
+    Pay with BSV
+  </button>
+</div>
+
+Or message [@PiWalletSV on X](https://x.com/PiWalletSV) if checkout is unavailable.
 
 Unauthorized resale of printed case goods requires prior written permission
 ([Disclaimer §12](disclaimer.md#12-kits-and-case-no-unauthorized-resale)).

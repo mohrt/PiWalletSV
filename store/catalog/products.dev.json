@@ -1,0 +1,23 @@
+{
+  "currency": "usd",
+  "products": [
+    {
+      "sku": "full-kit",
+      "name": "Full Pi Zero W Kit (Beta)",
+      "description": "Pi Zero W, bonnet, camera, factory-flashed SD, case, cables — limited batch.",
+      "price_usd_cents": 14900,
+      "stripe_price_id": "price_REPLACE_FULL_KIT_TEST",
+      "bsv_amount_sats": 500000,
+      "active": true
+    },
+    {
+      "sku": "case-only",
+      "name": "Printed Case (Round 1)",
+      "description": "PETG printed PiWalletSV case — tub, lid, and button caps.",
+      "price_usd_cents": 3500,
+      "stripe_price_id": "price_REPLACE_CASE_ONLY_TEST",
+      "bsv_amount_sats": 120000,
+      "active": true
+    }
+  ]
+}
