@@ -16,8 +16,8 @@ On **first boot** (empty vault), choose **Restore from USB** from the
 
 ### USB port
 
-Use the Pi's **left** micro-USB port with the included OTG adapter and a
-**USB flash drive**. Keep **PWR IN** (right port) connected for power.
+Use the Pi's **left** micro-USB port with **your own** micro-USB OTG adapter
+and a **USB flash drive**. Keep **PWR IN** (right port) connected for power.
 
 ### Stick requirements
 

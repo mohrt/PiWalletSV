@@ -1,12 +1,16 @@
-# Prior art
+# Related work
 
 PiWalletSV is not the first project to implement an air-gapped
 Bitcoin SV signing flow, and a lot of the design choices here only
 make sense in contrast to what came before. This chapter collects
 *comparative* notes against existing approaches: where the trust
 model is identical, where PiWalletSV trades complexity for stricter
-verification, and what the prior art usefully prompts us to add to
+verification, and what related work usefully prompts us to add to
 the backlog.
+
+PiWalletSV was developed alongside public write-ups of the same
+air-gap model — not as a late response, but as an independent
+implementation of the same trust boundary with stricter verification.
 
 This is not a competitive landscape document. It's design context.
 

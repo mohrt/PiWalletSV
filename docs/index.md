@@ -138,10 +138,9 @@ device signs anything.
     Clone the repo, provision a Pi, and run the companion in a browser.
     Start here if you want to inspect, modify, or contribute to the code.
 
--   :material-shopping-outline: __[Purchase a complete kit](purchase.md)__
+-   :material-shopping-outline: __[Purchase](purchase.md)__
 
-    Pre-assembled kit with Pi, bonnet, camera, and pre-flashed SD card.
-    Coming soon.
+    Full kit or case-only — pay with card or BSV. Limited batches.
 
 </div>
 

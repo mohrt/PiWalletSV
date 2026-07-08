@@ -59,11 +59,12 @@ Typical PiWalletSV kit contents:
 8. **Case** (may include a tamper-evident seal)
 9. **This insert**
 
-**Not included (bring your own for vault backup):** a **micro-USB OTG adapter**
-and **USB flash drive**. Plug the OTG adapter into the **other** (left)
-micro-USB port — **not** the right-most power port — then use
-**Settings → Maintenance → USB backup**. Never connect the Pi to a computer
-through either port.
+**Optional (not included):** a **micro-USB OTG adapter** and **USB flash
+drive** for the **left** micro-USB port. Use them only to **export or import
+your encrypted vault** when upgrading firmware or replacing the SD card —
+**Settings → Maintenance → USB backup**. You do **not** need them for everyday
+use. Optionally, you can **restore each wallet from your written seed phrase(s)**
+on the bonnet. Never connect the Pi to a computer through either port.
 
 Keep the seed phrase backup **separate** from the device and SD card.
 
@@ -119,9 +120,9 @@ stronger than trying to prove the factory flash byte-for-byte.
 5. Power on and continue with **First boot** below.
 
 **Note:** Re-flashing **erases** the card. That is OK on a new kit.
-If you already have a wallet, **back up the vault to a USB flash drive
-first** (your OTG adapter + stick in the **left** port → **Settings → Maintenance → USB backup**).
-After re-flash, restore from that backup or your seed phrase.
+If you already have a wallet, either **export the vault to USB** (optional
+OTG adapter + stick in the **left** port → **Settings → Maintenance → USB backup**)
+**or** be ready to **restore from your seed phrase(s)** after re-flash.
 
 **Tamper seal:** If your case has a security sticker, inspect it before
 first use. A broken seal is a reason to prefer **Option B**.
@@ -185,9 +186,10 @@ microSD matches it.
    - **Right-most port — POWER ONLY.** Plug the included **micro-USB cable**
      (from the 5 V adapter) here. Labeled **PWR IN** on the bonnet.
      **Never** plug a flash drive or OTG adapter into this port.
-   - **Other port (left) — USB backup only.** For vault backup, plug **your
-     own** **OTG adapter** and **USB flash drive** here, then use
+   - **Other port (left) — optional USB vault export/import.** For upgrades,
+     plug **your own** **OTG adapter** and **USB flash drive** here, then use
      **Settings → Maintenance → USB backup**. **Not included in the kit.**
+     Or restore from seed after re-flash — no OTG required.
      **Not** for power and **not** for connecting the Pi to a computer.
 
    ```
@@ -286,7 +288,7 @@ Start with **testnet** until you trust the full flow.
 |------|--------|
 | **Seed phrase (12/24 words)** | **You** write on paper/steel — **required** |
 | **Encrypted vault** | On SD card; needs **PIN** |
-| **USB backup** | Your OTG adapter + flash drive (left port) → Settings → Maintenance → USB backup |
+| **USB backup** | **Optional** OTG + flash drive (left port) → export/import vault on upgrade; or use seed restore |
 
 **Lost PIN + no seed** → funds not recoverable.  
 **Lost SD + have seed** → restore wallet on a new setup or re-flash.
@@ -310,13 +312,13 @@ Start with **testnet** until you trust the full flow.
 PiWalletSV has **no over-the-air updates** and **no USB update from a
 computer** (by design). To upgrade:
 
-1. **Back up the vault** to a USB flash drive (OTG adapter + stick →
-   **Settings → Maintenance → USB backup**), or confirm you have your seed phrase.
+1. **Export the vault to USB** (optional OTG + stick → **Settings → Maintenance → USB backup**),
+   **or** confirm you have your seed phrase(s).
 2. Download and **verify** the new image on your **computer** at
    piwalletsv.com/download.
 3. **Remove the microSD**, re-flash it on your computer, then put it
    back in the Pi.
-4. **Restore** the vault from USB backup (or restore wallet from seed).
+4. **Restore** from USB backup **or** **Restore wallet** from seed on the bonnet.
 5. Re-check **Airgap status**.
 
 Full steps: https://piwalletsv.com/user-manual/#upgrade-your-device
@@ -352,7 +354,7 @@ This insert is a summary. The authoritative manual lives at
 │  BEFORE FUNDING:  re-flash verified image (recommended)     │
 │  RECOVERY = 12/24 words ONLY  (not PIN, not support)        │
 │  AIRGAP: Settings → Maintenance → Airgap status → all OK    │
-│  USB (display facing you): RIGHT-MOST=power  LEFT=backup (BYO OTG) │
+│  USB (display facing you): RIGHT-MOST=power  LEFT=optional backup (BYO OTG) │
 └─────────────────────────────────────────────────────────────┘
 ```
 

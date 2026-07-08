@@ -154,8 +154,12 @@ nav:
           - Download image: download.md
           - Flash and first run: build-image.md
       - Build from scratch: getting-started.md
-      - Purchase kit: purchase.md
+      - Purchase: purchase.md
+      - Shipping: purchase/shipping.md
+      - Returns & refunds: purchase/returns.md
+      - Kit insert (print): print/index.md
       - Order success: store/success.md
+      - Order status: store/order-status.md
       - Order cancelled: store/cancel.md
       - BSV payment: store/pending-bsv.md
   - User guide:
@@ -169,7 +173,7 @@ nav:
       - Architecture: architecture.md
       - Security: security.md
       - BRC alignment: brc-alignment.md
-      - Prior art: prior-art.md
+      - Related work: related-work.md
       - Protocol spec:
           - Overview: protocol/README.md
           - Derivation: protocol/derivation.md

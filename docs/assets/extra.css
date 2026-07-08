@@ -149,8 +149,280 @@
   margin: 1rem 0 1.25rem;
 }
 
+/* Out-of-stock buttons — fade (md-typeset wraps purchase content, not .md-content) */
+.md-typeset .piwalletsv-store-actions button.md-button.piwalletsv-store-oos,
+.md-typeset .piwalletsv-store-actions button.md-button:disabled.piwalletsv-store-oos {
+  cursor: not-allowed !important;
+  filter: grayscale(0.45) !important;
+  opacity: 0.5 !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.md-typeset .piwalletsv-store-actions button.md-button[aria-busy="true"]:not(.piwalletsv-store-oos) {
+  cursor: wait !important;
+  opacity: 0.75 !important;
+}
+
 .piwalletsv-store-error {
   color: var(--md-code-hl-error-color, #cf6679);
   margin: 0.5rem 0 0;
   width: 100%;
+}
+
+.piwalletsv-store-stock {
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
+}
+
+.piwalletsv-store-stock--in {
+  color: var(--md-default-fg-color--light, #666);
+}
+
+.piwalletsv-store-stock--out {
+  color: var(--md-code-hl-error-color, #cf6679);
+  font-weight: 600;
+}
+
+.piwalletsv-store-follow {
+  font-size: 0.9rem;
+  margin: 0 0 1.25rem;
+}
+
+/* ---- Store operator console (store/operator.md) ---------------------- */
+
+.piwalletsv-operator-root {
+  margin: 1rem 0 2rem;
+}
+
+.piwalletsv-operator-top {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.piwalletsv-operator-top h1 {
+  margin: 0;
+}
+
+.piwalletsv-operator-login {
+  max-width: 28rem;
+}
+
+.piwalletsv-operator-hint {
+  color: var(--md-default-fg-color--light, #666);
+  margin: 0.5rem 0 1rem;
+}
+
+.piwalletsv-operator-input {
+  font: inherit;
+  margin-right: 0.5rem;
+  max-width: 10rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.piwalletsv-operator-error {
+  color: var(--md-code-hl-error-color, #cf6679);
+  margin-top: 0.75rem;
+}
+
+.piwalletsv-operator-section {
+  margin-bottom: 2rem;
+}
+
+.piwalletsv-operator-section-head {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.piwalletsv-operator-section h2 {
+  margin: 0;
+}
+
+.piwalletsv-operator-stock-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.piwalletsv-operator-stock-card {
+  border: 1px solid var(--md-default-fg-color--lightest, #ddd);
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.piwalletsv-operator-stock-card h3 {
+  margin: 0 0 0.5rem;
+}
+
+.piwalletsv-operator-stock-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.piwalletsv-operator-table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.piwalletsv-operator-table th,
+.piwalletsv-operator-table td {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest, #ddd);
+  padding: 0.5rem 0.4rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.piwalletsv-operator-table code {
+  font-size: 0.75rem;
+  word-break: break-all;
+}
+
+.piwalletsv-operator-sub {
+  color: var(--md-default-fg-color--light, #666);
+  font-size: 0.75rem;
+  margin-top: 0.2rem;
+}
+
+.piwalletsv-operator-address {
+  max-width: 14rem;
+}
+
+.piwalletsv-operator-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.piwalletsv-operator-actions .md-button {
+  font-size: 0.75rem;
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+}
+
+.piwalletsv-operator-muted {
+  color: var(--md-default-fg-color--light, #666);
+}
+
+/* ---- Customer order status (store/order-status.md) ------------------- */
+
+.piwalletsv-order-status {
+  margin: 1rem 0 2rem;
+}
+
+.piwalletsv-order-lookup label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.piwalletsv-order-lookup-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.piwalletsv-order-id-input {
+  flex: 1 1 16rem;
+  font: inherit;
+  max-width: 28rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.piwalletsv-order-error {
+  color: var(--md-code-hl-error-color, #cf6679);
+}
+
+.piwalletsv-order-detail {
+  margin-top: 1.5rem;
+}
+
+.piwalletsv-order-status-heading {
+  margin: 0 0 0.25rem;
+}
+
+.piwalletsv-order-tracking-heading {
+  margin: 0 0 0.75rem;
+}
+
+.piwalletsv-order-table {
+  border-collapse: collapse;
+  margin: 0 0 1.25rem;
+  max-width: 40rem;
+  width: 100%;
+}
+
+.piwalletsv-order-table th,
+.piwalletsv-order-table td {
+  border-bottom: 1px solid var(--md-default-fg-color--lightest, rgba(0, 0, 0, 0.07));
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  vertical-align: top;
+}
+
+.piwalletsv-order-table th {
+  color: var(--md-default-fg-color--light, #666);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  width: 9rem;
+}
+
+.piwalletsv-order-table td code {
+  word-break: break-all;
+}
+
+.piwalletsv-order-total-row th,
+.piwalletsv-order-total-row td {
+  border-bottom: none;
+  padding-top: 0.65rem;
+}
+
+.piwalletsv-order-hint {
+  color: var(--md-default-fg-color--light, #666);
+  margin: 0.5rem 0 1rem;
+}
+
+.piwalletsv-order-tracking {
+  margin-top: 1.5rem;
+}
+
+/* ---- Kit insert preview (print/index.md) ----------------------------- */
+
+.kit-insert-preview {
+  margin: 1.5rem 0 2rem;
+  background: #e8ecf0;
+  border-radius: 8px;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.kit-insert-preview iframe {
+  border: none;
+  display: block;
+  width: 8.5in;
+  max-width: 100%;
+  height: 23in;
+  min-height: 600px;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 900px) {
+  .kit-insert-preview iframe {
+    width: 100%;
+    height: 70vh;
+    min-height: 480px;
+  }
 }

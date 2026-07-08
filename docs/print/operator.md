@@ -35,9 +35,12 @@ pandoc kit-insert.md -o kit-insert-extended.pdf \
   -V fontsize=10pt
 ```
 
-## Online equivalent
+## Online
 
-[User manual § Verify your SD card](../user-manual.md#verify-sd-card-on-arrival)
+- **[Kit insert (print)](index.md)** — preview and print the 2-page insert in your browser.
+- Direct link (no site chrome): [`kit-insert.html`](kit-insert.html)
+- Extended checklist: [`kit-insert.md`](kit-insert.md)
+- User manual: [Verify your SD card](../user-manual.md#verify-sd-card-on-arrival)
 
 ## Customisation
 

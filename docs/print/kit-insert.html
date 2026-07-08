@@ -405,6 +405,51 @@
     }
 
     @media screen {
+      body { background: #e8ecf0; padding: 3.25rem 0 2rem; }
+      .print-toolbar {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        padding: 0.55rem 1rem;
+        background: var(--navy);
+        color: #fff;
+        font-size: 0.8125rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      }
+      .print-toolbar a,
+      .print-toolbar button {
+        font: inherit;
+        cursor: pointer;
+        border: 1px solid rgba(255,255,255,0.35);
+        border-radius: 4px;
+        padding: 0.35rem 0.85rem;
+        background: transparent;
+        color: #fff;
+        text-decoration: none;
+      }
+      .print-toolbar button.primary,
+      .print-toolbar a.primary {
+        background: var(--gold);
+        border-color: var(--gold);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .print-toolbar span { opacity: 0.85; }
+      .page { margin: 0 auto 1.5rem; box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+    }
+
+    @media print {
+      .print-toolbar { display: none !important; }
+      body { padding: 0; background: #fff; }
+      .page { margin: 0; box-shadow: none; }
+    }
+
+    @media screen {
       body {
         background: #dde3ea;
         padding: 24px;
@@ -421,6 +466,12 @@
   </style>
 </head>
 <body>
+
+  <div class="print-toolbar" aria-label="Print controls">
+    <span>PiWalletSV kit insert · US Letter · 2 pages</span>
+    <button type="button" class="primary" onclick="window.print()">Print</button>
+    <a href="../purchase/">Back to purchase</a>
+  </div>
 
   <!-- Page 1 — Welcome -->
   <div class="page welcome">
@@ -548,7 +599,7 @@
           <li>From Wallets, press <strong>B</strong> → Settings</li>
           <li><strong>Receive</strong> — companion shows address; confirm on Pi for large amounts.</li>
           <li><strong>Send</strong> — companion builds tx → Pi scans QR → review → hold A → companion broadcasts.</li>
-          <li><strong>Backup</strong> — your OTG adapter + USB stick (not included), left port → Settings → Maintenance → USB backup.</li>
+          <li><strong>Backup / upgrade</strong> — <strong>optional:</strong> OTG adapter + USB stick (not included), left port → Settings → Maintenance → USB backup — exports/imports the vault when you re-flash. Optionally, restore each wallet from your written seed phrase(s) on the bonnet.</li>
         </ul>
       </section>
     </div>
@@ -556,7 +607,7 @@
     <div class="grid-2">
       <section class="block">
         <h2>Swap or re-flash microSD</h2>
-        <p class="block-lead">For verify, upgrade, or card replacement. Back up vault to USB or confirm you have your seed phrase first.</p>
+        <p class="block-lead">For verify, upgrade, or card replacement. Export vault to USB (optional OTG + stick) <strong>or</strong> confirm you have your seed phrase(s) — you can restore manually after re-flash.</p>
         <ol class="steps">
           <li><strong>Power off</strong> — unplug the power cable and wait a few seconds.</li>
           <li><strong>Open the case</strong> — remove corner screws. <strong>Save the two button caps</strong> from the front lid — do not lose them.</li>
@@ -583,7 +634,7 @@
         <div class="callout" style="margin-top:0.08in;margin-bottom:0;">
           <strong>USB ports</strong>
           <strong style="display:inline;font-weight:600;">Right-most</strong> — power only (included cable). Never plug a flash drive here.
-          <strong style="display:inline;font-weight:600;">Left</strong> — vault backup with your own OTG adapter + USB stick (not included).
+          <strong style="display:inline;font-weight:600;">Left</strong> — <strong>optional</strong> vault export/import (your OTG adapter + USB stick, not included) during upgrades; optionally restore from seed on the bonnet.
         </div>
       </section>
     </div>

@@ -5,6 +5,18 @@ firmware, flash a microSD, and assemble the Pi + bonnet + camera yourself.
 That is the **default path** — especially while Raspberry Pi boards are
 hard to buy.
 
+!!! warning "Beta hardware"
+    Round-one kits are **beta** pre-release hardware and software. There is
+    **no warranty**. Change-of-mind returns incur a **restocking fee** (20% full kit,
+    15% case). See [Returns & refunds](purchase/returns.md) and
+    [Shipping](purchase/shipping.md) before ordering.
+
+## Batch status
+
+**Round-one beta** — limited quantity. If checkout buttons are disabled or return
+an error, the batch is sold out or not yet open. Follow [@PiWalletSV on X](https://x.com/PiWalletSV)
+for announcements.
+
 ## Raspberry Pi supply
 
 Raspberry Pi boards (especially **Pi Zero / Zero W**) are in **very low
@@ -36,7 +48,7 @@ Bring your own parts, flash the official image, print or buy a case.
 | **ArduCam OV5647** + cable | Kit camera; not Camera Module 3 |
 | **microSD** 8 GB+ | Blank; you flash firmware |
 | **5 V power** + micro-USB cable | **Right** port = power only |
-| **micro-USB OTG adapter** | **Left** port + USB stick for vault backup |
+| **micro-USB OTG adapter + USB stick** | **Optional** — left port only; export/import vault during upgrades (see [User manual](user-manual.md#usb-backup)) |
 | **Case** | [Print yourself](https://github.com/mohrt/PiWalletSV/blob/main/hardware/case/README.md) or buy case-only (below) |
 
 **Steps:**
@@ -61,30 +73,41 @@ When offered, a complete kit includes:
 
 - Raspberry Pi Zero W (header soldered), heat sink, bonnet, OV5647 camera
 - **Factory-flashed microSD** + **SD adapter** (full-size)
-- 5 V adapter, power cable, OTG adapter, **printed case**, kit insert
+- 5 V adapter, power cable, **printed case**, kit insert
 
 **You still need:** a **USB microSD reader/writer on your PC or Mac** to
 [re-flash before you fund](user-manual.md#verify-sd-card-on-arrival) (strongly
 recommended).
+
+**Optional (not in the box):** a **micro-USB OTG adapter** and **USB flash drive**
+for the **left** micro-USB port. These are only for **exporting or importing
+your encrypted vault** when you upgrade firmware or replace the SD card — see
+[USB backup](user-manual.md#usb-backup). You do **not** need them for normal
+daily use. Optionally, you can **restore each wallet from your written seed
+phrase(s)** on the bonnet.
 
 The included card is flashed at the factory for convenience. For a cold
 wallet, **re-flashing the signed download yourself** is the only practical
 way to rule out tampering in transit — Pi hardware has no secure boot.
 
 Printable insert for full-kit boxes:
-[`docs/print/kit-insert.md`](print/kit-insert.md).
+[Open kit insert (print)](print/index.md) ·
+[`kit-insert.html`](print/kit-insert.html) (full page, no site chrome).
+
+<p class="piwalletsv-store-stock" data-store-stock="full-kit" hidden></p>
 
 <div class="piwalletsv-store-actions">
   <button type="button" class="md-button md-button--primary" data-store-checkout="stripe" data-sku="full-kit">
     Buy with card
   </button>
   <button type="button" class="md-button" data-store-checkout="bsv" data-sku="full-kit">
-    Pay with BSV
+    Buy with BSV
   </button>
 </div>
 
-Contact [@PiWalletSV on X](https://x.com/PiWalletSV) for batch availability
-if checkout is unavailable (limited runs; not guaranteed in stock).
+<p class="piwalletsv-store-follow" data-store-follow="full-kit" hidden>
+  Follow <a href="https://x.com/PiWalletSV">@PiWalletSV on X</a> for updates.
+</p>
 
 ### 3. Case only
 
@@ -100,16 +123,17 @@ instead of printing from
     Buy with card
   </button>
   <button type="button" class="md-button" data-store-checkout="bsv" data-sku="case-only">
-    Pay with BSV
+    Buy with BSV
   </button>
 </div>
 
-Or message [@PiWalletSV on X](https://x.com/PiWalletSV) if checkout is unavailable.
-
-Unauthorized resale of printed case goods requires prior written permission
-([Disclaimer §12](disclaimer.md#12-kits-and-case-no-unauthorized-resale)).
+<p class="piwalletsv-store-follow" data-store-follow="case-only" hidden>
+  Follow <a href="https://x.com/PiWalletSV">@PiWalletSV on X</a> for updates.
+</p>
 
 ## Questions
 
 Message [@PiWalletSV on X](https://x.com/PiWalletSV) for kit, case, or
 hardware compatibility questions.
+
+**Policies:** [Shipping](purchase/shipping.md) · [Returns & refunds](purchase/returns.md) · [Order status](store/order-status.md) · [Disclaimer](disclaimer.md)

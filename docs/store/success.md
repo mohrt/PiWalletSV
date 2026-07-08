@@ -7,18 +7,38 @@ Thank you. Your payment is being confirmed.
      data-dev-banner=""
      hidden></div>
 
-If you paid by card, Stripe will email a receipt. Order status updates automatically
-once the payment webhook is processed (usually within a minute).
+<div id="piwalletsv-order-success">
 
-**Order ID:** <span id="piwalletsv-order-id">—</span>
+<p data-missing-order-id hidden>
+  Missing order ID in URL. Use the link from checkout or look up your order on
+  [Order status](order-status.md).
+</p>
+
+<p>
+  <strong>Status:</strong> <span data-order-status-label>Confirming payment…</span>
+  (updates every 15 seconds)
+</p>
+
+If you paid by card, Stripe will email a receipt once payment is confirmed.
+
+<p><strong>Order ID:</strong> <span id="piwalletsv-order-id">—</span></p>
+
+<p data-paid-note hidden>
+  <strong>Payment confirmed.</strong> We will ship within a few business days. Tracking appears on
+  <a href="order-status.md">Order status</a> when your label is purchased.
+</p>
+
+<p data-tracking-note hidden>
+  <strong>Tracking available:</strong>
+  <a data-tracking-link href="#" target="_blank" rel="noopener">Track package</a>
+</p>
+
+<p>
+  <a id="piwalletsv-track-order" class="md-button md-button--primary" href="/store/order-status/">
+    Track order status
+  </a>
+</p>
+
+</div>
 
 [Back to purchase options](../purchase.md)
-
-<script>
-(function () {
-  const id = new URLSearchParams(window.location.search).get("order_id");
-  if (id) {
-    document.getElementById("piwalletsv-order-id").textContent = id;
-  }
-})();
-</script>
