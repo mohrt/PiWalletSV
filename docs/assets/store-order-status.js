@@ -17,7 +17,6 @@
   const form = root.querySelector("[data-order-lookup-form]");
   const input = root.querySelector("[data-order-id-input]");
   const errorEl = root.querySelector("[data-order-error]");
-  const detailEl = root.querySelector("[data-order-detail]");
   let pollTimer = null;
 
   function formatUsd(cents) {
@@ -34,12 +33,22 @@
     return iso.replace("T", " ").replace("+00:00", " UTC");
   }
 
+  function setText(el, text) {
+    if (el) {
+      el.textContent = text;
+    }
+  }
+
+  function detailEl() {
+    return root.querySelector("[data-order-detail]");
+  }
+
   function statusLabel(data) {
     const status = data.status || "";
     if (status === "cancelled") {
       return "Cancelled";
     }
-    if (status === "shipped" || (data.shipment && data.shipment.tracking_number)) {
+    if (status === "shipped") {
       return "Shipped";
     }
     if (status === "paid" || status === "fulfilled") {
@@ -63,9 +72,9 @@
       return "If you just paid by card, confirmation usually takes under a minute.";
     }
     if (status === "paid" || status === "fulfilled") {
-      return "We ship within a few business days. Tracking will appear here when the label is purchased.";
+      return "We ship within a few business days. Tracking appears here once your package is in the mail.";
     }
-    if (status === "shipped" || (data.shipment && data.shipment.tracking_number)) {
+    if (status === "shipped") {
       return "Your package is on the way.";
     }
     if (status === "cancelled") {
@@ -97,72 +106,74 @@
   }
 
   function renderOrder(data) {
-    if (!detailEl) {
+    const detail = detailEl();
+    if (!detail) {
+      showError("Order status layout is missing on this page.");
       return;
     }
-    detailEl.hidden = false;
-    detailEl.querySelector("[data-order-status-label]").textContent = statusLabel(data);
-    detailEl.querySelector("[data-order-status-hint]").textContent = statusHint(data);
-    detailEl.querySelector("[data-order-id]").textContent = data.order_id || "—";
-    detailEl.querySelector("[data-product-name]").textContent = data.product_name || "—";
+    detail.hidden = false;
 
-    const itemEl = detailEl.querySelector("[data-item-usd]");
+    setText(detail.querySelector("[data-order-status-label]"), statusLabel(data));
+    setText(detail.querySelector("[data-order-status-hint]"), statusHint(data));
+    setText(detail.querySelector("[data-order-id-display]"), data.order_id || "—");
+    setText(detail.querySelector("[data-product-name]"), data.product_name || "—");
+
+    const itemEl = detail.querySelector("[data-item-usd]");
     if (itemEl) {
       const itemCents =
         data.item_subtotal_cents != null ? data.item_subtotal_cents : data.price_usd_cents;
-      itemEl.textContent = formatUsd(itemCents);
+      setText(itemEl, formatUsd(itemCents));
     }
 
     const hasBreakdown =
       data.payment_method === "stripe" &&
       (data.total_cents != null || data.shipping_cents != null || data.tax_cents != null);
 
-    detailEl.querySelectorAll("[data-order-breakdown-row]").forEach(function (row) {
+    detail.querySelectorAll("[data-order-breakdown-row]").forEach(function (row) {
       row.hidden = !hasBreakdown;
     });
 
-    const shippingEl = detailEl.querySelector("[data-shipping-usd]");
+    const shippingEl = detail.querySelector("[data-shipping-usd]");
     if (shippingEl) {
-      shippingEl.textContent =
+      setText(
+        shippingEl,
         data.shipping_cents != null
           ? formatUsd(data.shipping_cents) +
-            (data.shipping_label ? " (" + data.shipping_label + ")" : "")
-          : "—";
+              (data.shipping_label ? " (" + data.shipping_label + ")" : "")
+          : "—"
+      );
     }
-    const taxEl = detailEl.querySelector("[data-tax-usd]");
+    const taxEl = detail.querySelector("[data-tax-usd]");
     if (taxEl) {
-      taxEl.textContent = data.tax_cents != null ? formatUsd(data.tax_cents) : "—";
+      setText(taxEl, data.tax_cents != null ? formatUsd(data.tax_cents) : "—");
     }
-    const totalEl = detailEl.querySelector("[data-total-usd]");
+    const totalEl = detail.querySelector("[data-total-usd]");
     if (totalEl) {
-      totalEl.textContent = data.total_cents != null ? formatUsd(data.total_cents) : "—";
+      setText(totalEl, data.total_cents != null ? formatUsd(data.total_cents) : "—");
     }
 
-    detailEl.querySelector("[data-payment-method]").textContent = data.payment_method || "—";
-    detailEl.querySelector("[data-created-at]").textContent = formatWhen(data.created_at);
-    detailEl.querySelector("[data-paid-at]").textContent = formatWhen(data.paid_at);
+    setText(detail.querySelector("[data-payment-method]"), data.payment_method || "—");
+    setText(detail.querySelector("[data-created-at]"), formatWhen(data.created_at));
+    setText(detail.querySelector("[data-paid-at]"), formatWhen(data.paid_at));
 
-    const bsvRefRow = detailEl.querySelector("[data-bsv-ref-row]");
+    const bsvRefRow = detail.querySelector("[data-bsv-ref-row]");
     if (bsvRefRow) {
       if (data.bsv_reference) {
         bsvRefRow.hidden = false;
-        bsvRefRow.querySelector("[data-bsv-reference]").textContent = data.bsv_reference;
+        setText(bsvRefRow.querySelector("[data-bsv-reference]"), data.bsv_reference);
       } else {
         bsvRefRow.hidden = true;
       }
     }
 
-    const trackingSection = detailEl.querySelector("[data-tracking-section]");
+    const trackingSection = detail.querySelector("[data-tracking-section]");
     const shipment = data.shipment;
     if (trackingSection) {
       if (shipment && shipment.tracking_number) {
         trackingSection.hidden = false;
-        trackingSection.querySelector("[data-carrier]").textContent = shipment.carrier || "Carrier";
-        trackingSection.querySelector("[data-tracking-number]").textContent = shipment.tracking_number;
-        const shippedAt = trackingSection.querySelector("[data-shipped-at]");
-        if (shippedAt) {
-          shippedAt.textContent = formatWhen(shipment.shipped_at);
-        }
+        setText(trackingSection.querySelector("[data-carrier]"), shipment.carrier || "Carrier");
+        setText(trackingSection.querySelector("[data-tracking-number]"), shipment.tracking_number);
+        setText(trackingSection.querySelector("[data-shipped-at]"), formatWhen(shipment.shipped_at));
         const trackLink = trackingSection.querySelector("[data-tracking-link]");
         if (trackLink) {
           if (shipment.tracking_url) {
@@ -198,8 +209,9 @@
       if (!resp.ok) {
         if (!quiet) {
           showError(data.error || "Order not found. Check the ID and try again.");
-          if (detailEl) {
-            detailEl.hidden = true;
+          const detail = detailEl();
+          if (detail) {
+            detail.hidden = true;
           }
           clearPoll();
         }

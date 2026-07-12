@@ -126,7 +126,10 @@ extra_css:
 
 extra_javascript:
   - assets/env-links.js
-  - assets/store-checkout.js
+  - assets/store-checkout.js?v=bsv-checkout-form
+  - assets/store-checkout-bsv.js?v=email-verify
+  - assets/store-verify-email.js?v=email-verify
+  - assets/store-pending-bsv.js?v=bsv-checkout-form
 
 extra:
   generator: false
@@ -161,6 +164,8 @@ nav:
       - Order success: store/success.md
       - Order status: store/order-status.md
       - Order cancelled: store/cancel.md
+      - BSV checkout: store/checkout-bsv.md
+      - Verify email: store/verify-email.md
       - BSV payment: store/pending-bsv.md
   - User guide:
       - User manual: user-manual.md

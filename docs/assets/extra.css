@@ -190,10 +190,122 @@
   margin: 0 0 1.25rem;
 }
 
+.piwalletsv-bsv-checkout-form {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 28rem;
+}
+
+.piwalletsv-bsv-checkout-form label {
+  display: grid;
+  font-weight: 600;
+  gap: 0.35rem;
+}
+
+.piwalletsv-bsv-checkout-form input {
+  font: inherit;
+  padding: 0.4rem 0.55rem;
+}
+
+.piwalletsv-bsv-pay {
+  margin: 1.25rem 0;
+  max-width: 36rem;
+}
+
+.piwalletsv-bsv-amount {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.piwalletsv-bsv-amount-sub {
+  color: var(--md-default-fg-color--light, #666);
+  font-weight: 400;
+}
+
+.piwalletsv-bsv-address-row {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.piwalletsv-bsv-address {
+  display: inline-block;
+  font-size: 0.85rem;
+  max-width: 100%;
+  word-break: break-all;
+}
+
+.piwalletsv-bsv-copy {
+  font-size: 0.8rem;
+  min-height: auto;
+  padding: 0.25rem 0.6rem;
+}
+
+.piwalletsv-bsv-qr-wrap {
+  margin: 0.75rem 0;
+}
+
+.piwalletsv-bsv-hint,
+.piwalletsv-bsv-fallback {
+  color: var(--md-default-fg-color--light, #666);
+  font-size: 0.9rem;
+}
+
+.piwalletsv-bsv-exact-warning {
+  background: color-mix(in srgb, var(--md-code-hl-warning-color, #f0a500) 12%, transparent);
+  border-left: 3px solid var(--md-code-hl-warning-color, #f0a500);
+  margin: 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+}
+
+.piwalletsv-bsv-quote {
+  background: var(--md-code-bg-color, rgba(0, 0, 0, 0.03));
+  border-radius: 6px;
+  margin: 1rem 0;
+  max-width: 28rem;
+  padding: 0.75rem 1rem;
+}
+
+.piwalletsv-bsv-quote h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.piwalletsv-bsv-partial {
+  background: color-mix(in srgb, var(--md-code-hl-warning-color, #f0a500) 10%, transparent);
+  border-radius: 6px;
+  margin: 1rem 0;
+  max-width: 36rem;
+  padding: 0.75rem 1rem;
+}
+
+.piwalletsv-bsv-uri-row {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  word-break: break-all;
+}
+
 /* ---- Store operator console (store/operator.md) ---------------------- */
+
+body.piwalletsv-operator-page .md-grid {
+  max-width: none;
+}
+
+body.piwalletsv-operator-page .md-content__inner {
+  max-width: none;
+}
 
 .piwalletsv-operator-root {
   margin: 1rem 0 2rem;
+  width: 100%;
 }
 
 .piwalletsv-operator-top {
@@ -213,16 +325,109 @@
   max-width: 28rem;
 }
 
+.piwalletsv-operator-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .piwalletsv-operator-hint {
   color: var(--md-default-fg-color--light, #666);
   margin: 0.5rem 0 1rem;
 }
 
+.piwalletsv-operator-label {
+  color: var(--md-default-fg-color--light, #666);
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+}
+
+.piwalletsv-operator-field {
+  margin-top: 0.85rem;
+}
+
+.piwalletsv-operator-field:first-child {
+  margin-top: 0;
+}
+
+.piwalletsv-operator-input-row {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .piwalletsv-operator-input {
+  background: var(--md-default-bg-color, #fff);
+  border: 1px solid var(--md-default-fg-color--lightest, #ccc);
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: inherit;
   font: inherit;
-  margin-right: 0.5rem;
-  max-width: 10rem;
-  padding: 0.35rem 0.5rem;
+  line-height: 1.4;
+  min-height: 2.5rem;
+  min-width: 0;
+  padding: 0.45rem 0.65rem;
+  width: 6.5rem;
+}
+
+.piwalletsv-operator-input--wide {
+  width: 100%;
+}
+
+.piwalletsv-operator-input:focus {
+  border-color: var(--md-primary-fg-color, #7c4dff);
+  outline: 2px solid color-mix(in srgb, var(--md-primary-fg-color, #7c4dff) 35%, transparent);
+  outline-offset: 1px;
+}
+
+.md-typeset .piwalletsv-operator-root .piwalletsv-operator-btn {
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--md-default-fg-color--lighter, #999);
+  border-radius: 6px;
+  box-shadow: none;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  justify-content: center;
+  line-height: 1.2;
+  margin: 0;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.9rem;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.md-typeset .piwalletsv-operator-root .piwalletsv-operator-btn:hover:not(:disabled) {
+  background: var(--md-default-fg-color--lightest, rgba(0, 0, 0, 0.05));
+}
+
+.md-typeset .piwalletsv-operator-root .piwalletsv-operator-btn:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.md-typeset .piwalletsv-operator-root .piwalletsv-operator-btn--primary {
+  background: var(--md-primary-fg-color, #7c4dff);
+  border-color: var(--md-primary-fg-color, #7c4dff);
+  color: var(--md-primary-bg-color, #fff);
+}
+
+.md-typeset .piwalletsv-operator-root .piwalletsv-operator-btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--md-primary-fg-color, #7c4dff) 88%, #000);
+  border-color: color-mix(in srgb, var(--md-primary-fg-color, #7c4dff) 88%, #000);
+}
+
+.md-typeset .piwalletsv-operator-root .piwalletsv-operator-btn--danger {
+  border-color: color-mix(in srgb, var(--md-code-hl-error-color, #cf6679) 55%, transparent);
+  color: var(--md-code-hl-error-color, #cf6679);
 }
 
 .piwalletsv-operator-error {
@@ -237,81 +442,265 @@
 .piwalletsv-operator-section-head {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   justify-content: space-between;
   margin-bottom: 0.75rem;
+}
+
+.piwalletsv-operator-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .piwalletsv-operator-section h2 {
   margin: 0;
 }
 
-.piwalletsv-operator-stock-grid {
+.piwalletsv-operator-filters {
+  align-items: flex-end;
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem 1rem;
+  grid-template-columns: minmax(12rem, 14rem) minmax(14rem, 1fr);
+  margin-bottom: 1rem;
 }
 
-.piwalletsv-operator-stock-card {
-  border: 1px solid var(--md-default-fg-color--lightest, #ddd);
+@media (max-width: 640px) {
+  .piwalletsv-operator-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+.piwalletsv-operator-filter-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.piwalletsv-operator-select {
+  background: var(--md-default-bg-color, #fff);
+  border: 1px solid var(--md-default-fg-color--lightest, #ccc);
   border-radius: 6px;
-  padding: 1rem;
-}
-
-.piwalletsv-operator-stock-card h3 {
-  margin: 0 0 0.5rem;
-}
-
-.piwalletsv-operator-stock-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-.piwalletsv-operator-table {
-  border-collapse: collapse;
-  font-size: 0.85rem;
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.65rem;
   width: 100%;
 }
 
-.piwalletsv-operator-table th,
-.piwalletsv-operator-table td {
-  border-bottom: 1px solid var(--md-default-fg-color--lightest, #ddd);
-  padding: 0.5rem 0.4rem;
-  text-align: left;
-  vertical-align: top;
+.piwalletsv-operator-select:focus {
+  border-color: var(--md-primary-fg-color, #7c4dff);
+  outline: 2px solid color-mix(in srgb, var(--md-primary-fg-color, #7c4dff) 35%, transparent);
+  outline-offset: 1px;
 }
 
-.piwalletsv-operator-table code {
-  font-size: 0.75rem;
-  word-break: break-all;
+.piwalletsv-operator-search-field .piwalletsv-operator-input--wide {
+  width: 100%;
+}
+
+.piwalletsv-operator-filter-count {
+  color: var(--md-default-fg-color--light, #666);
+  font-size: 0.85rem;
+  grid-column: 1 / -1;
+  white-space: nowrap;
+}
+
+.piwalletsv-operator-empty {
+  color: var(--md-default-fg-color--light, #666);
+  margin: 0.5rem 0 0;
+}
+
+.piwalletsv-operator-stock-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.piwalletsv-operator-stock-card {
+  background: var(--md-code-bg-color, rgba(0, 0, 0, 0.03));
+  border: 1px solid var(--md-default-fg-color--lightest, #ddd);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+}
+
+.piwalletsv-operator-stock-card h3 {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.piwalletsv-operator-stock-count {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  margin: 0 0 0.25rem;
+}
+
+.piwalletsv-operator-stock-count-label {
+  color: var(--md-default-fg-color--light, #666);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.piwalletsv-operator-stock-count-value {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.piwalletsv-operator-stock-form {
+  margin-top: 0.5rem;
+}
+
+.piwalletsv-operator-order-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.piwalletsv-operator-order-card {
+  background: var(--md-code-bg-color, rgba(0, 0, 0, 0.03));
+  border: 1px solid var(--md-default-fg-color--lightest, #ddd);
+  border-radius: 8px;
+  padding: 0.9rem 1rem 1rem;
+}
+
+.piwalletsv-operator-order-head {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.piwalletsv-operator-order-head-main {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.piwalletsv-operator-order-head-side {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-left: auto;
+  text-align: right;
+}
+
+.piwalletsv-operator-order-id {
+  background: transparent;
+  font-size: 0.85rem;
+  padding: 0;
+}
+
+.piwalletsv-operator-order-total {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.piwalletsv-operator-order-when {
+  color: var(--md-default-fg-color--light, #666);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.piwalletsv-operator-order-meta {
+  display: grid;
+  gap: 0.45rem 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin: 0 0 0.85rem;
+}
+
+.piwalletsv-operator-order-meta-row {
+  margin: 0;
+  min-width: 0;
+}
+
+.piwalletsv-operator-order-meta-label {
+  color: var(--md-default-fg-color--light, #666);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  margin: 0 0 0.15rem;
+  text-transform: uppercase;
+}
+
+.piwalletsv-operator-order-meta-value {
+  font-size: 0.875rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.piwalletsv-operator-badge {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding: 0.35rem 0.55rem;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.piwalletsv-operator-badge--pending {
+  background: color-mix(in srgb, #f0a500 18%, transparent);
+  color: #c68400;
+}
+
+.piwalletsv-operator-badge--paid {
+  background: color-mix(in srgb, var(--md-primary-fg-color, #7c4dff) 18%, transparent);
+  color: var(--md-primary-fg-color, #7c4dff);
+}
+
+.piwalletsv-operator-badge--shipped {
+  background: color-mix(in srgb, #2e7d32 18%, transparent);
+  color: #2e7d32;
+}
+
+.piwalletsv-operator-badge--cancelled {
+  background: var(--md-default-fg-color--lightest, rgba(0, 0, 0, 0.08));
+  color: var(--md-default-fg-color--light, #666);
 }
 
 .piwalletsv-operator-sub {
   color: var(--md-default-fg-color--light, #666);
   font-size: 0.75rem;
-  margin-top: 0.2rem;
-}
-
-.piwalletsv-operator-address {
-  max-width: 14rem;
+  margin-top: 0.25rem;
 }
 
 .piwalletsv-operator-actions {
+  align-items: center;
+  border-top: 1px solid var(--md-default-fg-color--lightest, #ddd);
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-top: 0.75rem;
 }
 
-.piwalletsv-operator-actions .md-button {
-  font-size: 0.75rem;
-  margin: 0;
-  padding: 0.25rem 0.5rem;
+.piwalletsv-operator-actions .piwalletsv-operator-btn {
+  font-size: 0.78rem;
+  min-height: 2.1rem;
+  padding: 0.35rem 0.65rem;
 }
 
-.piwalletsv-operator-muted {
-  color: var(--md-default-fg-color--light, #666);
+.piwalletsv-operator-stripe-link {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.piwalletsv-operator-payment {
+  align-items: baseline;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
 }
 
 /* ---- Customer order status (store/order-status.md) ------------------- */

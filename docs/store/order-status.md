@@ -35,7 +35,7 @@ check payment confirmation and **tracking** once your label is purchased.
   <tbody>
     <tr>
       <th scope="row">Order ID</th>
-      <td><code data-order-id>—</code></td>
+      <td><code data-order-id-display>—</code></td>
     </tr>
     <tr>
       <th scope="row">Item</th>
@@ -114,7 +114,7 @@ check payment confirmation and **tracking** once your label is purchased.
 
 </div>
 
-<script src="/assets/store-order-status.js"></script>
+<script src="/assets/store-order-status.js?v=3"></script>
 
 Save your order ID after checkout. Pending orders refresh automatically every 30 seconds.
 

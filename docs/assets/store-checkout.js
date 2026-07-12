@@ -164,12 +164,9 @@
           throw new Error("missing checkout URL");
         }
         if (method === "bsv") {
-          const data = await postCheckout("/v1/checkout/bsv", sku);
-          if (data.pending_url) {
-            window.location.href = data.pending_url;
-            return;
-          }
-          throw new Error("missing pending URL");
+          window.location.href =
+            "/store/checkout-bsv/?sku=" + encodeURIComponent(sku);
+          return;
         }
       } catch (err) {
         showError(btn, err.message || String(err));
@@ -237,39 +234,5 @@
       refreshSuccess();
       setInterval(refreshSuccess, 15000);
     }
-  }
-
-  // BSV pending page: poll order status
-  const pendingEl = document.getElementById("piwalletsv-bsv-pending");
-  if (pendingEl && apiUrl) {
-    const orderId = new URLSearchParams(window.location.search).get("order_id");
-    if (!orderId) {
-      pendingEl.textContent = "Missing order_id in URL.";
-      return;
-    }
-
-    pendingEl.querySelector("[data-order-id]").textContent = orderId;
-
-    async function refresh() {
-      const resp = await fetch(apiUrl + "/v1/orders/" + encodeURIComponent(orderId));
-      const data = await resp.json();
-      if (!resp.ok) {
-        pendingEl.textContent = data.error || "Could not load order.";
-        return;
-      }
-      pendingEl.querySelector("[data-order-status]").textContent = data.status;
-      if (data.product_name) {
-        pendingEl.querySelector("[data-product-name]").textContent = data.product_name;
-      }
-      if (data.price_usd_cents != null) {
-        pendingEl.querySelector("[data-price-usd]").textContent = formatUsd(data.price_usd_cents);
-      }
-      if (data.status === "paid" || data.status === "fulfilled" || data.status === "shipped") {
-        pendingEl.querySelector("[data-paid-note]").hidden = false;
-      }
-    }
-
-    refresh();
-    setInterval(refresh, 15000);
   }
 })();

@@ -11,7 +11,7 @@ Not linked in the public nav — bookmark this URL.
   <p>Loading…</p>
 </div>
 
-<script src="/assets/store-operator.js"></script>
+<script src="/assets/store-operator.js?v=4"></script>
 
 Sign in with your **admin API key** (provided separately — not published in this repo).
 The key stays in your browser session until you sign out.
@@ -22,9 +22,10 @@ The key stays in your browser session until you sign out.
 - List **recent orders** with shipping address and BSV reference
 - **Mark paid** (BSV or manual card follow-up)
 - **Cancel** pending orders (releases reserved kit stock)
-- **Mark shipped** with carrier + tracking (customers see it on [order status](/store/order-status/))
+- **Download label** (Easyship PDF — open in Preview to print)
+- **Mark dropped in mail** / **Mark shipped** with carrier + tracking (customers see it on [order status](/store/order-status/))
 
 Card orders normally become `paid` automatically via Stripe webhook.
 
-When you buy a label in Easyship, use **Mark shipped** and enter carrier + tracking number.
+When Easyship buys a label, click **Download label**, open the PDF in **Preview**, then **Mark dropped in mail** after you post the package.
 Customers can look up status on the [order status](/store/order-status/) page.

@@ -1,0 +1,23 @@
+---
+description: PiWallet two-repo layout, infra conventions, pilot context
+alwaysApply: true
+---
+
+# PiWallet project context
+
+## Repos
+
+- **PiWallet** (this repo) — MkDocs site, store checkout UI (`docs/store/`, `docs/assets/store-*.js`). Branch `store-dev` for pilot. Status: `PILOT.md`.
+- **piwalletsv-infra** (`~/piwalletsv-infra`) — Store Lambda, Terraform, tests. Ops: `store/OPERATOR.md`, status: `PILOT.md`.
+
+Dev: https://dev.piwalletsv.com · API: https://store.dev.piwalletsv.com
+
+## Infrastructure rules
+
+- **Terraform owns infrastructure** — do not tell the operator to create AWS resources in Console when Terraform module exists in piwalletsv-infra.
+- **Manual only:** SSM secret values and registrar DNS (from `terraform output`).
+
+## Docs / store UI
+
+- BSV flow: `/store/checkout-bsv/` → verify email page → quote/pay. Publish with `./scripts/publish.sh site --env dev`.
+- Resume work: read `PILOT.md` and `~/piwalletsv-infra/PILOT.md` before re-asking for context.

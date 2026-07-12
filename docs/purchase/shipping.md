@@ -6,11 +6,9 @@ your shipping address; shipping fees are shown before you pay.
 
 ## Regions
 
-Card checkout currently accepts shipping addresses in:
+Checkout accepts shipping addresses in:
 
 **US, Canada, UK, Australia, Germany, France**
-
-Need another country? Message [@PiWalletSV on X](https://x.com/PiWalletSV) before ordering.
 
 ## How shipping is priced
 
@@ -41,12 +39,13 @@ collected at checkout and is **your responsibility**.
 
 When your label is purchased, tracking appears on the
 [order status page](/store/order-status/) (use your order ID). You may also receive
-a tracking email from Easyship or us with the carrier tracking number.
+email from us with the carrier tracking number.
 
 ## BSV orders
 
-BSV orders ship after **manual payment confirmation** (usually within 24 hours).
-Shipping address is collected when you arrange payment on X.
+BSV checkout collects your email (verified by link), shipping address, and payment on the
+[BSV checkout page](/store/checkout-bsv/). Payment is confirmed on-chain; we email you when
+your order is paid and when it ships.
 
 ## Questions
 

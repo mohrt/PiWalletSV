@@ -19,7 +19,8 @@ Thank you. Your payment is being confirmed.
   (updates every 15 seconds)
 </p>
 
-If you paid by card, Stripe will email a receipt once payment is confirmed.
+If you paid by card, Stripe will email a receipt once payment is confirmed. The receipt
+includes a **Track your PiWalletSV order** link to this page (with your order ID prefilled).
 
 <p><strong>Order ID:</strong> <span id="piwalletsv-order-id">—</span></p>
 
