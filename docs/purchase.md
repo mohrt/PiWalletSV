@@ -24,6 +24,9 @@ supply** right now. Memory and fab capacity are heavily pulled toward
 AI and datacenter demand, so distributors often show long lead times or
 empty shelves.
 
+We do **not** currently sell **Raspberry Pi Zero 2** kits — those boards
+are unobtainable at a reasonable price. Round-one kits use **Pi Zero W**.
+
 **What that means for you:**
 
 - **Full pre-assembled kits** are offered only in **small batches** when
@@ -53,7 +56,7 @@ Bring your own parts, flash the official image, print or buy a case.
 
 **Steps:**
 
-1. [Download](download.md) the signed `{{ firmware_image_file }}` from GitHub
+1. [Download](download.md) the signed firmware image from GitHub
 2. GPG + SHA-256 verify ([Security § Release key](security.md#release-key))
 3. Flash with [Raspberry Pi Imager](https://www.raspberrypi.com/software/) —
    see [Flash and first run](build-image.md)

@@ -126,10 +126,10 @@ extra_css:
 
 extra_javascript:
   - assets/env-links.js
-  - assets/store-checkout.js?v=bsv-checkout-form
-  - assets/store-checkout-bsv.js?v=email-verify
-  - assets/store-verify-email.js?v=email-verify
-  - assets/store-pending-bsv.js?v=bsv-checkout-form
+  - assets/store-checkout.js?v=stock-label
+  - assets/store-checkout-bsv.js?v=no-stock-round1
+  - assets/store-verify-email.js?v=verify-sku-handoff
+  - assets/store-pending-bsv.js?v=no-round1
 
 extra:
   generator: false

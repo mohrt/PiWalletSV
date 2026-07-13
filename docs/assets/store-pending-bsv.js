@@ -9,17 +9,27 @@
   }
 
   const apiUrl = (cfgEl.dataset.apiUrl || "").replace(/\/$/, "");
-  const devBanner = cfgEl.dataset.devBanner || "";
   const orderId = new URLSearchParams(window.location.search).get("order_id");
+  const debug =
+    !!cfgEl.dataset.devBanner ||
+    /\.dev\./.test(window.location.hostname) ||
+    /\.dev\./.test(apiUrl) ||
+    new URLSearchParams(window.location.search).get("debug") === "1";
 
-  if (devBanner) {
-    const banner = document.createElement("div");
-    banner.className = "piwalletsv-store-banner";
-    banner.textContent = devBanner;
-    const main = document.querySelector(".md-content");
-    if (main && main.firstChild) {
-      main.insertBefore(banner, main.firstChild);
+  function debugLog() {
+    if (!debug) {
+      return;
     }
+    const args = Array.prototype.slice.call(arguments);
+    args.unshift("[bsv-pending]");
+    console.log.apply(console, args);
+  }
+
+  function displayProductName(name) {
+    return String(name || "")
+      .replace(/\s*\(Round\s*1\)\s*/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   function formatUsd(cents) {
@@ -35,11 +45,42 @@
   }
 
   function setCopyFeedback(btn, ok) {
-    const prev = btn.textContent;
-    btn.textContent = ok ? "Copied" : "Copy failed";
-    setTimeout(function () {
-      btn.textContent = prev;
-    }, 1500);
+    if (!btn.dataset.copyLabel) {
+      btn.dataset.copyLabel = btn.getAttribute("aria-label") || "Copy";
+    }
+    const idle = btn.dataset.copyLabel;
+    const message = ok ? "Copied" : "Copy failed";
+    btn.classList.toggle("is-copied", ok);
+    btn.classList.toggle("is-copy-failed", !ok);
+    btn.setAttribute("aria-label", message);
+    btn.setAttribute("title", message);
+    btn.setAttribute("data-feedback", message);
+
+    let badge = btn.parentElement && btn.parentElement.querySelector(".piwalletsv-bsv-copy-feedback");
+    if (!badge && btn.parentElement) {
+      badge = document.createElement("span");
+      badge.className = "piwalletsv-bsv-copy-feedback";
+      badge.setAttribute("aria-live", "polite");
+      btn.parentElement.appendChild(badge);
+    }
+    if (badge) {
+      badge.textContent = message;
+      badge.classList.toggle("is-copied", ok);
+      badge.classList.toggle("is-copy-failed", !ok);
+      badge.hidden = false;
+    }
+
+    clearTimeout(btn._copyFeedbackTimer);
+    btn._copyFeedbackTimer = setTimeout(function () {
+      btn.classList.remove("is-copied", "is-copy-failed");
+      btn.removeAttribute("data-feedback");
+      btn.setAttribute("aria-label", idle);
+      btn.setAttribute("title", idle);
+      if (badge) {
+        badge.hidden = true;
+        badge.classList.remove("is-copied", "is-copy-failed");
+      }
+    }, 1800);
   }
 
   function bindCopy(btn, getText) {
@@ -74,12 +115,56 @@
     orderIdEl.textContent = orderId;
   }
 
-  const track = document.getElementById("piwalletsv-bsv-track-order");
-  if (track) {
-    track.href = "/store/order-status/?order_id=" + encodeURIComponent(orderId);
+  let lastPaySats = null;
+  let pollTimer = null;
+  let cancelling = false;
+
+  const waitingBanner = pendingEl.querySelector("[data-waiting-banner]");
+  const waitingTitle = pendingEl.querySelector("[data-waiting-title]");
+  const waitingCopy = pendingEl.querySelector("[data-waiting-copy]");
+  const cancelBlock = pendingEl.querySelector("[data-cancel-block]");
+  const cancelBtn = document.getElementById("piwalletsv-bsv-cancel");
+  const cancelPanel = pendingEl.querySelector("[data-cancel-panel]");
+  const cancelConfirm = pendingEl.querySelector("[data-cancel-confirm]");
+  const cancelBack = pendingEl.querySelector("[data-cancel-back]");
+  const cancelError = pendingEl.querySelector("[data-cancel-error]");
+
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
   }
 
-  let lastPaySats = null;
+  function showCancelError(message) {
+    if (!cancelError) {
+      return;
+    }
+    cancelError.hidden = !message;
+    cancelError.textContent = message || "";
+  }
+
+  function setWaitingState(kind) {
+    if (!waitingBanner) {
+      return;
+    }
+    if (!kind) {
+      waitingBanner.hidden = true;
+      return;
+    }
+    waitingBanner.hidden = false;
+    waitingBanner.classList.toggle("is-partial", kind === "partial");
+    if (waitingTitle) {
+      waitingTitle.textContent =
+        kind === "partial" ? "Waiting for remaining payment" : "Waiting for payment";
+    }
+    if (waitingCopy) {
+      waitingCopy.textContent =
+        kind === "partial"
+          ? "Partial funds detected. Send the remaining sats to the same address."
+          : "This page checks the blockchain every 15 seconds. Keep it open after you send.";
+    }
+  }
 
   function updateQr(address, sats) {
     const qrImg = pendingEl.querySelector("[data-bsv-qr]");
@@ -105,11 +190,81 @@
     });
   }
 
+  async function cancelOrder() {
+    showCancelError("");
+    cancelling = true;
+    if (cancelConfirm) {
+      cancelConfirm.disabled = true;
+      cancelConfirm.setAttribute("aria-busy", "true");
+    }
+    if (cancelBack) {
+      cancelBack.disabled = true;
+    }
+    try {
+      const resp = await fetch(
+        apiUrl + "/v1/orders/" + encodeURIComponent(orderId) + "/cancel",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}",
+        }
+      );
+      const data = await resp.json().catch(function () {
+        return {};
+      });
+      if (!resp.ok) {
+        throw new Error(data.error || "could not cancel order");
+      }
+      stopPolling();
+      await refresh();
+    } catch (err) {
+      showCancelError(err.message || String(err));
+      cancelling = false;
+      if (cancelConfirm) {
+        cancelConfirm.disabled = false;
+        cancelConfirm.setAttribute("aria-busy", "false");
+      }
+      if (cancelBack) {
+        cancelBack.disabled = false;
+      }
+    }
+  }
+
+  if (cancelBtn && cancelPanel) {
+    cancelBtn.addEventListener("click", function () {
+      showCancelError("");
+      cancelPanel.hidden = false;
+      cancelBtn.hidden = true;
+    });
+  }
+  if (cancelBack && cancelPanel && cancelBtn) {
+    cancelBack.addEventListener("click", function () {
+      cancelPanel.hidden = true;
+      cancelBtn.hidden = false;
+      showCancelError("");
+    });
+  }
+  if (cancelConfirm) {
+    cancelConfirm.addEventListener("click", cancelOrder);
+  }
+
   async function refresh() {
-    const resp = await fetch(apiUrl + "/v1/orders/" + encodeURIComponent(orderId));
+    const url = apiUrl + "/v1/orders/" + encodeURIComponent(orderId);
+    debugLog("poll", url);
+    const resp = await fetch(url);
     const data = await resp.json();
+    debugLog("poll result", {
+      http: resp.status,
+      status: data.status,
+      bsv_amount_sats: data.bsv_amount_sats,
+      bsv_received_sats: data.bsv_received_sats,
+      bsv_payment_state: data.bsv_payment_state,
+      bsv_receive_address: data.bsv_receive_address,
+      error: data.error,
+    });
     if (!resp.ok) {
       pendingEl.textContent = data.error || "Could not load order.";
+      stopPolling();
       return;
     }
 
@@ -120,7 +275,7 @@
     if (data.product_name) {
       const productEl = pendingEl.querySelector("[data-product-name]");
       if (productEl) {
-        productEl.textContent = data.product_name;
+        productEl.textContent = displayProductName(data.product_name);
       }
     }
     if (data.bsv_reference) {
@@ -157,6 +312,10 @@
     const received = data.bsv_received_sats != null ? Number(data.bsv_received_sats) : 0;
     const isPaid =
       data.status === "paid" || data.status === "fulfilled" || data.status === "shipped";
+    const isCancelled = data.status === "cancelled";
+    const isPartial =
+      !isPaid && !isCancelled && expected != null && received > 0 && received < expected;
+    const canCancel = data.status === "pending_bsv" && received === 0;
 
     if (expected != null) {
       const satsEl = pendingEl.querySelector("[data-bsv-sats]");
@@ -181,7 +340,7 @@
       if (addrEl) {
         addrEl.textContent = data.bsv_receive_address;
       }
-      if (payBlock && !isPaid) {
+      if (payBlock && !isPaid && !isCancelled) {
         payBlock.hidden = false;
       }
       bindCopy(pendingEl.querySelector("[data-copy-address]"), function () {
@@ -192,17 +351,17 @@
       if (!isPaid && received > 0 && expected != null && received < expected) {
         qrSats = expected - received;
       }
-      if (!isPaid && qrSats != null && qrSats !== lastPaySats) {
+      if (!isPaid && !isCancelled && qrSats != null && qrSats !== lastPaySats) {
         lastPaySats = qrSats;
         updateQr(data.bsv_receive_address, qrSats);
-      } else if (!isPaid && qrSats != null && lastPaySats == null) {
+      } else if (!isPaid && !isCancelled && qrSats != null && lastPaySats == null) {
         lastPaySats = qrSats;
         updateQr(data.bsv_receive_address, qrSats);
       }
     }
 
     const partialNote = pendingEl.querySelector("[data-partial-note]");
-    if (partialNote && !isPaid && expected != null && received > 0 && received < expected) {
+    if (partialNote && isPartial) {
       partialNote.hidden = false;
       const recvEl = partialNote.querySelector("[data-partial-received]");
       const reqEl = partialNote.querySelector("[data-partial-required]");
@@ -220,22 +379,52 @@
       partialNote.hidden = true;
     }
 
-    const paidNote = pendingEl.querySelector("[data-paid-note]");
-    if (paidNote) {
-      paidNote.hidden = !isPaid;
+    if (isPaid) {
+      debugLog("payment confirmed — redirecting to success");
+      stopPolling();
+      window.location.replace(
+        "/store/success/?order_id=" + encodeURIComponent(orderId)
+      );
+      return;
     }
-    const payBlock = pendingEl.querySelector("[data-pay-instructions]");
-    if (payBlock && isPaid) {
-      payBlock.hidden = true;
-    }
-    if (data.status === "cancelled") {
+
+    if (isCancelled) {
+      debugLog("order cancelled — stopping poll");
+      stopPolling();
+      setWaitingState(null);
+      const payBlock = pendingEl.querySelector("[data-pay-instructions]");
+      if (payBlock) {
+        payBlock.hidden = true;
+      }
+      if (cancelBlock) {
+        cancelBlock.hidden = true;
+      }
       const cancelNote = pendingEl.querySelector("[data-cancelled-note]");
       if (cancelNote) {
         cancelNote.hidden = false;
       }
+      return;
+    }
+
+    setWaitingState(isPartial ? "partial" : "waiting");
+    if (cancelBlock) {
+      cancelBlock.hidden = !canCancel;
+      if (!canCancel && cancelPanel) {
+        cancelPanel.hidden = true;
+        if (cancelBtn) {
+          cancelBtn.hidden = false;
+        }
+      }
     }
   }
 
+  if (debug) {
+    debugLog("debug logging enabled", { orderId: orderId, apiUrl: apiUrl });
+  }
   refresh();
-  setInterval(refresh, 15000);
+  pollTimer = setInterval(function () {
+    if (!cancelling) {
+      refresh();
+    }
+  }, 15000);
 })();

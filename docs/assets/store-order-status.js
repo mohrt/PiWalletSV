@@ -26,6 +26,13 @@
     return "$" + (cents / 100).toFixed(2);
   }
 
+  function displayProductName(name) {
+    return String(name || "")
+      .replace(/\s*\(Round\s*1\)\s*/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function formatWhen(iso) {
     if (!iso) {
       return "—";
@@ -116,7 +123,7 @@
     setText(detail.querySelector("[data-order-status-label]"), statusLabel(data));
     setText(detail.querySelector("[data-order-status-hint]"), statusHint(data));
     setText(detail.querySelector("[data-order-id-display]"), data.order_id || "—");
-    setText(detail.querySelector("[data-product-name]"), data.product_name || "—");
+    setText(detail.querySelector("[data-product-name]"), displayProductName(data.product_name || "—") || "—");
 
     const itemEl = detail.querySelector("[data-item-usd]");
     if (itemEl) {

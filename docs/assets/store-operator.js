@@ -32,6 +32,14 @@
     return node;
   }
 
+  function setBusy(button, busy) {
+    if (!button) {
+      return;
+    }
+    button.disabled = !!busy;
+    button.setAttribute("aria-busy", busy ? "true" : "false");
+  }
+
   function btn(label, primary) {
     const node = el(
       "button",
@@ -49,6 +57,13 @@
     return id.slice(0, 8) + "…";
   }
 
+  function displayProductName(name) {
+    return String(name || "")
+      .replace(/\s*\(Round\s*1\)\s*/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function statusClass(status) {
     if (!status) {
       return "";
@@ -64,6 +79,9 @@
     }
     if (status === "cancelled") {
       return "piwalletsv-operator-badge--cancelled";
+    }
+    if (status === "refunded") {
+      return "piwalletsv-operator-badge--refunded";
     }
     return "";
   }
@@ -86,6 +104,7 @@
     { id: "paid", label: "Paid" },
     { id: "fulfilled", label: "Fulfilled" },
     { id: "shipped", label: "Shipped" },
+    { id: "refunded", label: "Refunded" },
     { id: "cancelled", label: "Cancelled" },
   ];
 
@@ -210,44 +229,123 @@
     return row;
   }
 
-  function appendOrderActions(order, container) {
-    if (order.status === "pending_bsv" || order.status === "pending_stripe") {
-      const paidBtn = btn("Mark paid", true);
-      paidBtn.addEventListener("click", function () {
-        const txid =
-          order.payment_method === "bsv"
-            ? window.prompt("BSV txid (optional):", "") || ""
-            : "";
-        paidBtn.disabled = true;
-        api("POST", "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/mark-paid", {
-          txid: txid.trim() || undefined,
-        })
-          .then(refresh)
-          .catch(function (e) {
-            alert(e.message || String(e));
-          })
-          .finally(function () {
-            paidBtn.disabled = false;
-          });
-      });
-      const cancelBtn = btn("Cancel", false);
-      cancelBtn.classList.add("piwalletsv-operator-btn--danger");
-      cancelBtn.addEventListener("click", function () {
-        if (!window.confirm("Cancel order and release stock if reserved?")) {
-          return;
-        }
-        cancelBtn.disabled = true;
+  function setActionError(container, message) {
+    let err = container.querySelector(".piwalletsv-operator-action-error");
+    if (!message) {
+      if (err) {
+        err.remove();
+      }
+      return;
+    }
+    if (!err) {
+      err = el("p", "piwalletsv-operator-action-error");
+      container.appendChild(err);
+    }
+    err.textContent = message;
+  }
+
+  function clearPanels(container) {
+    container.querySelectorAll(".piwalletsv-operator-panel").forEach(function (node) {
+      node.remove();
+    });
+    setActionError(container, "");
+  }
+
+  function appendCancelAction(order, container, copy) {
+    const cancelBtn = btn("Cancel order", false);
+    cancelBtn.classList.add("piwalletsv-operator-btn--danger");
+    cancelBtn.addEventListener("click", function () {
+      clearPanels(container);
+      const panel = el("div", "piwalletsv-operator-panel");
+      panel.appendChild(
+        el(
+          "p",
+          "piwalletsv-operator-panel-copy",
+          copy || "Cancel this order? This is logged in order history."
+        )
+      );
+      const row = el("div", "piwalletsv-operator-panel-actions");
+      const confirmCancel = btn("Yes, cancel", false);
+      confirmCancel.classList.add("piwalletsv-operator-btn--danger");
+      const keep = btn("Keep order", false);
+      confirmCancel.addEventListener("click", function () {
+        setBusy(confirmCancel, true);
+        keep.disabled = true;
         api("POST", "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/cancel", {})
           .then(refresh)
           .catch(function (e) {
-            alert(e.message || String(e));
-          })
-          .finally(function () {
-            cancelBtn.disabled = false;
+            setActionError(container, e.message || String(e));
+            setBusy(confirmCancel, false);
+            keep.disabled = false;
           });
       });
+      keep.addEventListener("click", function () {
+        clearPanels(container);
+      });
+      row.appendChild(confirmCancel);
+      row.appendChild(keep);
+      panel.appendChild(row);
+      container.appendChild(panel);
+    });
+    container.appendChild(cancelBtn);
+  }
+
+  function appendOrderActions(order, container, options) {
+    const opts = options || {};
+    const onDetail = !!opts.detail;
+    if (order.status === "pending_bsv" || order.status === "pending_stripe") {
+      const paidBtn = btn("Mark paid", true);
+      paidBtn.addEventListener("click", function () {
+        clearPanels(container);
+        if (order.payment_method !== "bsv") {
+          paidBtn.disabled = true;
+          api("POST", "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/mark-paid", {})
+            .then(refresh)
+            .catch(function (e) {
+              setActionError(container, e.message || String(e));
+              paidBtn.disabled = false;
+            });
+          return;
+        }
+        const panel = el("div", "piwalletsv-operator-panel");
+        panel.appendChild(
+          el("p", "piwalletsv-operator-panel-copy", "Optional BSV transaction id:")
+        );
+        const txInput = el("input", "piwalletsv-operator-input piwalletsv-operator-input--wide");
+        txInput.type = "text";
+        txInput.placeholder = "txid (optional)";
+        panel.appendChild(txInput);
+        const row = el("div", "piwalletsv-operator-panel-actions");
+        const confirmPaid = btn("Confirm paid", true);
+        const cancelPaid = btn("Back", false);
+        confirmPaid.addEventListener("click", function () {
+          confirmPaid.disabled = true;
+          cancelPaid.disabled = true;
+          api("POST", "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/mark-paid", {
+            txid: (txInput.value || "").trim() || undefined,
+          })
+            .then(refresh)
+            .catch(function (e) {
+              setActionError(container, e.message || String(e));
+              confirmPaid.disabled = false;
+              cancelPaid.disabled = false;
+            });
+        });
+        cancelPaid.addEventListener("click", function () {
+          clearPanels(container);
+        });
+        row.appendChild(confirmPaid);
+        row.appendChild(cancelPaid);
+        panel.appendChild(row);
+        container.appendChild(panel);
+      });
+
       container.appendChild(paidBtn);
-      container.appendChild(cancelBtn);
+      appendCancelAction(
+        order,
+        container,
+        "Cancel this unpaid order and release reserved stock? Logged in order history."
+      );
       return;
     }
 
@@ -256,80 +354,183 @@
       const shipment = order.shipment || {};
       const hasLabel = !!(label.tracking_number || shipment.tracking_number);
       const easyshipId = order.easyship_shipment_id || "";
+
+      if (order.status === "paid" && !hasLabel) {
+        const buyBtn = btn("Buy label", true);
+        buyBtn.addEventListener("click", function () {
+          clearPanels(container);
+          setBusy(buyBtn, true);
+          api("POST", "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/fulfill", {})
+            .then(refresh)
+            .catch(function (e) {
+              setActionError(container, e.message || String(e));
+              setBusy(buyBtn, false);
+            });
+        });
+        container.appendChild(buyBtn);
+      }
+
       if (easyshipId) {
         const printBtn = btn("Download label", false);
         printBtn.addEventListener("click", function () {
-          printBtn.disabled = true;
+          clearPanels(container);
+          setBusy(printBtn, true);
           downloadLabelPdf(order.order_id, easyshipId)
             .catch(function (e) {
-              alert(e.message || String(e));
+              setActionError(container, e.message || String(e));
             })
             .finally(function () {
-              printBtn.disabled = false;
+              setBusy(printBtn, false);
             });
         });
         container.appendChild(printBtn);
       }
-      const shipBtn = btn(
-        order.status === "shipped" ? "Update tracking" : hasLabel ? "Mark dropped in mail" : "Mark shipped",
-        true
-      );
-      shipBtn.addEventListener("click", function () {
-        const carrierSource = shipment.carrier || label.carrier || "USPS";
-        const trackingSource = shipment.tracking_number || label.tracking_number || "";
-        const urlSource = shipment.tracking_url || label.tracking_url || "";
-        if (hasLabel && order.status !== "shipped") {
-          if (!window.confirm("Mark this order shipped? Use this after you drop the package in the mail.")) {
-            return;
-          }
-          shipBtn.disabled = true;
+
+      if (hasLabel && order.status !== "shipped") {
+        const dropBtn = btn("Mark dropped in mail", true);
+        dropBtn.addEventListener("click", function () {
+          clearPanels(container);
+          dropBtn.disabled = true;
           api("POST", "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/ship", {})
             .then(refresh)
             .catch(function (e) {
-              alert(e.message || String(e));
-            })
-            .finally(function () {
-              shipBtn.disabled = false;
+              setActionError(container, e.message || String(e));
+              dropBtn.disabled = false;
             });
-          return;
-        }
-        const carrier =
-          window.prompt("Carrier (USPS, UPS, FedEx, DHL):", carrierSource) || "";
-        if (!carrier.trim()) {
-          return;
-        }
-        const tracking =
-          window.prompt("Tracking number:", trackingSource) || "";
-        if (!tracking.trim()) {
-          return;
-        }
-        const trackingUrl =
-          window.prompt("Tracking URL (optional — auto-guessed if blank):", urlSource) ||
-          "";
-        shipBtn.disabled = true;
-        api("POST", "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/ship", {
-          carrier: carrier.trim(),
-          tracking_number: tracking.trim(),
-          tracking_url: trackingUrl.trim() || undefined,
-        })
-          .then(refresh)
-          .catch(function (e) {
-            alert(e.message || String(e));
-          })
-          .finally(function () {
-            shipBtn.disabled = false;
-          });
-      });
-      container.appendChild(shipBtn);
-      if (hasLabel) {
-        const note = label.tracking_number || shipment.tracking_number;
-        container.appendChild(
-          el(
-            "span",
-            "piwalletsv-operator-sub",
-            order.status === "shipped" ? note : "Label: " + note
-          )
+        });
+        container.appendChild(dropBtn);
+      } else {
+        const shipBtn = btn(
+          order.status === "shipped" ? "Update tracking" : "Enter tracking",
+          !hasLabel
         );
+        shipBtn.addEventListener("click", function () {
+          clearPanels(container);
+          const carrierSource = shipment.carrier || label.carrier || "USPS";
+          const trackingSource = shipment.tracking_number || label.tracking_number || "";
+          const urlSource = shipment.tracking_url || label.tracking_url || "";
+          const panel = el("div", "piwalletsv-operator-panel");
+          panel.appendChild(el("p", "piwalletsv-operator-panel-copy", "Shipping details"));
+
+          function field(labelText, inputEl) {
+            const wrap = el("label", "piwalletsv-operator-field");
+            wrap.appendChild(el("span", "piwalletsv-operator-label", labelText));
+            wrap.appendChild(inputEl);
+            return wrap;
+          }
+
+          const carrierInput = el("input", "piwalletsv-operator-input piwalletsv-operator-input--wide");
+          carrierInput.value = carrierSource;
+          carrierInput.placeholder = "USPS, UPS, FedEx, DHL";
+          const trackingInput = el("input", "piwalletsv-operator-input piwalletsv-operator-input--wide");
+          trackingInput.value = trackingSource;
+          trackingInput.placeholder = "Tracking number";
+          const urlInput = el("input", "piwalletsv-operator-input piwalletsv-operator-input--wide");
+          urlInput.value = urlSource;
+          urlInput.placeholder = "Tracking URL (optional)";
+          panel.appendChild(field("Carrier", carrierInput));
+          panel.appendChild(field("Tracking number", trackingInput));
+          panel.appendChild(field("Tracking URL", urlInput));
+
+          const row = el("div", "piwalletsv-operator-panel-actions");
+          const save = btn(order.status === "shipped" ? "Save tracking" : "Mark shipped", true);
+          const back = btn("Back", false);
+          save.addEventListener("click", function () {
+            const carrier = (carrierInput.value || "").trim();
+            const tracking = (trackingInput.value || "").trim();
+            if (!carrier || !tracking) {
+              setActionError(container, "Carrier and tracking number are required.");
+              return;
+            }
+            save.disabled = true;
+            back.disabled = true;
+            api("POST", "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/ship", {
+              carrier: carrier,
+              tracking_number: tracking,
+              tracking_url: (urlInput.value || "").trim() || undefined,
+            })
+              .then(refresh)
+              .catch(function (e) {
+                setActionError(container, e.message || String(e));
+                save.disabled = false;
+                back.disabled = false;
+              });
+          });
+          back.addEventListener("click", function () {
+            clearPanels(container);
+          });
+          row.appendChild(save);
+          row.appendChild(back);
+          panel.appendChild(row);
+          container.appendChild(panel);
+        });
+        container.appendChild(shipBtn);
+      }
+
+      if (
+        onDetail &&
+        (order.status === "paid" || order.status === "fulfilled")
+      ) {
+        appendCancelAction(
+          order,
+          container,
+          "Cancel this order (does not refund payment — use Mark refunded after money is returned)? Logged in order history."
+        );
+      }
+
+      if (
+        onDetail &&
+        (order.status === "paid" || order.status === "fulfilled" || order.status === "shipped")
+      ) {
+        const refundBtn = btn("Mark refunded", false);
+        refundBtn.addEventListener("click", function () {
+          clearPanels(container);
+          const panel = el("div", "piwalletsv-operator-panel");
+          panel.appendChild(
+            el(
+              "p",
+              "piwalletsv-operator-panel-copy",
+              order.payment_method === "stripe"
+                ? "Confirm after you refund in Stripe Dashboard. This only sets status to refunded."
+                : "Confirm after you complete the BSV refund offline. This only sets status to refunded."
+            )
+          );
+          if (order.stripe_dashboard_url) {
+            const dash = el("p", "piwalletsv-operator-panel-copy");
+            const link = el("a", "piwalletsv-operator-stripe-link", "Open Stripe payment");
+            link.href = order.stripe_dashboard_url;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            dash.appendChild(link);
+            panel.appendChild(dash);
+          }
+          const row = el("div", "piwalletsv-operator-panel-actions");
+          const confirm = btn("Confirm refunded", true);
+          const back = btn("Back", false);
+          confirm.addEventListener("click", function () {
+            setBusy(confirm, true);
+            back.disabled = true;
+            api(
+              "POST",
+              "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/mark-refunded",
+              {}
+            )
+              .then(refresh)
+              .catch(function (e) {
+                setActionError(container, e.message || String(e));
+                setBusy(confirm, false);
+                back.disabled = false;
+              });
+          });
+          back.addEventListener("click", function () {
+            clearPanels(container);
+          });
+          row.appendChild(confirm);
+          row.appendChild(back);
+          panel.appendChild(row);
+          container.appendChild(panel);
+        });
+        container.appendChild(refundBtn);
       }
       return;
     }
@@ -337,13 +538,167 @@
     container.appendChild(el("span", "piwalletsv-operator-muted", "—"));
   }
 
+  function selectedOrderIdFromUrl() {
+    try {
+      return new URLSearchParams(window.location.search).get("order_id") || "";
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function setOrderIdInUrl(orderId) {
+    const url = new URL(window.location.href);
+    if (orderId) {
+      url.searchParams.set("order_id", orderId);
+    } else {
+      url.searchParams.delete("order_id");
+    }
+    history.replaceState({}, "", url.pathname + url.search + url.hash);
+  }
+
+  function openOrderDetail(orderId) {
+    setOrderIdInUrl(orderId);
+    return loadDashboard();
+  }
+
+  function renderEventHistory(events) {
+    const section = el("section", "piwalletsv-operator-history");
+    section.appendChild(el("h3", null, "Order history"));
+    const list = el("ol", "piwalletsv-operator-chronicle");
+    const items = Array.isArray(events) ? events : [];
+    if (!items.length) {
+      section.appendChild(el("p", "piwalletsv-operator-empty", "No events recorded yet."));
+      return section;
+    }
+    items.forEach(function (evt) {
+      const li = el("li", "piwalletsv-operator-chronicle-item");
+      li.appendChild(el("time", "piwalletsv-operator-chronicle-at", formatWhen(evt.at)));
+      li.appendChild(el("strong", "piwalletsv-operator-chronicle-type", evt.type || "—"));
+      if (evt.detail) {
+        li.appendChild(el("span", "piwalletsv-operator-chronicle-detail", evt.detail));
+      }
+      list.appendChild(li);
+    });
+    section.appendChild(list);
+    return section;
+  }
+
+  function renderOrderDetail(order) {
+    const wrap = el("div", "piwalletsv-operator-detail");
+    const top = el("div", "piwalletsv-operator-top");
+    top.appendChild(el("h1", null, "Order detail"));
+    const back = btn("Back to orders", false);
+    back.addEventListener("click", function () {
+      setOrderIdInUrl("");
+      loadDashboard().catch(function (e) {
+        alert(e.message || String(e));
+      });
+    });
+    top.appendChild(back);
+    wrap.appendChild(top);
+
+    const card = el("article", "piwalletsv-operator-order-card piwalletsv-operator-order-card--detail");
+    const head = el("div", "piwalletsv-operator-order-head");
+    const headMain = el("div", "piwalletsv-operator-order-head-main");
+    const idCode = el("code", "piwalletsv-operator-order-id");
+    idCode.textContent = order.order_id || "—";
+    headMain.appendChild(idCode);
+    headMain.appendChild(
+      el("span", "piwalletsv-operator-badge " + statusClass(order.status), order.status || "—")
+    );
+    head.appendChild(headMain);
+    head.appendChild(
+      el(
+        "span",
+        "piwalletsv-operator-order-total",
+        formatUsd(order.total_cents != null ? order.total_cents : order.price_usd_cents)
+      )
+    );
+    card.appendChild(head);
+
+    const meta = el("dl", "piwalletsv-operator-order-meta");
+    meta.appendChild(metaRow("Product", displayProductName(order.product_name || order.sku || "—") || "—"));
+    meta.appendChild(metaRow("Payment", paymentMetaValue(order)));
+    meta.appendChild(metaRow("Created", formatWhen(order.created_at)));
+    meta.appendChild(metaRow("Paid", formatWhen(order.paid_at)));
+    if (order.refunded_at) {
+      meta.appendChild(metaRow("Refunded", formatWhen(order.refunded_at)));
+    }
+    if (order.customer_email) {
+      meta.appendChild(metaRow("Customer", order.customer_email));
+    }
+    const addr = formatAddress(order.shipping_address);
+    if (addr !== "—") {
+      meta.appendChild(metaRow("Ship to", addr));
+    }
+    if (order.payment_txid) {
+      meta.appendChild(metaRow("Payment txid", order.payment_txid));
+    }
+    if (order.bsv_reference) {
+      meta.appendChild(metaRow("BSV ref", order.bsv_reference));
+    }
+    if (order.bsv_receive_address) {
+      meta.appendChild(metaRow("BSV address", order.bsv_receive_address));
+    }
+    if (order.bsv_amount_sats != null) {
+      meta.appendChild(metaRow("BSV amount", String(order.bsv_amount_sats) + " sats"));
+    }
+    if (order.bsv_received_sats != null) {
+      meta.appendChild(metaRow("BSV received", String(order.bsv_received_sats) + " sats"));
+    }
+    if (order.item_subtotal_cents != null) {
+      meta.appendChild(metaRow("Subtotal", formatUsd(order.item_subtotal_cents)));
+    }
+    if (order.shipping_cents != null) {
+      meta.appendChild(metaRow(order.shipping_label || "Shipping", formatUsd(order.shipping_cents)));
+    }
+    if (order.tax_cents != null) {
+      meta.appendChild(metaRow("Tax", formatUsd(order.tax_cents)));
+    }
+    if (order.fulfillment_log) {
+      meta.appendChild(metaRow("Fulfillment log", order.fulfillment_log));
+    }
+    if (order.easyship_shipment_id) {
+      meta.appendChild(metaRow("Easyship ID", order.easyship_shipment_id));
+    }
+    const labelInfo = order.label || {};
+    const shipInfo = order.shipment || {};
+    const labelTracking = labelInfo.tracking_number || shipInfo.tracking_number;
+    if (labelTracking) {
+      meta.appendChild(metaRow("Label", labelTracking));
+    }
+    if (labelInfo.carrier || shipInfo.carrier) {
+      meta.appendChild(metaRow("Carrier", labelInfo.carrier || shipInfo.carrier));
+    }
+    card.appendChild(meta);
+
+    const actions = el("div", "piwalletsv-operator-actions");
+    appendOrderActions(order, actions, { detail: true });
+    card.appendChild(actions);
+    wrap.appendChild(card);
+    wrap.appendChild(renderEventHistory(order.events));
+    return wrap;
+  }
+
   function renderOrderCard(order) {
     const card = el("article", "piwalletsv-operator-order-card");
     const head = el("div", "piwalletsv-operator-order-head");
     const headMain = el("div", "piwalletsv-operator-order-head-main");
-    const idCode = el("code", "piwalletsv-operator-order-id");
+    const idCode = el("code", "piwalletsv-operator-order-id piwalletsv-operator-order-id--link");
     idCode.textContent = shortId(order.order_id);
-    idCode.title = order.order_id || "";
+    idCode.title = (order.order_id || "") + " — open detail";
+    idCode.tabIndex = 0;
+    idCode.addEventListener("click", function () {
+      openOrderDetail(order.order_id).catch(function (e) {
+        alert(e.message || String(e));
+      });
+    });
+    idCode.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        idCode.click();
+      }
+    });
     headMain.appendChild(idCode);
     headMain.appendChild(
       el("span", "piwalletsv-operator-badge " + statusClass(order.status), order.status || "—")
@@ -362,7 +717,7 @@
     card.appendChild(head);
 
     const meta = el("dl", "piwalletsv-operator-order-meta");
-    meta.appendChild(metaRow("Product", order.product_name || order.sku || "—"));
+    meta.appendChild(metaRow("Product", displayProductName(order.product_name || order.sku || "—") || "—"));
     meta.appendChild(metaRow("Payment", paymentMetaValue(order)));
     if (order.bsv_reference) {
       meta.appendChild(metaRow("BSV ref", order.bsv_reference));
@@ -450,7 +805,9 @@
     }
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
-    const filename = (shipmentId || shortId(orderId)) + "-label.pdf";
+    const orderPrefix = (orderId || "").slice(0, 8);
+    const filename =
+      (shipmentId ? shipmentId + "-" + orderPrefix : orderPrefix || "label") + ".pdf";
     const link = el("a");
     link.href = url;
     link.download = filename;
@@ -463,7 +820,7 @@
     }, 60000);
   }
 
-  function renderLogin() {
+  function renderLogin(errorMessage) {
     root.replaceChildren();
     const panel = el("div", "piwalletsv-operator-login");
     panel.appendChild(el("h2", null, "Operator sign-in"));
@@ -484,6 +841,10 @@
     input.placeholder = "Paste key from SSM";
     const err = el("p", "piwalletsv-operator-error");
     err.hidden = true;
+    if (errorMessage) {
+      err.textContent = errorMessage;
+      err.hidden = false;
+    }
     const continueBtn = btn("Continue", true);
     continueBtn.addEventListener("click", function () {
       adminKey = input.value.trim();
@@ -496,8 +857,7 @@
       loadDashboard().catch(function (e) {
         sessionStorage.removeItem(STORAGE_KEY);
         adminKey = "";
-        err.textContent = e.message || String(e);
-        err.hidden = false;
+        renderLogin(e.message || String(e));
       });
     });
     input.addEventListener("keydown", function (ev) {
@@ -603,6 +963,24 @@
     return section;
   }
 
+  function looksLikeOrderId(value) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      (value || "").trim()
+    );
+  }
+
+  function tryOpenOrderFromSearch(query) {
+    const id = (query || "").trim();
+    if (!looksLikeOrderId(id)) {
+      return false;
+    }
+    sessionStorage.setItem(ORDER_SEARCH_KEY, "");
+    openOrderDetail(id).catch(function (e) {
+      alert(e.message || "Order not found: " + String(e));
+    });
+    return true;
+  }
+
   function renderOrders(orders, filter, search) {
     const section = el("section", "piwalletsv-operator-section");
     const head = el("div", "piwalletsv-operator-section-head");
@@ -649,7 +1027,7 @@
     searchLabelEl.htmlFor = "piwalletsv-operator-order-search";
     searchInput.id = "piwalletsv-operator-order-search";
     searchInput.type = "search";
-    searchInput.placeholder = "Order ID, email, product, tracking…";
+    searchInput.placeholder = "Order ID (opens any order), email, product, tracking…";
     searchInput.autocomplete = "off";
     searchInput.spellcheck = false;
     searchInput.value = searchState;
@@ -693,14 +1071,38 @@
     }
 
     filterSelect.addEventListener("change", paintOrders);
-    searchInput.addEventListener("input", paintOrders);
-    searchInput.addEventListener("search", paintOrders);
+    searchInput.addEventListener("input", function () {
+      if (tryOpenOrderFromSearch(searchInput.value)) {
+        return;
+      }
+      paintOrders();
+    });
+    searchInput.addEventListener("search", function () {
+      if (tryOpenOrderFromSearch(searchInput.value)) {
+        return;
+      }
+      paintOrders();
+    });
+    searchInput.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" && tryOpenOrderFromSearch(searchInput.value)) {
+        ev.preventDefault();
+      }
+    });
     paintOrders();
 
     return section;
   }
 
   async function loadDashboard() {
+    renderLoading();
+    const selectedId = selectedOrderIdFromUrl();
+    if (selectedId) {
+      const order = await api("GET", "/v1/admin/orders/" + encodeURIComponent(selectedId));
+      root.replaceChildren();
+      root.appendChild(renderOrderDetail(order));
+      return;
+    }
+
     const inv = await api("GET", "/v1/inventory");
     const orders = await api("GET", "/v1/admin/orders?limit=100");
     root.replaceChildren();
@@ -711,6 +1113,7 @@
     signOut.addEventListener("click", function () {
       sessionStorage.removeItem(STORAGE_KEY);
       adminKey = "";
+      setOrderIdInUrl("");
       renderLogin();
     });
     top.appendChild(signOut);
@@ -724,6 +1127,18 @@
         sessionStorage.getItem(ORDER_SEARCH_KEY) || ""
       )
     );
+  }
+
+  function renderLoading() {
+    root.replaceChildren();
+    const wrap = el("div", "piwalletsv-operator-loading");
+    wrap.setAttribute("role", "status");
+    wrap.setAttribute("aria-live", "polite");
+    const spinner = el("div", "piwalletsv-operator-loading-spinner");
+    spinner.setAttribute("aria-hidden", "true");
+    wrap.appendChild(spinner);
+    wrap.appendChild(el("p", null, "Loading…"));
+    root.appendChild(wrap);
   }
 
   function refresh() {

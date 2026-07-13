@@ -1107,6 +1107,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       },
       onAccept: (validation) => {
         if (validation.result.workflow === "settings-backup") {
+          setBackupStatus("Importing…");
           stopImportQrScan();
           void runImportBytes(validation.result.bytes);
         }

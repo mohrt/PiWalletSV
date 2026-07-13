@@ -139,6 +139,8 @@ export async function startPw1Scan(
             }
           }
           if (out !== null) {
+            // Completing frame: show N/N before validation/import (can take seconds).
+            emitProgress(asm, onProgress);
             void handleComplete(out);
           } else {
             emitProgress(asm, onProgress);

@@ -10,7 +10,7 @@
   const apiUrl = (cfgEl.dataset.apiUrl || "").replace(/\/$/, "");
   const devBanner = cfgEl.dataset.devBanner || "";
 
-  if (devBanner) {
+  if (devBanner && !document.querySelector(".piwalletsv-store-banner")) {
     const banner = document.createElement("div");
     banner.className = "piwalletsv-store-banner";
     banner.textContent = devBanner;
@@ -78,13 +78,10 @@
       el.hidden = false;
       if (info.in_stock) {
         el.className = "piwalletsv-store-stock piwalletsv-store-stock--in";
-        el.textContent =
-          info.available === 1
-            ? "1 kit left in this batch."
-            : info.available + " kits left in this batch.";
+        el.textContent = "IN STOCK";
       } else {
         el.className = "piwalletsv-store-stock piwalletsv-store-stock--out";
-        el.textContent = "Out of stock for this batch.";
+        el.textContent = "OUT OF STOCK";
       }
     });
 

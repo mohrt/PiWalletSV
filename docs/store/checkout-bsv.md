@@ -7,8 +7,6 @@ Enter your email and shipping address to continue.
      data-dev-banner="{{ store_dev_banner }}"
      hidden></div>
 
-<p class="piwalletsv-store-stock" id="piwalletsv-bsv-checkout-stock" hidden></p>
-
 <form id="piwalletsv-bsv-checkout-form" class="piwalletsv-bsv-checkout-form">
 
 <div id="piwalletsv-bsv-email-step" class="piwalletsv-bsv-email-step">
@@ -18,7 +16,7 @@ Enter your email and shipping address to continue.
   </label>
   <p class="piwalletsv-bsv-email-hint">We will send a verification link before you can pay.</p>
   <button type="button" class="md-button" id="piwalletsv-bsv-send-verify">Send verification link</button>
-  <p class="piwalletsv-store-note" id="piwalletsv-bsv-verify-sent" hidden>Check your inbox for a link from PiWalletSV.</p>
+  <p class="piwalletsv-store-note" id="piwalletsv-bsv-verify-sent" hidden>Check your inbox for a link from PiWalletSV. Didn’t get it? Click Resend verification link.</p>
 </div>
 
 <div id="piwalletsv-bsv-shipping-step" class="piwalletsv-bsv-shipping-step" hidden>
@@ -27,8 +25,20 @@ Enter your email and shipping address to continue.
   </p>
 
 <label>
+  Country
+  <select name="country" id="piwalletsv-bsv-country" required autocomplete="country">
+    <option value="US" selected>United States</option>
+    <option value="CA">Canada</option>
+    <option value="GB">United Kingdom</option>
+    <option value="AU">Australia</option>
+    <option value="DE">Germany</option>
+    <option value="FR">France</option>
+  </select>
+</label>
+
+<label>
   Ship to name
-  <input type="text" name="shipping_name" autocomplete="name" />
+  <input type="text" name="shipping_name" required autocomplete="name" />
 </label>
 
 <label>
@@ -47,25 +57,13 @@ Enter your email and shipping address to continue.
 </label>
 
 <label>
-  State / province
+  <span data-state-label>State</span>
   <input type="text" name="state" autocomplete="address-level1" />
 </label>
 
 <label>
-  Postal code
-  <input type="text" name="postal_code" required autocomplete="postal-code" />
-</label>
-
-<label>
-  Country
-  <select name="country" required autocomplete="country">
-    <option value="US" selected>United States</option>
-    <option value="CA">Canada</option>
-    <option value="GB">United Kingdom</option>
-    <option value="AU">Australia</option>
-    <option value="DE">Germany</option>
-    <option value="FR">France</option>
-  </select>
+  <span data-postal-label>ZIP code</span>
+  <input type="text" name="postal_code" required autocomplete="postal-code" placeholder="78701" />
 </label>
 
 <p id="piwalletsv-bsv-checkout-product" hidden>
@@ -77,9 +75,7 @@ Enter your email and shipping address to continue.
   <p>Shipping: <span data-quote-shipping>…</span></p>
   <p>Tax: <span data-quote-tax>…</span></p>
   <p><strong>Total USD: <span data-quote-total>…</span></strong></p>
-  <p class="piwalletsv-bsv-exact-warning">
-    You will pay <strong data-quote-sats>…</strong>. Send <strong>exactly</strong> that many satoshis.
-  </p>
+  <p><strong>Total BSV: <span data-quote-bsv>…</span></strong></p>
 </div>
 
 <p class="piwalletsv-store-error" id="piwalletsv-bsv-checkout-error" hidden></p>

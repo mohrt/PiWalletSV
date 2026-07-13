@@ -60,9 +60,8 @@
         successEl.hidden = false;
       }
       if (continueLink) {
-        const href = sku
-          ? "/store/checkout-bsv/?sku=" + encodeURIComponent(sku)
-          : "/store/checkout-bsv/";
+        const href =
+          "/store/checkout-bsv/?sku=" + encodeURIComponent(sku || "full-kit");
         continueLink.href = href;
       }
     } catch (err) {

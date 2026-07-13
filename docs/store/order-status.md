@@ -114,7 +114,7 @@ check payment confirmation and **tracking** once your label is purchased.
 
 </div>
 
-<script src="/assets/store-order-status.js?v=3"></script>
+<script src="/assets/store-order-status.js?v=no-round1"></script>
 
 Save your order ID after checkout. Pending orders refresh automatically every 30 seconds.
 
