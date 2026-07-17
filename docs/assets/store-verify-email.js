@@ -5,8 +5,6 @@
   const cfgEl = document.getElementById("piwalletsv-store-config");
   const statusEl = document.getElementById("piwalletsv-verify-email-status");
   const errorEl = document.getElementById("piwalletsv-verify-email-error");
-  const successEl = document.getElementById("piwalletsv-verify-email-success");
-  const continueLink = document.getElementById("piwalletsv-verify-email-continue");
 
   if (!cfgEl || !statusEl) {
     return;
@@ -47,23 +45,38 @@
         throw new Error(data.error || "verification failed");
       }
 
+      var prev = {};
+      try {
+        prev = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "{}") || {};
+      } catch (_err) {
+        prev = {};
+      }
+      var country = (
+        prev.country ||
+        sessionStorage.getItem("piwalletsv_bsv_ship_country") ||
+        ""
+      )
+        .toString()
+        .trim()
+        .toUpperCase();
       sessionStorage.setItem(
         SESSION_KEY,
         JSON.stringify({
           customer_email: data.customer_email,
           email_verification_token: data.email_verification_token,
+          country: country || prev.country || undefined,
         })
       );
+      if (country) {
+        sessionStorage.setItem("piwalletsv_bsv_ship_country", country);
+      }
 
-      statusEl.hidden = true;
-      if (successEl) {
-        successEl.hidden = false;
+      var next =
+        "/store/checkout-bsv/?sku=" + encodeURIComponent(sku || "full-kit");
+      if (country && country.length === 2) {
+        next += "&country=" + encodeURIComponent(country);
       }
-      if (continueLink) {
-        const href =
-          "/store/checkout-bsv/?sku=" + encodeURIComponent(sku || "full-kit");
-        continueLink.href = href;
-      }
+      window.location.replace(next);
     } catch (err) {
       showError(err.message || String(err));
     }

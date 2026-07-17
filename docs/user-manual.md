@@ -3,31 +3,24 @@
 This chapter is the user-facing journey: from "I have an unflashed
 SD card" to "I just signed and broadcast a transaction." It assumes
 you've already done the hardware bring-up in
-[Getting started](getting-started.md). The bonnet-driven UI for
-some of these steps is part of Phase 2 and is noted in each section;
-until it ships, the CLI on the Pi (and the companion web app on the
-phone) provides the same workflows.
+[Getting started](getting-started.md). Each step can be driven from
+the **bonnet** UI on the Pi; the equivalent **CLI** commands (and the
+companion web app on the phone) are shown alongside where useful.
 
 !!! warning "Beta software"
-    PiWalletSV is beta-quality. Until v1.0, exercise these flows
-    with **testnet-scale amounts only**. The [Disclaimer](disclaimer.md)
-    and [Security policy](security.md) describe the risks and your
-    responsibilities.
+    PiWalletSV software is **beta**. It is fully functional with **no currently
+    known issues**. Bugs that turn up will be fixed and released; all notices
+    are posted on [@PiWalletSV](https://x.com/PiWalletSV). Read the
+    [Disclaimer](disclaimer.md) and [Security policy](security.md) before
+    storing real funds.
 
 ## Verify your SD card on arrival { #verify-sd-card-on-arrival }
 
-Pre-flashed kits should be verified **before** you create a wallet or
-receive funds:
+Full-kit cards were booted for factory diagnostics, so they will not
+byte-match the pristine release image. Establish trust **before** you
+create a wallet or receive funds.
 
-- **Option B — Re-flash a verified image** (recommended): download from
-  [Download](download.md), verify GPG + SHA-256, and flash the card
-  yourself **before first boot**. Easiest way to trust the microSD.
-- **Option A — Light checks** (optional, weaker): compare **Image ID** on
-  the kit insert to piwalletsv.com (paperwork only), or hash the card
-  in a computer reader without booting the Pi (advanced). The device
-  cannot verify the card on-screen.
-
-A **printable version** of this section ships in the kit:
+A printable checklist ships in the kit:
 [`docs/print/kit-insert.md`](print/kit-insert.md).
 
 --8<-- "docs/includes/verify-sd-card.md"
@@ -35,32 +28,26 @@ A **printable version** of this section ships in the kit:
 ## 1. First boot
 
 On a **freshly flashed** SD card, the Pi reboots **once** while the image
-expands to the card size. The panel may stay dark for up to ~1 minute until
-the logo splash appears. After that one-time expand reboot, every boot is
-single-stage.
+expands to the card size. The panel may stay dark for a couple of minutes
+before the logo splash appears. After that one-time expand reboot, every
+boot is single-stage.
 
 When you first boot the Pi with PiWalletSV installed, the bonnet shows
 the **PiWalletSV logo** briefly, then walks you through a three-page
 disclaimer:
 
-1. **Beta software.** A short statement that this is pre-release
-   code with no warranty.
+1. **Beta software.** Fully functional with no currently known issues;
+   bugs will be fixed and released; notices via [@PiWalletSV on X](https://x.com/PiWalletSV).
+   There is no warranty.
 2. **You are your own custodian.** A reminder that nobody can
    recover funds for you if the seed is lost.
 3. **No liability.** A confirmation that operating this device is
    on your own responsibility.
 
-You hold the **A** button on the third page to confirm. The
-acknowledgement is persisted (with the disclaimer version and
-timestamp) into the vault file's metadata so the device doesn't
-re-prompt on every boot. A version bump in the disclaimer text
-re-prompts on next boot.
+You hold the **A** button on the third page to confirm.
 
 Hold **B** for five seconds on the boot logo to open
 [factory diagnostics](#factory-diagnostics) instead of continuing setup.
-
-Until Phase 2 ships, the equivalent acknowledgement happens in the
-companion's first-load modal (see §3 below).
 
 ## 2. Create your first wallet
 
@@ -69,7 +56,7 @@ at `m/44'/236'/0'`. The device supports multiple wallets in the
 same vault; each has its own seed, its own xpub, and its own pair
 of receive / change branches.
 
-=== "CLI (today)"
+=== "CLI"
 
     ```bash
     # 1. Initialise the vault (asks for a PIN twice).
@@ -91,16 +78,14 @@ of receive / change branches.
     PIN-derived KEK, and discarded. The encrypted xprv plus its
     fingerprint, label, and BIP44 path are what get persisted.
 
-=== "Bonnet (Phase 2)"
+=== "Bonnet"
 
-    The bonnet will provide:
+    The bonnet provides:
 
-    - A "**New wallet**" menu that generates a fresh mnemonic and
-      walks you through reading each word aloud while a piece of
-      paper is in front of you.
-    - A "**Restore wallet**" menu that lets you re-enter a mnemonic
-      via the joystick + A/B with BIP39 prefix autocomplete (the
-      `word-entry-ui` task on the roadmap).
+    - A "**New wallet**" menu that generates a fresh mnemonic and shows
+      each word on screen so you can write it down on paper.
+    - A "**Restore wallet**" menu that lets you enter an existing mnemonic
+      via the joystick + A/B with BIP39 prefix autocomplete.
 
 The "label" is purely for display — it's what shows up on the
 bonnet selector and in the companion's wallet list. Pick something
@@ -110,9 +95,16 @@ not authoritative metadata.
 
 ## 3. First-load companion
 
-Open the companion in your browser. The URL is whatever you decided
-during the setup (`https://localhost:5173/` for development;
-`https://your-domain.example/` once you deploy the static build).
+Open the official companion in your browser:
+
+**[{{ companion_url|replace('https://', '') }}]({{ companion_url }}/)**
+
+Most people should use this host — it stays up to date, needs no
+local install, and only keeps **ephemeral** watch-only data in the
+browser (xpubs and scan cache; never seeds or keys). If you want to
+self-host instead, see [Getting started § Install the companion
+PWA](getting-started.md#install-the-companion-pwa) for how to run the
+companion on localhost.
 
 On the first visit you'll see a **blocking modal**:
 
@@ -121,10 +113,6 @@ On the first visit you'll see a **blocking modal**:
   own responsibility."
 - A **Continue** button that's disabled until the box is ticked.
 
-This modal re-appears whenever the disclaimer version increases.
-`localStorage` tracks the acknowledgement; clearing site data
-re-prompts.
-
 After accepting, you land on `/#/wallets`, which is empty until you
 pair a wallet.
 
@@ -132,7 +120,13 @@ pair a wallet.
 
 On a phone, install the companion to your home screen so it opens
 full-screen like an app — without the browser address bar getting in
-the way during QR scans.
+the way during QR scans. Prefer **Chrome** or **Firefox**: companion
+paired wallets are an **ephemeral** watch-only list in IndexedDB, and
+Safari’s Intelligent Tracking Prevention can delete that storage after
+about seven days of Safari use with no interaction on the site. That is
+inconvenient, not a loss of funds — re-pair from the Pi (re-import the
+xpub), or migrate from another companion via **Settings → Export /
+Import**.
 
 --8<-- "docs/includes/pwa-install-steps.md"
 
@@ -143,13 +137,13 @@ companion so the companion can watch the wallet (discover UTXOs,
 display the next receive address, build proposals). No private
 material crosses the gap.
 
-=== "Bonnet (Phase 2)"
+=== "Bonnet"
 
     Select **Pair → Show pairing QR** on the bonnet. The screen
     animates the multipart QR. The companion's **Scan** page reads
     it.
 
-=== "Terminal QR (today)"
+=== "Terminal QR"
 
     ```bash
     # On the Pi:
@@ -324,9 +318,9 @@ at the QR canvas.
     pairing. Press **A** or **B** when the companion confirms it
     has the full set.
 
-=== "CLI (today)"
+=== "CLI"
 
-    Until the bonnet flow ships, run the steps as discrete CLI
+    Prefer the CLI, or scripting? Run the steps as discrete CLI
     invocations:
 
     ```bash
@@ -390,17 +384,20 @@ asking the Pi to re-sign.
 
 Lost a vault, replaced a SD card, switching devices? If you need to
 recover funds without access to the device at all, see
-[Recover without device](recover-without-device.md) for step-by-step
-instructions using iancoleman.io/bip39/ or ElectrumSV.
+[Recover without device](recover-without-device.md). PiWalletSV uses
+standard BIP39 + BIP44 (`m/44'/236'/0'`), so any BIP44-compatible BSV
+tool works — for example
+[iancoleman.io/bip39](https://iancoleman.io/bip39/),
+[satofinder.com](https://satofinder.com), or ElectrumSV.
 
-=== "Bonnet (Phase 2)"
+=== "Bonnet"
 
     Select **Restore wallet** on the bonnet's main menu. The
     joystick word-entry UI lets you type each word with prefix
     autocomplete. Both 12 and 24-word mnemonics are supported.
     The checksum is verified before the account is derived.
 
-=== "CLI (today)"
+=== "CLI"
 
     ```bash
     piwallet vault init                  # only if you don't have a vault yet
@@ -444,7 +441,7 @@ on-device-only state are gone.
 
 If you've lost the PIN: there's no recovery mechanism. By design.
 The vault will lock for an exponential delay after wrong-PIN
-attempts (see [`piwallet/core/vault.py`](https://github.com/example/piwallet/blob/main/piwallet/core/vault.py))
+attempts (see [`piwallet/core/vault.py`](https://github.com/mohrt/PiWalletSV/blob/main/piwallet/core/vault.py))
 and wipe after a configurable threshold of consecutive failures.
 You'll need to restore from the mnemonic.
 
@@ -475,7 +472,7 @@ re-install from the site); only the Pi device follows the steps below.
 - A **FAT32 or exFAT USB flash drive** (factory formatting is fine) for
   Path A below, **or** a microSD card reader for Path C.
 - The new **`.img.xz`** and **`.asc`** signature from
-  [Download](download.md), verified the same way as first setup
+  [GitHub Releases](https://github.com/mohrt/PiWalletSV/releases), verified the same way as first setup
   ([Flash and first run § Step 1](build-image.md#step-1-verify-the-download)).
 
 ### Overview
@@ -533,7 +530,8 @@ re-prompts the disclaimer on first boot after re-flash.
 
 **Physical backup (no SSH on the sealed device):**
 
-1. **Power off** the Pi and remove the microSD.
+1. **Power off** the Pi and remove the microSD (thin tweezers work through
+   the case slot — no disassembly needed).
 2. Insert the card into a **USB card reader** on another computer.
 3. Mount the **Linux root** partition (ext4). On Linux this is usually
    automatic; on macOS or Windows you may need an ext4 driver or a
@@ -547,16 +545,20 @@ flashing; the new image overwrites the card completely.
 
 ### Step 2 — Download and verify the new image
 
-Follow [Download](download.md) and
-[Flash and first run § Step 1](build-image.md#step-1-verify-the-download):
+Follow [Flash and first run § Step 1](build-image.md#step-1-verify-the-download)
+([Download](download.md) → GitHub Releases):
 
-1. Fetch `piwalletsv-<VERSION>.img.xz` and its `.asc` signature.
-2. Verify the signature with the project release key.
+1. Fetch `piwalletsv-<VERSION>.img.xz` and its `.asc` signature from the
+   [GitHub release](https://github.com/mohrt/PiWalletSV/releases).
+2. Verify the signature with the project release key
+   ([Security § Release key](security.md#release-key)).
 3. Decompress if your flashing tool requires a raw `.img`.
 
 **Do not flash an unverified image.**
 
 ### Step 3 — Re-flash the microSD
+
+--8<-- "docs/includes/remove-microsd-tip.md"
 
 Flash the verified image with Raspberry Pi Imager or your platform's
 equivalent ([Flash and first run § Step 2](build-image.md#step-2-flash-the-image)).
@@ -691,7 +693,7 @@ troubleshooting — it is never accessible over the network. To use it:
 3. Once the bonnet shows the boot splash or disclaimer, press
    **Ctrl + Alt + F2** on the keyboard. The HDMI output switches to tty2
    and shows a login prompt.
-4. Log in as `pisv` with your device password.
+4. Log in as `pisv` — default password is `pisv`.
 5. To return to tty1 (bonnet display output) press **Ctrl + Alt + F1**.
 
 This console has no network access and is intended for reading logs

@@ -1,8 +1,5 @@
 # Order status
 
-Look up your PiWalletSV order by **order ID** (from checkout, email, or X). You can
-check payment confirmation and **tracking** once your label is purchased.
-
 <div id="piwalletsv-store-config"
      data-api-url="{{ store_api_url }}"
      hidden></div>
@@ -36,6 +33,10 @@ check payment confirmation and **tracking** once your label is purchased.
     <tr>
       <th scope="row">Order ID</th>
       <td><code data-order-id-display>—</code></td>
+    </tr>
+    <tr data-bsv-ref-row hidden>
+      <th scope="row">BSV reference</th>
+      <td><code data-bsv-reference>—</code></td>
     </tr>
     <tr>
       <th scope="row">Item</th>
@@ -71,11 +72,6 @@ check payment confirmation and **tracking** once your label is purchased.
     </tr>
   </tbody>
 </table>
-
-<p data-bsv-ref-row hidden>
-  <strong>BSV reference:</strong> <code data-bsv-reference>—</code> — include this when you message
-  <a href="https://x.com/PiWalletSV">@PiWalletSV on X</a>.
-</p>
 
 <div class="piwalletsv-order-tracking" data-tracking-section hidden>
 
@@ -114,10 +110,8 @@ check payment confirmation and **tracking** once your label is purchased.
 
 </div>
 
-<script src="/assets/store-order-status.js?v=no-round1"></script>
-
-Save your order ID after checkout. Pending orders refresh automatically every 30 seconds.
+<script src="/assets/store-order-status.js?v=bsv-ref-row"></script>
 
 Questions? [@PiWalletSV on X](https://x.com/PiWalletSV)
 
-[Back to purchase options](../purchase.md)
+[Back to shop](../purchase/shop.md)

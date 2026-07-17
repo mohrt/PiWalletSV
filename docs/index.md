@@ -18,19 +18,27 @@ small web app on your phone or laptop talks to the chain; the Pi
 just signs.
 
 [Launch wallet ↗]({{ companion_url }}/){ .pwsv-cta }
+[Purchase](purchase/shop.md){ .pwsv-cta-secondary }
 [Read the docs](getting-started.md){ .pwsv-cta-secondary }
 
 !!! tip "On your phone"
-    For full-screen access (camera pairing, sends), [add the companion to your Home Screen](user-manual.md#add-to-home-screen).
+    Prefer **Chrome** or **Firefox** for the companion. Paired wallets are an
+    **ephemeral** watch-only cache in the browser. Safari can purge that
+    storage (including after ~7 days of idle use under Intelligent Tracking
+    Prevention). Not a loss of funds — re-pair from the Pi (re-import the
+    xpub) or migrate via companion **Settings → Export / Import**. For
+    full-screen access (camera pairing, sends),
+    [add the companion to your Home Screen](user-manual.md#add-to-home-screen).
 
 </div>
 </div>
 
 !!! warning "Beta software"
-    PiWalletSV is in active development. There is no warranty and no
-    custodial backup. Read the [Disclaimer](disclaimer.md) and
-    [Security briefing](security.md) before storing real funds on a
-    device you built from this code.
+    PiWalletSV software is **beta**. It is fully functional with **no currently
+    known issues**. Bugs that turn up will be fixed and released; all notices
+    are posted on [@PiWalletSV](https://x.com/PiWalletSV). There is no warranty
+    and no custodial backup — read the [Disclaimer](disclaimer.md) and
+    [Security briefing](security.md) before storing real funds.
 
 ## Why do I need this?
 
@@ -138,7 +146,8 @@ device signs anything.
     Clone the repo, provision a Pi, and run the companion in a browser.
     Start here if you want to inspect, modify, or contribute to the code.
 
--   :material-shopping-outline: __[Purchase](purchase.md)__
+-   :material-shopping-outline: __[Shop](purchase/shop.md)__ ·
+    [Ways to get hardware](purchase/hardware.md)
 
     Full kit or case-only — pay with card or BSV. Limited batches.
 

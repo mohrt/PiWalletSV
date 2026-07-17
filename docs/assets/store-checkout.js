@@ -36,8 +36,8 @@
     const el = document.createElement("style");
     el.id = id;
     el.textContent =
-      ".md-typeset .piwalletsv-store-actions button.md-button.piwalletsv-store-oos," +
-      ".md-typeset .piwalletsv-store-actions button.md-button:disabled.piwalletsv-store-oos{" +
+      ".md-typeset .piwalletsv-store-actions button.md-button:disabled," +
+      ".md-typeset .piwalletsv-store-actions button.md-button.piwalletsv-store-oos{" +
       "cursor:not-allowed!important;filter:grayscale(.45)!important;opacity:.5!important;" +
       "pointer-events:none!important;box-shadow:none!important}";
     document.head.appendChild(el);
@@ -67,16 +67,46 @@
     return "$" + (cents / 100).toFixed(2);
   }
 
+  function selectedShipCountry() {
+    const select = document.querySelector("[data-store-ship-country]");
+    const country = ((select && select.value) || "").trim().toUpperCase();
+    if (!country || country.length !== 2) {
+      return null;
+    }
+    return country;
+  }
+
+  function shippingZoneForCountry(country) {
+    return country === "US" ? "US" : "international";
+  }
+
+  function applyCheckoutEnabled() {
+    const countryOk = selectedShipCountry() !== null;
+    document.querySelectorAll("[data-store-checkout]").forEach(function (btn) {
+      if (btn.classList.contains("piwalletsv-store-oos")) {
+        return;
+      }
+      btn.disabled = !countryOk;
+      if (countryOk) {
+        btn.removeAttribute("aria-disabled");
+        btn.removeAttribute("title");
+      } else {
+        btn.setAttribute("aria-disabled", "true");
+        btn.title = "Select where to ship first";
+      }
+    });
+  }
+
   function applyStockUi() {
     document.querySelectorAll("[data-store-stock]").forEach(function (el) {
       const sku = el.getAttribute("data-store-stock");
       const info = stockBySku[sku];
-      if (!info || !info.track_inventory) {
+      if (!info) {
         el.hidden = true;
         return;
       }
       el.hidden = false;
-      if (info.in_stock) {
+      if (!info.track_inventory || info.in_stock) {
         el.className = "piwalletsv-store-stock piwalletsv-store-stock--in";
         el.textContent = "IN STOCK";
       } else {
@@ -95,16 +125,16 @@
     document.querySelectorAll("[data-store-checkout]").forEach(function (btn) {
       const sku = btn.getAttribute("data-sku");
       const info = stockBySku[sku];
-      if (!info || !info.track_inventory) {
-        return;
-      }
-      if (!info.in_stock) {
+      btn.classList.remove("piwalletsv-store-oos");
+      if (info && info.track_inventory && !info.in_stock) {
         btn.disabled = true;
         btn.classList.add("piwalletsv-store-oos");
         btn.setAttribute("aria-disabled", "true");
         btn.title = "Out of stock";
+        return;
       }
     });
+    applyCheckoutEnabled();
   }
 
   async function loadInventory() {
@@ -112,6 +142,7 @@
       const resp = await fetch(apiUrl + "/v1/inventory");
       const data = await resp.json();
       if (!resp.ok) {
+        applyCheckoutEnabled();
         return;
       }
       (data.products || []).forEach(function (p) {
@@ -119,15 +150,15 @@
       });
       applyStockUi();
     } catch (_err) {
-      /* leave buttons enabled if inventory fetch fails */
+      applyCheckoutEnabled();
     }
   }
 
-  async function postCheckout(path, sku) {
+  async function postCheckout(path, sku, shippingZone) {
     const resp = await fetch(apiUrl + path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sku: sku }),
+      body: JSON.stringify({ sku: sku, shipping_zone: shippingZone }),
     });
     const data = await resp.json().catch(function () {
       return {};
@@ -141,6 +172,11 @@
     return data;
   }
 
+  const countrySelect = document.querySelector("[data-store-ship-country]");
+  if (countrySelect) {
+    countrySelect.addEventListener("change", applyCheckoutEnabled);
+  }
+  applyCheckoutEnabled();
   loadInventory();
 
   document.querySelectorAll("[data-store-checkout]").forEach(function (btn) {
@@ -150,10 +186,16 @@
       if (!sku || !method) {
         return;
       }
+      const country = selectedShipCountry();
+      if (!country) {
+        showError(btn, "Select where to ship first.");
+        return;
+      }
+      const zone = shippingZoneForCountry(country);
       setBusy(btn, true);
       try {
         if (method === "stripe") {
-          const data = await postCheckout("/v1/checkout/stripe", sku);
+          const data = await postCheckout("/v1/checkout/stripe", sku, zone);
           if (data.checkout_url) {
             window.location.href = data.checkout_url;
             return;
@@ -162,12 +204,16 @@
         }
         if (method === "bsv") {
           window.location.href =
-            "/store/checkout-bsv/?sku=" + encodeURIComponent(sku);
+            "/store/checkout-bsv/?sku=" +
+            encodeURIComponent(sku) +
+            "&country=" +
+            encodeURIComponent(country);
           return;
         }
       } catch (err) {
         showError(btn, err.message || String(err));
         setBusy(btn, false);
+        applyCheckoutEnabled();
         if ((err.message || "").indexOf("Out of stock") >= 0) {
           loadInventory();
         }
@@ -175,7 +221,7 @@
     });
   });
 
-  // Card success page: poll order status while payment confirms
+  // Success page: one-shot status (Checkout only redirects here after payment)
   const successEl = document.getElementById("piwalletsv-order-success");
   if (successEl && apiUrl) {
     const orderId = new URLSearchParams(window.location.search).get("order_id");
@@ -194,7 +240,7 @@
         track.href = "/store/order-status/?order_id=" + encodeURIComponent(orderId);
       }
 
-      async function refreshSuccess() {
+      void (async function loadSuccess() {
         const resp = await fetch(apiUrl + "/v1/orders/" + encodeURIComponent(orderId));
         const data = await resp.json();
         if (!resp.ok) {
@@ -202,34 +248,46 @@
         }
         const statusEl = successEl.querySelector("[data-order-status-label]");
         if (statusEl) {
-          if (data.status === "paid" || data.status === "fulfilled") {
-            statusEl.textContent = "Payment confirmed";
-          } else if (data.status === "shipped") {
+          if (data.status === "shipped") {
             statusEl.textContent = "Shipped";
-          } else if (data.status === "pending_stripe") {
-            statusEl.textContent = "Confirming payment…";
+          } else if (data.status === "fulfilled") {
+            statusEl.textContent = "Ready to ship";
+          } else if (data.status === "cancelled") {
+            statusEl.textContent = "Cancelled";
+          } else if (data.status === "refunded") {
+            statusEl.textContent = "Refunded";
           } else {
-            statusEl.textContent = data.status || "—";
+            statusEl.textContent = "Payment confirmed";
           }
-        }
-        const paidNote = successEl.querySelector("[data-paid-note]");
-        if (paidNote) {
-          paidNote.hidden = !(data.status === "paid" || data.status === "fulfilled" || data.status === "shipped");
         }
         const trackingNote = successEl.querySelector("[data-tracking-note]");
         if (trackingNote) {
-          trackingNote.hidden = !(data.shipment && data.shipment.tracking_url);
+          const safeUrl =
+            data.shipment && data.shipment.tracking_url
+              ? (function (url) {
+                  const raw = String(url || "").trim();
+                  if (!/^https:\/\//i.test(raw)) {
+                    return "";
+                  }
+                  try {
+                    const parsed = new URL(raw);
+                    return parsed.protocol === "https:" ? parsed.href : "";
+                  } catch (_err) {
+                    return "";
+                  }
+                })(data.shipment.tracking_url)
+              : "";
+          trackingNote.hidden = !safeUrl;
           if (!trackingNote.hidden) {
             const link = trackingNote.querySelector("[data-tracking-link]");
             if (link) {
-              link.href = data.shipment.tracking_url;
+              link.href = safeUrl;
+              link.rel = "noopener noreferrer";
+              link.target = "_blank";
             }
           }
         }
-      }
-
-      refreshSuccess();
-      setInterval(refreshSuccess, 15000);
+      })();
     }
   }
 })();

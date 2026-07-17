@@ -19,6 +19,21 @@
     return;
   }
 
+  const isStoreDev =
+    apiUrl.indexOf("store.dev.piwalletsv.com") >= 0 ||
+    apiUrl.indexOf("localhost") >= 0 ||
+    apiUrl.indexOf("127.0.0.1") >= 0;
+
+  const DEV_STATUSES = [
+    "pending_bsv",
+    "pending_stripe",
+    "paid",
+    "fulfilled",
+    "shipped",
+    "cancelled",
+    "refunded",
+  ];
+
   let adminKey = sessionStorage.getItem(STORAGE_KEY) || "";
 
   function el(tag, className, text) {
@@ -141,7 +156,7 @@
       order.stripe_payment_intent_id,
       shipment.tracking_number,
       shipment.carrier,
-      formatAddress(order.shipping_address),
+      formatShipTo(order),
     ];
     return parts
       .filter(Boolean)
@@ -290,9 +305,103 @@
     container.appendChild(cancelBtn);
   }
 
+  function appendDevTools(order, container) {
+    if (!isStoreDev) {
+      return;
+    }
+    const tools = el("div", "piwalletsv-operator-dev-tools");
+    tools.appendChild(el("p", "piwalletsv-operator-dev-label", "Dev tools"));
+
+    const canSetSats =
+      order.status === "pending_bsv" && !(Number(order.bsv_received_sats) > 0);
+    if (canSetSats) {
+      const row = el("div", "piwalletsv-operator-panel-actions");
+      const input = el("input", "piwalletsv-operator-input");
+      input.type = "number";
+      input.min = "1";
+      input.step = "1";
+      input.value = "1000";
+      input.setAttribute("aria-label", "BSV amount sats");
+      const apply = btn("Set BSV amount", false);
+      apply.addEventListener("click", function () {
+        const sats = parseInt(String(input.value || "").trim(), 10);
+        if (!sats || sats < 1) {
+          setActionError(container, "Enter a positive sat amount.");
+          return;
+        }
+        apply.disabled = true;
+        api(
+          "POST",
+          "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/set-bsv-amount",
+          { bsv_amount_sats: sats }
+        )
+          .then(refresh)
+          .catch(function (e) {
+            setActionError(container, e.message || String(e));
+            apply.disabled = false;
+          });
+      });
+      const quick = btn("1000 sats", true);
+      quick.addEventListener("click", function () {
+        quick.disabled = true;
+        apply.disabled = true;
+        api(
+          "POST",
+          "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/set-bsv-amount",
+          { bsv_amount_sats: 1000 }
+        )
+          .then(refresh)
+          .catch(function (e) {
+            setActionError(container, e.message || String(e));
+            quick.disabled = false;
+            apply.disabled = false;
+          });
+      });
+      row.appendChild(quick);
+      row.appendChild(input);
+      row.appendChild(apply);
+      tools.appendChild(row);
+    }
+
+    const statusRow = el("div", "piwalletsv-operator-panel-actions");
+    const select = el("select", "piwalletsv-operator-select");
+    DEV_STATUSES.forEach(function (status) {
+      const opt = document.createElement("option");
+      opt.value = status;
+      opt.textContent = status;
+      if (status === order.status) {
+        opt.selected = true;
+      }
+      select.appendChild(opt);
+    });
+    const setStatus = btn("Set status", false);
+    setStatus.addEventListener("click", function () {
+      const next = select.value;
+      if (!next || next === order.status) {
+        return;
+      }
+      setStatus.disabled = true;
+      api(
+        "POST",
+        "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/set-status",
+        { status: next }
+      )
+        .then(refresh)
+        .catch(function (e) {
+          setActionError(container, e.message || String(e));
+          setStatus.disabled = false;
+        });
+    });
+    statusRow.appendChild(select);
+    statusRow.appendChild(setStatus);
+    tools.appendChild(statusRow);
+    container.appendChild(tools);
+  }
+
   function appendOrderActions(order, container, options) {
     const opts = options || {};
     const onDetail = !!opts.detail;
+    appendDevTools(order, container);
     if (order.status === "pending_bsv" || order.status === "pending_stripe") {
       const paidBtn = btn("Mark paid", true);
       paidBtn.addEventListener("click", function () {
@@ -352,10 +461,15 @@
     if (order.status === "paid" || order.status === "fulfilled" || order.status === "shipped") {
       const label = order.label || {};
       const shipment = order.shipment || {};
-      const hasLabel = !!(label.tracking_number || shipment.tracking_number);
-      const easyshipId = order.easyship_shipment_id || "";
+      const labelReady = !!(label.purchased_at);
+      const hasLabel = !!(labelReady || label.tracking_number || shipment.tracking_number);
+      const labelShipmentId =
+        order.label_shipment_id ||
+        order.shippo_transaction_id ||
+        order.easyship_shipment_id ||
+        "";
 
-      if (order.status === "paid" && !hasLabel) {
+      if ((order.status === "paid" || order.status === "fulfilled") && !labelReady) {
         const buyBtn = btn("Buy label", true);
         buyBtn.addEventListener("click", function () {
           clearPanels(container);
@@ -370,12 +484,12 @@
         container.appendChild(buyBtn);
       }
 
-      if (easyshipId) {
+      if (labelReady && labelShipmentId) {
         const printBtn = btn("Download label", false);
         printBtn.addEventListener("click", function () {
           clearPanels(container);
           setBusy(printBtn, true);
-          downloadLabelPdf(order.order_id, easyshipId)
+          downloadLabelPdf(order.order_id, labelShipmentId)
             .catch(function (e) {
               setActionError(container, e.message || String(e));
             })
@@ -627,9 +741,9 @@
     if (order.customer_email) {
       meta.appendChild(metaRow("Customer", order.customer_email));
     }
-    const addr = formatAddress(order.shipping_address);
-    if (addr !== "—") {
-      meta.appendChild(metaRow("Ship to", addr));
+    const shipTo = formatShipTo(order);
+    if (shipTo !== "—") {
+      meta.appendChild(metaRow("Ship to", shipTo));
     }
     if (order.payment_txid) {
       meta.appendChild(metaRow("Payment txid", order.payment_txid));
@@ -641,7 +755,14 @@
       meta.appendChild(metaRow("BSV address", order.bsv_receive_address));
     }
     if (order.bsv_amount_sats != null) {
-      meta.appendChild(metaRow("BSV amount", String(order.bsv_amount_sats) + " sats"));
+      let amountLabel = String(order.bsv_amount_sats) + " sats";
+      if (
+        order.bsv_amount_sats_original != null &&
+        Number(order.bsv_amount_sats_original) !== Number(order.bsv_amount_sats)
+      ) {
+        amountLabel += " (was " + order.bsv_amount_sats_original + ")";
+      }
+      meta.appendChild(metaRow("BSV amount", amountLabel));
     }
     if (order.bsv_received_sats != null) {
       meta.appendChild(metaRow("BSV received", String(order.bsv_received_sats) + " sats"));
@@ -742,9 +863,9 @@
     if (order.customer_email) {
       meta.appendChild(metaRow("Customer", order.customer_email));
     }
-    const addr = formatAddress(order.shipping_address);
-    if (addr !== "—") {
-      meta.appendChild(metaRow("Ship to", addr));
+    const shipTo = formatShipTo(order);
+    if (shipTo !== "—") {
+      meta.appendChild(metaRow("Ship to", shipTo));
     }
     card.appendChild(meta);
 
@@ -767,6 +888,15 @@
       addr.country,
     ].filter(Boolean);
     return parts.join(", ") || "—";
+  }
+
+  function formatShipTo(order) {
+    const name = String((order && order.shipping_name) || "").trim();
+    const addr = formatAddress(order && order.shipping_address);
+    if (name && addr !== "—") {
+      return name + ", " + addr;
+    }
+    return name || addr;
   }
 
   async function api(method, path, body) {

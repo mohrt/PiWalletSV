@@ -13,13 +13,14 @@ and from the companion web app's first-load acknowledgment modal.
 
 ---
 
-## 1. Alpha Software
+## 1. Beta Software
 
-PiWalletSV is **alpha-quality, pre-release software** authored as a
-personal / hobbyist project. It has **not** been independently audited
-for security, correctness, or fitness for handling funds. Bugs,
-regressions, undocumented behavior changes, and incompatible breaking
-changes may occur in any release.
+PiWalletSV is **beta software**. It is fully functional with **no currently
+known issues**. Bugs that turn up will be fixed and released; all project
+notices are posted on [@PiWalletSV](https://x.com/PiWalletSV). It has
+**not** been independently audited for security, correctness, or fitness for
+handling funds. Undocumented behavior changes and incompatible breaking
+changes may still occur in any release.
 
 Do not store an amount of Bitcoin SV (BSV) in PiWalletSV that you are
 not prepared to lose entirely.

@@ -122,6 +122,7 @@
   const waitingBanner = pendingEl.querySelector("[data-waiting-banner]");
   const waitingTitle = pendingEl.querySelector("[data-waiting-title]");
   const waitingCopy = pendingEl.querySelector("[data-waiting-copy]");
+  const payIntro = pendingEl.querySelector("[data-pay-intro]");
   const cancelBlock = pendingEl.querySelector("[data-cancel-block]");
   const cancelBtn = document.getElementById("piwalletsv-bsv-cancel");
   const cancelPanel = pendingEl.querySelector("[data-cancel-panel]");
@@ -166,6 +167,26 @@
     }
   }
 
+  function setPayVisible(visible) {
+    if (payIntro) {
+      payIntro.hidden = !visible;
+    }
+    const payBlock = pendingEl.querySelector("[data-pay-instructions]");
+    if (payBlock) {
+      payBlock.hidden = !visible;
+    }
+  }
+
+  function renderLocalQr(uri) {
+    if (typeof window.qrcode !== "function") {
+      return null;
+    }
+    const qr = window.qrcode(0, "M");
+    qr.addData(uri);
+    qr.make();
+    return qr.createDataURL(6, 12);
+  }
+
   function updateQr(address, sats) {
     const qrImg = pendingEl.querySelector("[data-bsv-qr]");
     const uriRow = pendingEl.querySelector(".piwalletsv-bsv-uri-row");
@@ -174,9 +195,6 @@
       return;
     }
     const uri = "bitcoin:" + address + "?amount=" + satsToBsvUri(sats);
-    qrImg.src =
-      "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=" +
-      encodeURIComponent(uri);
     qrImg.alt = "QR code for BSV payment";
     qrImg.hidden = false;
     if (uriRow) {
@@ -188,6 +206,17 @@
     bindCopy(pendingEl.querySelector("[data-copy-uri]"), function () {
       return uri;
     });
+    // Encode locally so the payment URI never leaves the browser as a QR-API query.
+    try {
+      const dataUrl = renderLocalQr(uri);
+      if (!dataUrl) {
+        qrImg.hidden = true;
+        return;
+      }
+      qrImg.src = dataUrl;
+    } catch (_err) {
+      qrImg.hidden = true;
+    }
   }
 
   async function cancelOrder() {
@@ -235,6 +264,8 @@
       showCancelError("");
       cancelPanel.hidden = false;
       cancelBtn.hidden = true;
+      setWaitingState(null);
+      setPayVisible(false);
     });
   }
   if (cancelBack && cancelPanel && cancelBtn) {
@@ -242,6 +273,7 @@
       cancelPanel.hidden = true;
       cancelBtn.hidden = false;
       showCancelError("");
+      refresh();
     });
   }
   if (cancelConfirm) {
@@ -336,12 +368,11 @@
 
     if (data.bsv_receive_address) {
       const addrEl = pendingEl.querySelector("[data-bsv-address]");
-      const payBlock = pendingEl.querySelector("[data-pay-instructions]");
       if (addrEl) {
         addrEl.textContent = data.bsv_receive_address;
       }
-      if (payBlock && !isPaid && !isCancelled) {
-        payBlock.hidden = false;
+      if (!isPaid && !isCancelled) {
+        setPayVisible(true);
       }
       bindCopy(pendingEl.querySelector("[data-copy-address]"), function () {
         return data.bsv_receive_address;
@@ -392,10 +423,7 @@
       debugLog("order cancelled — stopping poll");
       stopPolling();
       setWaitingState(null);
-      const payBlock = pendingEl.querySelector("[data-pay-instructions]");
-      if (payBlock) {
-        payBlock.hidden = true;
-      }
+      setPayVisible(false);
       if (cancelBlock) {
         cancelBlock.hidden = true;
       }

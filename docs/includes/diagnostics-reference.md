@@ -28,6 +28,23 @@ release) to leave diagnostics and continue boot.
 
 Sub-screens use **A/B: back** unless noted otherwise.
 
+### Reading "Run all checks"
+
+Each row ends with a status glyph:
+
+| Glyph | Colour | Meaning |
+|-------|--------|---------|
+| **OK** | green | Check passed. |
+| **!!** | red | Check failed — investigate. |
+| **&ndash;** (a dash) | grey | Nothing to test / could not be verified — **not** a failure. |
+
+A **`-` (dash) next to Wi-Fi or Network is expected and correct** on a
+sealed device: the image disables the radios and network at boot, so
+there is no Wi-Fi or network interface for the check to exercise. Only a
+red **`!!`** indicates a real problem. For the full air-gap breakdown
+(and the shell report that sees the host directly), see
+[§14 Airgap status](#airgap-status).
+
 ### Restart app
 
 **Restart app** is for recovering a stuck UI or applying a fresh process

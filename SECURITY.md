@@ -22,8 +22,7 @@ app, or in the documented operational procedures), please report it
 
 GitHub private vulnerability reporting:
 
-1. Open `https://github.com/<owner>/PiWallet/security/advisories/new`
-   (replace `<owner>` with the org / user this repo lives under).
+1. Open `https://github.com/mohrt/PiWalletSV/security/advisories/new`.
 2. Fill in a clear title, a reproduction, the impact, and what
    versions / configurations are affected.
 3. We will respond on the advisory thread.

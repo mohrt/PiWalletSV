@@ -1,13 +1,15 @@
 # Pay with BSV
 
-Send **exactly** the satoshi amount shown below to the receive address for this order. Payment is detected automatically.
-
 <div id="piwalletsv-store-config"
      data-api-url="{{ store_api_url }}"
      data-dev-banner="{{ store_dev_banner }}"
      hidden></div>
 
 <div id="piwalletsv-bsv-pending">
+
+<p data-pay-intro>
+  Send <strong>exactly</strong> the satoshi amount shown below to the receive address for this order. Payment is detected automatically.
+</p>
 
 <div class="piwalletsv-bsv-waiting" data-waiting-banner hidden>
   <span class="piwalletsv-bsv-waiting-spinner" aria-hidden="true"></span>
@@ -145,7 +147,7 @@ Send **exactly** the satoshi amount shown below to the receive address for this 
 
 <p data-cancelled-note hidden>
   This order was cancelled. Start a new checkout from the
-  <a href="../purchase.md">purchase page</a> if you still want to buy.
+  <a href="../purchase/shop/">shop</a> if you still want to buy.
 </p>
 
 <p class="piwalletsv-bsv-fallback">
@@ -155,4 +157,4 @@ Send **exactly** the satoshi amount shown below to the receive address for this 
 
 </div>
 
-[Back to purchase options](../purchase.md)
+[Back to shop](../purchase/shop.md)

@@ -1,13 +1,18 @@
 # Build & deploy
 
-How to take a stock Raspberry Pi Zero 2 WH from a freshly-flashed
-SD card to a self-launching PiWalletSV signer. This chapter is
-narrowly about the **Pi-side install**. Hardware bring-up (bonnet,
-camera, SPI tuning) is in [Getting started](getting-started.md);
+How to take a stock Raspberry Pi Zero / Zero W / Zero WH from a
+freshly-flashed SD card to a self-launching PiWalletSV signer. This
+chapter is narrowly about the **Pi-side install**. Hardware bring-up
+(bonnet, camera, SPI tuning) is in [Getting started](getting-started.md);
 the user-facing journey is in the [User manual](user-manual.md).
 
 If you only want to develop on a laptop, you don't need any of this —
 `pip install -e ".[dev]"` and `pytest` is enough.
+
+!!! note "Supported boards today"
+    Round-one firmware and the OOTB path target **Pi Zero / Zero W /
+    Zero WH** on **32-bit** Raspberry Pi OS Lite (`pi0` image).
+    **Pi Zero 2 W** and **64-bit** images are not yet supported OOTB.
 
 ## 1. Decide what you're building
 
@@ -25,13 +30,15 @@ section.
 
 ## 2. Pick an OS image
 
-- **Raspberry Pi OS Lite (64-bit, Bookworm or later)** is the tested
-  baseline. The 32-bit image works but `picamera2` is much slower on
-  it.
-- **Pi OS Lite Trixie** is the newest tested target (used in
-  [Hardware checkpoint #1](hardware/checkpoint-1.md)).
-- Avoid Desktop images on a Pi Zero 2 W — the X server eats the RAM
-  and SD-card lifetime that the signer wants for itself.
+- **Raspberry Pi OS Lite (32-bit, Bookworm or later)** is the tested
+  baseline for Pi Zero / Zero W / Zero WH. That matches the published
+  `pi0` sealed image.
+- **Pi OS Lite Trixie (32-bit)** is also used in
+  [Hardware checkpoint #1](hardware/checkpoint-1.md).
+- Avoid Desktop images on a Pi Zero — the X server eats the RAM and
+  SD-card lifetime that the signer wants for itself.
+- Do **not** use a 64-bit OS image or a Pi Zero 2 W for the supported
+  path yet; those targets are planned (`pi02w`) but not OOTB.
 
 Flash the SD card with [`rpi-imager`](https://www.raspberrypi.com/software/),
 not `dd`. The imager pre-seeds:
@@ -148,7 +155,7 @@ mkdir -p ~/.piwallet
 piwallet vault --vault-path ~/.piwallet/vault.bin init
 ```
 
-`vault init` is interactive: it prompts for a PIN (4-12 digits),
+`vault init` is interactive: it prompts for a PIN (6 digits),
 confirms it, scrypt-derives a KEK, writes a fresh empty vault, and
 exits. Re-running it is refused if the vault already exists — that's
 intentional, see [Operate](operate.md#wiping-the-vault) for the wipe
@@ -298,7 +305,9 @@ The sealed image is built with
 on **Raspberry Pi OS Lite 32-bit** (Pi Zero W / Zero WH), captured with `dd`,
 shrunk with [`scripts/shrink-sd-image.sh`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/shrink-sd-image.sh)
 so it fits **8 GB** microSD cards, then compressed and signed. Signed `.img.xz`
-artifacts are published on **GitHub Releases** — see [Download](download.md).
+artifacts are published on **GitHub Releases** — see
+[Download](download.md) (landing page) or
+https://github.com/mohrt/PiWalletSV/releases directly.
 
 Operator workflow (sync → provision → capture → sign → publish):
 [`docs/includes/image-release-operator.md`](includes/image-release-operator.md).

@@ -27,6 +27,7 @@ exclude_docs: |
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/logo.png
   favicon: assets/favicon.png
   # Swap the default generic-git fork mark for the GitHub Octocat in
@@ -122,14 +123,16 @@ plugins:
       on_undefined: strict
 
 extra_css:
-  - assets/extra.css
+  - assets/extra.css?v=donate-header-1
 
 extra_javascript:
   - assets/env-links.js
-  - assets/store-checkout.js?v=stock-label
-  - assets/store-checkout-bsv.js?v=no-stock-round1
-  - assets/store-verify-email.js?v=verify-sku-handoff
-  - assets/store-pending-bsv.js?v=no-round1
+  - assets/qrcode-generator.js
+  - assets/store-checkout.js?v=zone-required
+  - assets/store-checkout-bsv.js?v=validate-disabled
+  - assets/store-verify-email.js?v=auto-redirect
+  - assets/store-pending-bsv.js?v=cancel-hide-intro3
+  - assets/store-donate.js?v=qr-local
 
 extra:
   generator: false
@@ -141,14 +144,6 @@ extra:
   # Store API (dev checkout). Empty on prod builds until prod store launches.
   store_api_url: !ENV [PIWALLETSV_STORE_API_URL, ""]
   store_dev_banner: !ENV [PIWALLETSV_STORE_DEV_BANNER, ""]
-  # Signed firmware on GitHub Releases — same URLs on dev and prod docs.
-  firmware_version: !ENV [PIWALLETSV_FIRMWARE_VERSION, "0.1.0-r3"]
-  firmware_board: !ENV [PIWALLETSV_FIRMWARE_BOARD, "pi0"]
-  firmware_maturity: !ENV [PIWALLETSV_FIRMWARE_MATURITY, "beta"]
-  firmware_image_file: !ENV [PIWALLETSV_FIRMWARE_IMAGE_FILE, "piwalletsv-0.1.0-r3-pi0-beta.img.xz"]
-  firmware_github_tag: !ENV [PIWALLETSV_FIRMWARE_GITHUB_TAG, "v0.1.0-r3"]
-  firmware_release_base: !ENV [PIWALLETSV_FIRMWARE_RELEASE_BASE, "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r3"]
-  firmware_release_page: !ENV [PIWALLETSV_FIRMWARE_RELEASE_PAGE, "https://github.com/mohrt/PiWalletSV/releases/tag/v0.1.0-r3"]
 
 nav:
   - Home: index.md
@@ -157,16 +152,13 @@ nav:
           - Download image: download.md
           - Flash and first run: build-image.md
       - Build from scratch: getting-started.md
-      - Purchase: purchase.md
+      - Shop: purchase/shop.md
+      - Donate: donate.md
+      - Ways to get hardware: purchase/hardware.md
       - Shipping: purchase/shipping.md
       - Returns & refunds: purchase/returns.md
-      - Kit insert (print): print/index.md
-      - Order success: store/success.md
+      - Kit insert (print): print/printables.md
       - Order status: store/order-status.md
-      - Order cancelled: store/cancel.md
-      - BSV checkout: store/checkout-bsv.md
-      - Verify email: store/verify-email.md
-      - BSV payment: store/pending-bsv.md
   - User guide:
       - User manual: user-manual.md
       - Recover without device: recover-without-device.md

@@ -4,6 +4,14 @@ This page describes how to access or sweep your BSV when the PiWalletSV
 device is unavailable — lost, broken, or not yet replaced. The only thing
 you need is your **seed phrase** (12 or 24 words).
 
+PiWalletSV uses standard **BIP39** mnemonics and the **BIP44** path
+`m/44'/236'/0'` (BSV). You do **not** need a PiWalletSV device to recover
+funds — any BIP44-compatible tool that supports BSV works, including:
+
+- [iancoleman.io/bip39](https://iancoleman.io/bip39/) — verify addresses from a mnemonic
+- [satofinder.com](https://satofinder.com) — browser BSV wallet (import mnemonic)
+- [ElectrumSV](https://electrumsv.io/) — desktop wallet that can sweep funds
+
 !!! danger "Use an offline machine for this"
     Your seed phrase controls all funds in the wallet. Any tool you enter
     it into must be air-gapped or at least disconnected from the internet
@@ -24,10 +32,10 @@ path chooser during wallet creation, your values may differ.
 
 | Parameter | Default | Where to verify |
 |-----------|---------|-----------------|
-| **Mnemonic** | 12 or 24 words | Your seed backup |
+| **Mnemonic** | 12 or 24 words (BIP39) | Your seed backup |
 | **BIP39 passphrase** | *(none — leave blank)* | v1 uses no passphrase |
 | **Coin / network** | BSV mainnet | Companion or `piwallet vault list` |
-| **Derivation path** | `m/44'/236'/0'` | Companion wallet detail or `piwallet vault list` |
+| **Derivation path** | `m/44'/236'/0'` (BIP44 / SLIP-44) | Companion wallet detail or `piwallet vault list` |
 
 If you still have access to the companion web app
 (`app.piwalletsv.com` or your paired device's companion URL),
@@ -89,7 +97,23 @@ passphrase (empty), and path combination.
 
 ---
 
-## Option B — Sweep into ElectrumSV
+## Option B — Import with SatoFinder
+
+[SatoFinder](https://satofinder.com) is a browser-based BSV wallet that
+imports BIP39 mnemonics. Use it when you want a lightweight way to see
+balance and send from the same addresses PiWalletSV derived.
+
+1. Open <https://satofinder.com> (prefer a saved/offline copy for real
+   funds — same air-gap caution as Option A).
+2. Choose **Import existing mnemonic** and enter your 12 or 24 words.
+3. Confirm the derivation path is BIP44 for BSV (`m/44'/236'/0'` / coin
+   type `236`) and leave the BIP39 passphrase empty.
+4. Verify the first receive address matches one you previously used,
+   then send or sweep as needed.
+
+---
+
+## Option C — Sweep into ElectrumSV
 
 [ElectrumSV](https://electrumsv.io/) is an open-source BSV desktop wallet
 that understands BIP39 mnemonics and BIP44 paths natively. It is the
@@ -121,7 +145,7 @@ derived from your seed.
 
 ---
 
-## Option C — Command-line (developer / scripted recovery)
+## Option D — Command-line (developer / scripted recovery)
 
 If you are comfortable with Python and want to derive addresses or
 build a sweep transaction programmatically, the PiWalletSV library

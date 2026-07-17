@@ -200,10 +200,12 @@ A useful way to summarise:
 | Merkle proofs (BUMP, embedded in BEEF) | per-proposal, BUMP root compared to anchor | fetched + self-checked against the explorer's stated root |
 | Signed transactions (Atomic BEEF) | yes (after sign) | yes (received via QR) |
 
-The companion holds **public data only**. Its IndexedDB can be
-wiped without losing funds. The Pi's vault is the single source of
-private material; the BIP39 mnemonic on paper (or steel) outside the
-device is the recovery channel.
+The companion holds **public data only**. Its IndexedDB is an ephemeral
+watch-only cache and can be wiped without losing funds (Safari ITP may
+purge it after ~7 days of idle browser use). Restore by re-pairing the
+xpub from the Pi or importing a companion Settings export. The Pi's
+vault is the single source of private material; the BIP39 mnemonic on
+paper (or steel) outside the device is the recovery channel.
 
 ## 5. Module layout
 
@@ -306,9 +308,9 @@ Everything is permissively licensed (MIT / Apache-2.0).
 
 The companion blocks every page render until the user has
 acknowledged the current `DISCLAIMER.md`. The state machine lives in
-[`companion/src/lib/terms.ts`](https://github.com/example/piwallet/blob/main/companion/src/lib/terms.ts);
+[`companion/src/lib/terms.ts`](https://github.com/mohrt/PiWalletSV/blob/main/companion/src/lib/terms.ts);
 the blocking modal lives in
-[`companion/src/app/terms-modal.ts`](https://github.com/example/piwallet/blob/main/companion/src/app/terms-modal.ts).
+[`companion/src/app/terms-modal.ts`](https://github.com/mohrt/PiWalletSV/blob/main/companion/src/app/terms-modal.ts).
 `localStorage` persists the version + timestamp; bumping
 `CURRENT_TERMS_VERSION` re-prompts every user on next load.
 

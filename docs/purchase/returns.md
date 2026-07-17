@@ -1,74 +1,59 @@
 # Return & refund policy
 
-**Round-one beta hardware.** PiWalletSV kits ship with pre-release beta software.
-There is **no warranty**. See the [Disclaimer](../disclaimer.md).
+**Round-one kits.** PiWalletSV ships with **beta** software. There is **no warranty**.
+See the [Disclaimer](../disclaimer.md).
 
-Change-of-mind returns are subject to a **restocking fee** so we are not out of pocket
-on return shipping and repackaging. The fee is disclosed here and on the
-[purchase page](../purchase.md) before you order.
+Eligible returns must be requested within **30 days** of delivery. Message
+[@PiWalletSV on X](https://x.com/PiWalletSV) with your **order ID** before
+sending anything back. **Do not return items without authorization** —
+unauthorized returns may not be refunded.
 
-## Defective or damaged on arrival
+## Defective or damaged
 
-If hardware arrives DOA or visibly damaged in shipping, contact us within **14 days**
-of delivery with your **order ID** (Stripe receipt or BSV pending page) and photos.
-
-We will replace the item or issue a **full refund** (including outbound shipping).
-For confirmed defects we provide a prepaid return label (US) or reimburse reasonable
-return shipping (international).
+If hardware arrives DOA or is damaged in shipping, message
+[@PiWalletSV on X](https://x.com/PiWalletSV) with your order ID and photos.
+We handle return shipping and replacement or refund **case by case** — you
+should not be out of pocket when the issue is our fault or carrier damage.
 
 **No restocking fee** when the return is our fault.
 
 ## Wrong item
 
-Contact us within 14 days — we ship the correct item or refund in full.
-**No restocking fee.**
+Message us within 30 days — we ship the correct item or refund in full.
+**No restocking fee.** Arrangements are case by case via X.
 
-## Full kit — change of mind (unopened only)
+## Change of mind (unopened only)
 
-Unopened kits in resalable condition may be returned within **14 days** with prior
-authorization from [@PiWalletSV on X](https://x.com/PiWalletSV).
+Unopened kits or unused cases in resalable condition may be returned within
+**30 days** with prior authorization from [@PiWalletSV on X](https://x.com/PiWalletSV).
 
 | Deduction | Amount |
 |-----------|--------|
-| Restocking fee | **20%** of product price |
+| Restocking fee (full kit) | **20%** of product price |
+| Restocking fee (case only) | **15%** of product price |
 | Original outbound shipping | **Non-refundable** |
 | Return shipping | **You pay** |
 
-Opened, powered-on, or booted kits **cannot** be returned.
+Opened, powered-on, or booted kits **cannot** be returned for change of mind.
 
-## Full kit — after wallet setup
+## After wallet setup
 
 If you completed first-boot setup, entered a seed phrase, or funded the wallet,
 **no return or refund** is available. We cannot resell or re-flash a device that
 may have held keys.
 
-## Case only
-
-Unused cases in original condition may be returned within **14 days** with prior
-authorization.
-
-| Deduction | Amount |
-|-----------|--------|
-| Restocking fee | **15%** of product price |
-| Original outbound shipping | **Non-refundable** |
-| Return shipping | **You pay** |
-
 ## Software issues
 
 Beta software limitations, bugs, or compatibility issues are **not** grounds for a
 hardware refund. Use [@PiWalletSV on X](https://x.com/PiWalletSV), GitHub issues, or
-re-flash from [Download](../download.md). Re-flash the SD before funding
+re-flash from [GitHub Releases](https://github.com/mohrt/PiWalletSV/releases)
+([Download](../download.md)). Re-flash the SD before funding
 ([verify on arrival](../user-manual.md#verify-sd-card-on-arrival)).
 
 ## Non-custodial / lost funds
 
 We never have access to your keys. We cannot refund cryptocurrency losses, forgotten
 PINs, or lost seed phrases.
-
-## How to request a return
-
-Message [@PiWalletSV on X](https://x.com/PiWalletSV) with your order ID.
-**Do not return items without authorization** — unauthorized returns may not be refunded.
 
 ## Refund timing
 
@@ -79,4 +64,4 @@ BSV spot price.
 
 ---
 
-_Last updated: 2026-06-16. Not legal advice — consult a lawyer for your jurisdiction._
+_Last updated: 2026-07-16. Not legal advice — consult a lawyer for your jurisdiction._

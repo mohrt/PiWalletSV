@@ -17,13 +17,23 @@
   const sendVerifyBtn = document.getElementById("piwalletsv-bsv-send-verify");
   const verifySentEl = document.getElementById("piwalletsv-bsv-verify-sent");
   const verifiedEmailEl = shippingStep && shippingStep.querySelector("[data-verified-email]");
+  const validateBtn = document.getElementById("piwalletsv-bsv-validate-address");
   const submitBtn = document.getElementById("piwalletsv-bsv-checkout-submit");
   const errorEl = document.getElementById("piwalletsv-bsv-checkout-error");
   const productEl = document.getElementById("piwalletsv-bsv-checkout-product");
   const stockEl = document.getElementById("piwalletsv-bsv-checkout-stock");
   const quoteEl = document.getElementById("piwalletsv-bsv-checkout-quote");
+  const addressCheckEl = document.getElementById("piwalletsv-bsv-address-check");
+  const addressModal = document.getElementById("piwalletsv-bsv-address-modal");
+  const correctedAddressEl =
+    addressModal && addressModal.querySelector("[data-corrected-address]");
 
   const SESSION_KEY = "piwalletsv_bsv_email_verification";
+  const DEST_COUNTRY_KEY = "piwalletsv_bsv_ship_country";
+  let addressValidated = false;
+  let quoteSeq = 0;
+  let submitting = false;
+  let pendingCorrectedAddress = null;
 
   const COUNTRY_FIELD_COPY = {
     US: { state: "State", postal: "ZIP code", postalPlaceholder: "78701" },
@@ -32,6 +42,28 @@
     AU: { state: "State / territory", postal: "Postcode", postalPlaceholder: "2000" },
     DE: { state: "Region (optional)", postal: "Postcode", postalPlaceholder: "10115" },
     FR: { state: "Region (optional)", postal: "Postcode", postalPlaceholder: "75001" },
+    NL: { state: "Province (optional)", postal: "Postcode", postalPlaceholder: "1012 AB" },
+    BE: { state: "Province (optional)", postal: "Postcode", postalPlaceholder: "1000" },
+    LU: { state: "Canton (optional)", postal: "Postcode", postalPlaceholder: "1009" },
+    IE: { state: "County (optional)", postal: "Eircode", postalPlaceholder: "D02 AF30" },
+    ES: { state: "Province (optional)", postal: "Postcode", postalPlaceholder: "28001" },
+    PT: { state: "District (optional)", postal: "Postcode", postalPlaceholder: "1000-001" },
+    IT: { state: "Province (optional)", postal: "Postcode", postalPlaceholder: "00118" },
+    AT: { state: "State (optional)", postal: "Postcode", postalPlaceholder: "1010" },
+    CH: { state: "Canton (optional)", postal: "Postcode", postalPlaceholder: "8001" },
+    SE: { state: "County (optional)", postal: "Postcode", postalPlaceholder: "111 22" },
+    NO: { state: "County (optional)", postal: "Postcode", postalPlaceholder: "0150" },
+    DK: { state: "Region (optional)", postal: "Postcode", postalPlaceholder: "1050" },
+    FI: { state: "Region (optional)", postal: "Postcode", postalPlaceholder: "00100" },
+    PL: { state: "Province (optional)", postal: "Postcode", postalPlaceholder: "00-001" },
+    CZ: { state: "Region (optional)", postal: "Postcode", postalPlaceholder: "110 00" },
+    NZ: { state: "Region (optional)", postal: "Postcode", postalPlaceholder: "6011" },
+  };
+
+  const DEFAULT_FIELD_COPY = {
+    state: "Region (optional)",
+    postal: "Postal code",
+    postalPlaceholder: "",
   };
 
   function formatUsd(cents) {
@@ -50,7 +82,7 @@
   }
 
   function applyCountryFieldCopy(country) {
-    const copy = COUNTRY_FIELD_COPY[country] || COUNTRY_FIELD_COPY.US;
+    const copy = COUNTRY_FIELD_COPY[country] || DEFAULT_FIELD_COPY;
     const stateLabel = form.querySelector("[data-state-label]");
     const postalLabel = form.querySelector("[data-postal-label]");
     const postalInput = form.querySelector('input[name="postal_code"]');
@@ -75,10 +107,26 @@
 
   function setBusy(busy, activeBtn) {
     if (submitBtn) {
-      submitBtn.disabled = busy;
-      submitBtn.setAttribute(
+      if (busy) {
+        if (!activeBtn || activeBtn === submitBtn) {
+          submitting = true;
+          submitBtn.disabled = true;
+          submitBtn.setAttribute(
+            "aria-busy",
+            !activeBtn || activeBtn === submitBtn ? "true" : "false"
+          );
+        }
+      } else {
+        submitting = false;
+        submitBtn.setAttribute("aria-busy", "false");
+        syncActionButtons();
+      }
+    }
+    if (validateBtn) {
+      validateBtn.disabled = busy;
+      validateBtn.setAttribute(
         "aria-busy",
-        busy && (!activeBtn || activeBtn === submitBtn) ? "true" : "false"
+        busy && activeBtn === validateBtn ? "true" : "false"
       );
     }
     if (sendVerifyBtn) {
@@ -87,6 +135,136 @@
         "aria-busy",
         busy && activeBtn === sendVerifyBtn ? "true" : "false"
       );
+    }
+  }
+
+  function syncActionButtons() {
+    if (submitting) {
+      return;
+    }
+    const checking =
+      addressCheckEl &&
+      !addressCheckEl.hidden &&
+      addressCheckEl.getAttribute("aria-busy") === "true";
+
+    if (validateBtn) {
+      validateBtn.hidden = false;
+      validateBtn.disabled = !!addressValidated || !!checking;
+      validateBtn.setAttribute(
+        "aria-busy",
+        checking && !addressValidated ? "true" : "false"
+      );
+      if (addressValidated) {
+        validateBtn.title = "Address already validated";
+      } else if (checking) {
+        validateBtn.title = "Checking address…";
+      } else {
+        validateBtn.removeAttribute("title");
+      }
+    }
+
+    if (!submitBtn) {
+      return;
+    }
+    const allow = !!addressValidated && !checking;
+    submitBtn.hidden = !addressValidated;
+    submitBtn.disabled = !allow;
+    submitBtn.setAttribute("aria-disabled", allow ? "false" : "true");
+    submitBtn.type = allow ? "submit" : "button";
+    if (allow) {
+      submitBtn.removeAttribute("title");
+    } else if (checking) {
+      submitBtn.title = "Checking address…";
+    } else {
+      submitBtn.title = "Validate your shipping address first";
+    }
+  }
+
+  function setAddressChecking(checking) {
+    if (addressCheckEl) {
+      // Only surface this while a validate/quote request is in flight.
+      addressCheckEl.hidden = !checking;
+      addressCheckEl.setAttribute("aria-busy", checking ? "true" : "false");
+      addressCheckEl.textContent = checking ? "Checking address…" : "";
+    }
+    if (submitBtn && !submitting) {
+      if (checking) {
+        submitBtn.disabled = true;
+        submitBtn.setAttribute("aria-disabled", "true");
+        submitBtn.type = "button";
+        submitBtn.setAttribute("aria-busy", "true");
+        submitBtn.title = "Checking address…";
+      } else {
+        submitBtn.setAttribute("aria-busy", "false");
+      }
+    }
+    syncActionButtons();
+  }
+
+  function invalidateAddress() {
+    addressValidated = false;
+    pendingCorrectedAddress = null;
+    if (quoteEl) {
+      quoteEl.hidden = true;
+    }
+    syncActionButtons();
+  }
+
+  function formatAddressBlock(address) {
+    const a = address || {};
+    const lines = [];
+    if (a.line1) {
+      lines.push(a.line1);
+    }
+    if (a.line2) {
+      lines.push(a.line2);
+    }
+    const cityLine = [a.city, a.state, a.postal_code].filter(Boolean).join(", ");
+    if (cityLine) {
+      lines.push(cityLine);
+    }
+    if (a.country) {
+      lines.push(a.country);
+    }
+    return lines.join("\n");
+  }
+
+  function fillShippingAddress(address) {
+    const a = address || {};
+    const setVal = function (name, value) {
+      const el = form.querySelector('[name="' + name + '"]');
+      if (el) {
+        el.value = value || "";
+      }
+    };
+    setVal("line1", a.line1);
+    setVal("line2", a.line2);
+    setVal("city", a.city);
+    setVal("state", a.state);
+    setVal("postal_code", a.postal_code);
+    if (a.country) {
+      setVal("country", String(a.country).toUpperCase());
+      applyCountryFieldCopy(String(a.country).toUpperCase());
+    }
+  }
+
+  function openAddressModal(corrected) {
+    pendingCorrectedAddress = corrected || null;
+    if (!addressModal || !correctedAddressEl) {
+      return;
+    }
+    correctedAddressEl.textContent = formatAddressBlock(corrected);
+    addressModal.hidden = false;
+    const acceptBtn = addressModal.querySelector("[data-addr-accept]");
+    if (acceptBtn) {
+      acceptBtn.focus();
+    }
+  }
+
+  function closeAddressModal() {
+    pendingCorrectedAddress = null;
+    if (addressModal) {
+      addressModal.hidden = true;
     }
   }
 
@@ -142,15 +320,63 @@
   }
 
   function writeSession(data) {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
+    const prev = readSession() || {};
+    sessionStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify(Object.assign({}, prev, data))
+    );
+  }
+
+  function rememberShipCountry(code) {
+    const country = String(code || "")
+      .trim()
+      .toUpperCase();
+    if (country.length === 2) {
+      sessionStorage.setItem(DEST_COUNTRY_KEY, country);
+      writeSession({ country: country });
+    }
+  }
+
+  function rememberedShipCountry() {
+    const fromStore = (sessionStorage.getItem(DEST_COUNTRY_KEY) || "")
+      .trim()
+      .toUpperCase();
+    if (fromStore.length === 2) {
+      return fromStore;
+    }
+    const session = readSession();
+    const fromSession = session && session.country
+      ? String(session.country).trim().toUpperCase()
+      : "";
+    return fromSession.length === 2 ? fromSession : "";
   }
 
   function clearSession() {
+    const country = rememberedShipCountry();
     sessionStorage.removeItem(SESSION_KEY);
+    if (country) {
+      sessionStorage.setItem(DEST_COUNTRY_KEY, country);
+    }
   }
 
-  function resetToEmailStep(message) {
+  function clearCheckoutState() {
+    sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(DEST_COUNTRY_KEY);
+  }
+
+  // Persist shop destination across email verify (redirect drops query params).
+  (function stashDestinationFromQuery() {
+    const fromQuery = (params.get("country") || "").trim().toUpperCase();
+    if (fromQuery.length === 2) {
+      rememberShipCountry(fromQuery);
+    }
+  })();
+
+  function resetToEmailStep(message, options) {
+    const opts = options || {};
     clearSession();
+    closeAddressModal();
+    invalidateAddress();
     if (quoteEl) {
       quoteEl.hidden = true;
     }
@@ -162,6 +388,12 @@
     }
     if (emailInput) {
       emailInput.readOnly = false;
+      if (opts.clearEmail) {
+        emailInput.value = "";
+      }
+    }
+    if (sendVerifyBtn) {
+      sendVerifyBtn.textContent = "Send verification link";
     }
     if (verifySentEl) {
       verifySentEl.hidden = true;
@@ -170,9 +402,18 @@
       verifiedEmailEl.textContent = "…";
     }
     showError(
-      message || "Your email verification expired. Send a new link to continue."
+      message === undefined
+        ? "Your email verification expired. Send a new link to continue."
+        : message || ""
     );
     setBusy(false);
+    if (opts.focusEmail && emailInput) {
+      emailInput.focus();
+    }
+  }
+
+  function changeEmail() {
+    resetToEmailStep("", { clearEmail: true, focusEmail: true });
   }
 
   function handleAuthFailure(message) {
@@ -208,6 +449,7 @@
     }
     if (shippingStep) {
       shippingStep.hidden = false;
+      invalidateAddress();
     }
   }
 
@@ -235,6 +477,7 @@
     return (
       body.customer_email &&
       body.email_verification_token &&
+      body.shipping_name &&
       a.line1 &&
       a.city &&
       a.postal_code &&
@@ -243,25 +486,38 @@
     );
   }
 
-  let quoteTimer = null;
-
-  function scheduleQuote() {
+  function renderQuote(data) {
     if (!quoteEl) {
       return;
     }
-    clearTimeout(quoteTimer);
-    quoteTimer = setTimeout(refreshQuote, 400);
+    quoteEl.hidden = false;
+    const shipEl = quoteEl.querySelector("[data-quote-shipping]");
+    const taxEl = quoteEl.querySelector("[data-quote-tax]");
+    const totalEl = quoteEl.querySelector("[data-quote-total]");
+    const bsvEl = quoteEl.querySelector("[data-quote-bsv]");
+    if (shipEl) {
+      shipEl.textContent =
+        (data.shipping_label || "Shipping") + " — " + formatUsd(data.shipping_cents || 0);
+    }
+    if (taxEl) {
+      taxEl.textContent = formatUsd(data.tax_cents || 0);
+    }
+    if (totalEl) {
+      totalEl.textContent = formatUsd(data.total_cents || 0);
+    }
+    if (bsvEl && data.bsv_amount_sats != null) {
+      bsvEl.textContent = satsToBsvDisplay(data.bsv_amount_sats);
+    }
   }
 
-  async function refreshQuote() {
-    if (!quoteEl) {
-      return;
-    }
+  async function fetchFullQuote(seq) {
     const body = checkoutBodyFromForm();
     if (!canQuote(body)) {
-      quoteEl.hidden = true;
-      return;
+      invalidateAddress();
+      setAddressChecking(false);
+      return false;
     }
+    setAddressChecking(true);
     try {
       const resp = await fetch(apiUrl + "/v1/checkout/bsv/quote", {
         method: "POST",
@@ -271,37 +527,117 @@
       const data = await resp.json().catch(function () {
         return {};
       });
+      if (seq !== quoteSeq) {
+        return false;
+      }
       if (!resp.ok) {
-        quoteEl.hidden = true;
+        invalidateAddress();
+        setAddressChecking(false);
         if (data.error && handleAuthFailure(data.error)) {
-          return;
+          return false;
         }
         if (data.error) {
           showError(data.error);
         }
-        return;
+        return false;
       }
       showError("");
-      quoteEl.hidden = false;
-      const shipEl = quoteEl.querySelector("[data-quote-shipping]");
-      const taxEl = quoteEl.querySelector("[data-quote-tax]");
-      const totalEl = quoteEl.querySelector("[data-quote-total]");
-      const bsvEl = quoteEl.querySelector("[data-quote-bsv]");
-      if (shipEl) {
-        shipEl.textContent =
-          (data.shipping_label || "Shipping") + " — " + formatUsd(data.shipping_cents || 0);
-      }
-      if (taxEl) {
-        taxEl.textContent = formatUsd(data.tax_cents || 0);
-      }
-      if (totalEl) {
-        totalEl.textContent = formatUsd(data.total_cents || 0);
-      }
-      if (bsvEl && data.bsv_amount_sats != null) {
-        bsvEl.textContent = satsToBsvDisplay(data.bsv_amount_sats);
-      }
+      addressValidated = true;
+      renderQuote(data);
+      setAddressChecking(false);
+      syncActionButtons();
+      return true;
     } catch (_err) {
-      quoteEl.hidden = true;
+      if (seq !== quoteSeq) {
+        return false;
+      }
+      invalidateAddress();
+      setAddressChecking(false);
+      showError("Could not load quote. Try again.");
+      return false;
+    }
+  }
+
+  async function validateAddress() {
+    showError("");
+    closeAddressModal();
+    const body = checkoutBodyFromForm();
+    if (!canQuote(body)) {
+      showError("Fill in name and a complete shipping address first.");
+      return;
+    }
+    const seq = ++quoteSeq;
+    setAddressChecking(true);
+    if (validateBtn) {
+      validateBtn.disabled = true;
+      validateBtn.setAttribute("aria-busy", "true");
+    }
+    try {
+      const validateResp = await fetch(apiUrl + "/v1/checkout/bsv/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({}, body, { validate_only: true })),
+      });
+      const validateData = await validateResp.json().catch(function () {
+        return {};
+      });
+      if (seq !== quoteSeq) {
+        return;
+      }
+      if (!validateResp.ok) {
+        invalidateAddress();
+        setAddressChecking(false);
+        if (validateData.error && handleAuthFailure(validateData.error)) {
+          return;
+        }
+        showError(validateData.error || "Address could not be verified.");
+        return;
+      }
+
+      if (validateData.address_corrected && validateData.shipping_address) {
+        setAddressChecking(false);
+        if (validateBtn) {
+          validateBtn.setAttribute("aria-busy", "false");
+          validateBtn.disabled = false;
+        }
+        openAddressModal(validateData.shipping_address);
+        return;
+      }
+
+      await fetchFullQuote(seq);
+    } catch (_err) {
+      if (seq !== quoteSeq) {
+        return;
+      }
+      invalidateAddress();
+      setAddressChecking(false);
+      showError("Address check failed. Try again.");
+    } finally {
+      if (validateBtn && !addressValidated) {
+        validateBtn.setAttribute("aria-busy", "false");
+        validateBtn.disabled = false;
+      }
+    }
+  }
+
+  async function acceptCorrectedAddress() {
+    if (!pendingCorrectedAddress) {
+      closeAddressModal();
+      return;
+    }
+    fillShippingAddress(pendingCorrectedAddress);
+    closeAddressModal();
+    const seq = ++quoteSeq;
+    await fetchFullQuote(seq);
+  }
+
+  function rejectCorrectedAddress() {
+    closeAddressModal();
+    invalidateAddress();
+    showError("");
+    const line1 = form.querySelector('input[name="line1"]');
+    if (line1) {
+      line1.focus();
     }
   }
 
@@ -369,19 +705,63 @@
     sendVerifyBtn.addEventListener("click", sendVerification);
   }
 
+  const changeEmailBtn = document.getElementById("piwalletsv-bsv-change-email");
+  if (changeEmailBtn) {
+    changeEmailBtn.addEventListener("click", changeEmail);
+  }
+
+  if (validateBtn) {
+    validateBtn.addEventListener("click", validateAddress);
+  }
+
+  if (addressModal) {
+    const acceptBtn = addressModal.querySelector("[data-addr-accept]");
+    const rejectBtn = addressModal.querySelector("[data-addr-reject]");
+    const dismissEls = addressModal.querySelectorAll("[data-addr-dismiss]");
+    if (acceptBtn) {
+      acceptBtn.addEventListener("click", acceptCorrectedAddress);
+    }
+    if (rejectBtn) {
+      rejectBtn.addEventListener("click", rejectCorrectedAddress);
+    }
+    dismissEls.forEach(function (el) {
+      el.addEventListener("click", rejectCorrectedAddress);
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && addressModal && !addressModal.hidden) {
+        rejectCorrectedAddress();
+      }
+    });
+  }
+
   if (shippingStep) {
     const countrySelect = form.querySelector('select[name="country"]');
     if (countrySelect) {
-      applyCountryFieldCopy(countrySelect.value);
+      const preferred =
+        (params.get("country") || "").trim().toUpperCase() ||
+        rememberedShipCountry();
+      if (
+        preferred &&
+        countrySelect.querySelector('option[value="' + preferred + '"]')
+      ) {
+        countrySelect.value = preferred;
+        rememberShipCountry(preferred);
+      }
+      applyCountryFieldCopy(countrySelect.value || "US");
       countrySelect.addEventListener("change", function () {
-        applyCountryFieldCopy(countrySelect.value);
+        rememberShipCountry(countrySelect.value || "");
+        applyCountryFieldCopy(countrySelect.value || "US");
+        invalidateAddress();
       });
     }
     shippingStep.querySelectorAll("input, select").forEach(function (input) {
-      input.addEventListener("input", scheduleQuote);
-      input.addEventListener("change", scheduleQuote);
+      input.addEventListener("input", invalidateAddress);
+      input.addEventListener("change", invalidateAddress);
     });
+    invalidateAddress();
   }
+
+  syncActionButtons();
 
   async function loadInventory() {
     try {
@@ -421,6 +801,11 @@
 
   form.addEventListener("submit", async function (ev) {
     ev.preventDefault();
+    if (!addressValidated || submitting) {
+      showError("Validate your shipping address first.");
+      syncActionButtons();
+      return;
+    }
     const session = readSession();
     if (!session || isSessionTokenExpired(session)) {
       resetToEmailStep(
@@ -451,7 +836,7 @@
         }
         throw new Error(data.error || "checkout failed");
       }
-      clearSession();
+      clearCheckoutState();
       if (data.pending_url) {
         window.location.href = data.pending_url;
         return;

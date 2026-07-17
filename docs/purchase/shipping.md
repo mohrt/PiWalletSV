@@ -1,22 +1,27 @@
 # Shipping
 
 PiWalletSV ships **full kits** and **case-only** orders from the United States via
-[Easyship](https://www.easyship.com/) (discounted multi-carrier rates). Checkout collects
-your shipping address; shipping fees are shown before you pay.
+[Shippo](https://goshippo.com/) (multi-carrier labels). Checkout collects your shipping
+address; shipping fees are shown before you pay.
 
 ## Regions
 
 Checkout accepts shipping addresses in:
 
-**US, Canada, UK, Australia, Germany, France**
+**US, Canada, UK, Australia, New Zealand**, plus **Austria, Belgium, Czechia, Denmark,
+Finland, France, Germany, Ireland, Italy, Luxembourg, Netherlands, Norway, Poland,
+Portugal, Spain, Sweden, Switzerland**.
 
 ## How shipping is priced
 
-We use **zone-based flat rates** per product (full kit vs case-only), calibrated from
-Easyship quotes so domestic and international shipping stay affordable. Rates may be
-adjusted between batches as carrier prices change.
+We use **zone-based flat rates** per product (full kit vs case-only):
 
-After payment, we buy the most economical **tracked** label available for your destination.
+1. On the [shop](shop.md), choose **United States** or **International**.
+2. Card and BSV checkout apply that zone’s flat rate automatically (no shipping method to pick).
+3. Enter the exact address (and country, if international) on the payment form.
+
+Rates may be adjusted between batches as carrier prices change. After payment, we buy
+the most economical **tracked** label available for your destination via Shippo.
 
 ## Delivery time
 
@@ -25,7 +30,7 @@ Typical transit (after we ship — usually within a few business days of payment
 | Region | Estimate |
 |--------|----------|
 | US domestic | 3–7 business days |
-| Canada / UK / EU / AU | 7–21 business days |
+| Canada / UK / EU / AU / NZ | 7–21 business days |
 
 These are estimates, not guarantees. Customs can add delay internationally.
 
@@ -37,7 +42,7 @@ collected at checkout and is **your responsibility**.
 
 ## Tracking
 
-When your label is purchased, tracking appears on the
+When your package ships, tracking appears on the
 [order status page](/store/order-status/) (use your order ID). You may also receive
 email from us with the carrier tracking number.
 

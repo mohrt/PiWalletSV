@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PiWalletSV — Seed Phrase Backup</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Serif+Display&display=swap");
+
+    :root {
+      --ink: #061018;
+      --navy: #0b1a2e;
+      --gold: #f0b90b;
+      --green: #51cf66;
+      --muted: #5c6b7a;
+      --line: #d0dae6;
+      --line-soft: #e8eef4;
+      --paper: #ffffff;
+      --cell: #f7f9fb;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    @page { size: letter; margin: 0; }
+
+    html, body {
+      font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.35;
+      color: var(--ink);
+      background: #e6ebf0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .sheet {
+      width: 8.5in;
+      height: 11in;
+      margin: 0.4in auto;
+      background: var(--paper);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(6, 16, 24, 0.12);
+    }
+
+    .sheet::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--gold) 0%, var(--green) 100%);
+      z-index: 2;
+    }
+
+    .sheet-inner {
+      height: 100%;
+      padding: 0.28in 0.38in 0.24in;
+      display: flex;
+      flex-direction: column;
+      gap: 0.12in;
+    }
+
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.2in;
+      padding-bottom: 0.08in;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .sheet-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.14in;
+    }
+
+    .sheet-brand img {
+      width: 0.68in;
+      height: auto;
+    }
+
+    .sheet-brand-text h1 {
+      font-family: "DM Serif Display", Georgia, serif;
+      font-size: 13.5pt;
+      font-weight: 400;
+      color: var(--navy);
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .sheet-brand-text p {
+      font-size: 7.5pt;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-top: 0.02in;
+    }
+
+    .sheet-note {
+      font-size: 7.5pt;
+      color: var(--muted);
+      text-align: right;
+      max-width: 3.4in;
+      line-height: 1.35;
+    }
+
+    .cards {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.12in;
+      min-height: 0;
+    }
+
+    .cut-guide {
+      display: flex;
+      align-items: center;
+      gap: 0.12in;
+      color: var(--muted);
+      font-size: 6.5pt;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .cut-guide::before,
+    .cut-guide::after {
+      content: "";
+      flex: 1;
+      border-top: 1px dashed #b8c4d2;
+    }
+
+    .card {
+      border: 1.25px solid var(--line);
+      border-radius: 8px;
+      padding: 0.16in 0.18in 0.14in;
+      display: flex;
+      flex-direction: column;
+      gap: 0.1in;
+      position: relative;
+      background: linear-gradient(180deg, #fff 0%, #fcfdfe 100%);
+      min-height: 0;
+    }
+
+    .card--12 {
+      flex: 0 0 38%;
+    }
+
+    .card--24 {
+      flex: 1 1 auto;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0.28in; bottom: 0.28in;
+      width: 3px;
+      border-radius: 0 2px 2px 0;
+      background: linear-gradient(180deg, var(--gold), var(--green));
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.16in;
+      padding-left: 0.08in;
+    }
+
+    .card-title {
+      font-family: "DM Serif Display", Georgia, serif;
+      font-size: 12.5pt;
+      color: var(--navy);
+      letter-spacing: -0.01em;
+      line-height: 1.1;
+    }
+
+    .card-sub {
+      font-size: 7pt;
+      color: var(--muted);
+      margin-top: 0.03in;
+      letter-spacing: 0.02em;
+    }
+
+    .length-badge {
+      flex-shrink: 0;
+      font-size: 8pt;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--navy);
+      background: linear-gradient(135deg, #fff8e0, #eefaf1);
+      border: 1px solid #e0d0a0;
+      border-radius: 999px;
+      padding: 0.05in 0.14in;
+      white-space: nowrap;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: 1.4fr 0.9fr 1fr;
+      gap: 0.1in;
+      padding-left: 0.08in;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.04in;
+    }
+
+    .field label {
+      font-size: 6.5pt;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .field .line {
+      border-bottom: 1px solid #c5d0dc;
+      height: 0.24in;
+    }
+
+    .words {
+      flex: 1;
+      display: grid;
+      gap: 0.07in;
+      padding-left: 0.08in;
+      min-height: 0;
+    }
+
+    .words--12 {
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+    }
+
+    .words--24 {
+      grid-template-columns: repeat(4, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+    }
+
+    .word {
+      display: flex;
+      align-items: stretch;
+      border: 1px solid var(--line-soft);
+      border-radius: 4px;
+      background: var(--cell);
+      overflow: hidden;
+      min-height: 0.38in;
+    }
+
+    .card--12 .word {
+      min-height: 0.52in;
+    }
+
+    .word-num {
+      flex: 0 0 0.28in;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 7pt;
+      font-weight: 600;
+      color: var(--muted);
+      background: #eef2f6;
+      border-right: 1px solid var(--line-soft);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .word-blank {
+      flex: 1;
+      background: #fff;
+    }
+
+    .card-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.12in;
+      padding-left: 0.08in;
+      padding-top: 0.04in;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .card-foot p {
+      font-size: 6.5pt;
+      color: var(--muted);
+      line-height: 1.35;
+      max-width: 5.4in;
+    }
+
+    .card-foot strong {
+      color: var(--navy);
+      font-weight: 600;
+    }
+
+    .badge {
+      font-size: 6.5pt;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--navy);
+      border: 1px solid var(--gold);
+      background: #fffaf0;
+      border-radius: 3px;
+      padding: 0.03in 0.08in;
+      white-space: nowrap;
+    }
+
+    .sheet-foot {
+      font-size: 6.5pt;
+      color: var(--muted);
+      text-align: center;
+      letter-spacing: 0.02em;
+    }
+
+    .sheet-foot a {
+      color: var(--navy);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    @media print {
+      html, body { background: #fff; }
+      .sheet { margin: 0; box-shadow: none; }
+      .print-toolbar,
+      .no-print { display: none !important; }
+    }
+
+    @media screen {
+      body {
+        background: #dde3ea;
+        padding: 3.25rem 24px 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+      }
+      .print-toolbar {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        padding: 0.55rem 1rem;
+        background: var(--navy);
+        color: #fff;
+        font-size: 0.8125rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      }
+      .print-toolbar a,
+      .print-toolbar button {
+        font: inherit;
+        cursor: pointer;
+        border: 1px solid rgba(255,255,255,0.35);
+        border-radius: 4px;
+        padding: 0.35rem 0.85rem;
+        background: transparent;
+        color: #fff;
+        text-decoration: none;
+      }
+      .print-toolbar button.primary,
+      .print-toolbar a.primary {
+        background: var(--gold);
+        border-color: var(--gold);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .print-toolbar span { opacity: 0.85; }
+      .sheet {
+        margin: 0;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+        border-radius: 2px;
+      }
+    }
+
+    /* Docs-site iframe preview: flush letter page, no chrome/margins. */
+    html.embed,
+    html.embed body {
+      background: #fff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      display: block !important;
+      gap: 0 !important;
+    }
+    html.embed .print-toolbar,
+    html.embed .no-print {
+      display: none !important;
+    }
+    html.embed .sheet {
+      margin: 0 !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
+  </style>
+  <script>
+    (function () {
+      if (window.self !== window.top || /(?:^|[?&])embed=1(?:&|$)/.test(location.search)) {
+        document.documentElement.classList.add("embed");
+      }
+    })();
+  </script>
+</head>
+<body>
+
+  <div class="print-toolbar" aria-label="Print controls">
+    <span>PiWalletSV seed backup · US Letter · 12-word + 24-word cards</span>
+    <button type="button" class="primary" onclick="window.print()">Print</button>
+    <a href="printables/">Back to docs</a>
+  </div>
+
+  <div class="sheet">
+    <div class="sheet-inner">
+      <header class="sheet-head">
+        <div class="sheet-brand">
+          <img src="../assets/logo.png" alt="PiWalletSV">
+          <div class="sheet-brand-text">
+            <h1>Seed phrase backup</h1>
+            <p>BIP39 · Offline recovery</p>
+          </div>
+        </div>
+        <p class="sheet-note">
+          Two cards: a <strong>12-word</strong> phrase (default) and a
+          <strong>24-word</strong> phrase. Cut apart and store separately
+          from the device. Never photograph or enter these words online.
+        </p>
+      </header>
+
+      <div class="cards">
+
+        <!-- 12-word card -->
+        <article class="card card--12" aria-label="12-word seed backup card">
+          <div class="card-top">
+            <div>
+              <div class="card-title">12-word wallet seed</div>
+              <div class="card-sub">PiWalletSV default. Write each BIP39 word in order.</div>
+            </div>
+            <span class="length-badge">12 words</span>
+          </div>
+
+          <div class="meta">
+            <div class="field">
+              <label>Wallet label</label>
+              <div class="line"></div>
+            </div>
+            <div class="field">
+              <label>Date</label>
+              <div class="line"></div>
+            </div>
+            <div class="field">
+              <label>Path (default m/44'/236'/0')</label>
+              <div class="line"></div>
+            </div>
+          </div>
+
+          <div class="words words--12">
+            <div class="word"><span class="word-num">1</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">2</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">3</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">4</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">5</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">6</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">7</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">8</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">9</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">10</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">11</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">12</span><span class="word-blank"></span></div>
+          </div>
+
+          <div class="card-foot">
+            <p>
+              <strong>Keep offline.</strong> This phrase recovers your funds without the Pi.
+              Store apart from the device. See piwalletsv.com/recover-without-device/
+            </p>
+            <span class="badge">Confidential</span>
+          </div>
+        </article>
+
+        <div class="cut-guide" aria-hidden="true">Cut here</div>
+
+        <!-- 24-word card -->
+        <article class="card card--24" aria-label="24-word seed backup card">
+          <div class="card-top">
+            <div>
+              <div class="card-title">24-word wallet seed</div>
+              <div class="card-sub">Higher entropy option. Write each BIP39 word in order.</div>
+            </div>
+            <span class="length-badge">24 words</span>
+          </div>
+
+          <div class="meta">
+            <div class="field">
+              <label>Wallet label</label>
+              <div class="line"></div>
+            </div>
+            <div class="field">
+              <label>Date</label>
+              <div class="line"></div>
+            </div>
+            <div class="field">
+              <label>Path (default m/44'/236'/0')</label>
+              <div class="line"></div>
+            </div>
+          </div>
+
+          <div class="words words--24">
+            <div class="word"><span class="word-num">1</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">2</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">3</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">4</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">5</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">6</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">7</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">8</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">9</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">10</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">11</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">12</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">13</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">14</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">15</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">16</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">17</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">18</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">19</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">20</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">21</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">22</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">23</span><span class="word-blank"></span></div>
+            <div class="word"><span class="word-num">24</span><span class="word-blank"></span></div>
+          </div>
+
+          <div class="card-foot">
+            <p>
+              <strong>Keep offline.</strong> This phrase recovers your funds without the Pi.
+              Store apart from the device. See piwalletsv.com/recover-without-device/
+            </p>
+            <span class="badge">Confidential</span>
+          </div>
+        </article>
+
+      </div>
+
+      <p class="sheet-foot">
+        PiWalletSV · Air-gapped BSV cold wallet ·
+        <a href="https://piwalletsv.com">piwalletsv.com</a>
+      </p>
+    </div>
+  </div>
+
+</body>
+</html>

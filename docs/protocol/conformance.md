@@ -2,7 +2,7 @@
 
 This document points at the canonical fixtures a v1 implementation
 SHOULD validate itself against. The fixtures live in
-[`tests/fixtures/`](https://github.com/example/piwallet/tree/main/tests/fixtures)
+[`tests/fixtures/`](https://github.com/mohrt/PiWalletSV/tree/main/tests/fixtures)
 on GitHub and are committed to source so external implementations
 can pull just that directory without cloning the full repository.
 

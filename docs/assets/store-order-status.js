@@ -40,6 +40,22 @@
     return iso.replace("T", " ").replace("+00:00", " UTC");
   }
 
+  function safeHttpsHref(url) {
+    const raw = String(url || "").trim();
+    if (!/^https:\/\//i.test(raw)) {
+      return "";
+    }
+    try {
+      const parsed = new URL(raw);
+      if (parsed.protocol !== "https:") {
+        return "";
+      }
+      return parsed.href;
+    } catch (_err) {
+      return "";
+    }
+  }
+
   function setText(el, text) {
     if (el) {
       el.textContent = text;
@@ -79,13 +95,13 @@
       return "If you just paid by card, confirmation usually takes under a minute.";
     }
     if (status === "paid" || status === "fulfilled") {
-      return "We ship within a few business days. Tracking appears here once your package is in the mail.";
+      return "Tracking appears here once your package is in the mail.";
     }
     if (status === "shipped") {
       return "Your package is on the way.";
     }
     if (status === "cancelled") {
-      return "This order was cancelled. Contact @PiWalletSV on X if you think this is a mistake.";
+      return "This order was cancelled.";
     }
     return "";
   }
@@ -183,10 +199,14 @@
         setText(trackingSection.querySelector("[data-shipped-at]"), formatWhen(shipment.shipped_at));
         const trackLink = trackingSection.querySelector("[data-tracking-link]");
         if (trackLink) {
-          if (shipment.tracking_url) {
-            trackLink.href = shipment.tracking_url;
+          const safeUrl = shipment.tracking_url ? safeHttpsHref(shipment.tracking_url) : "";
+          if (safeUrl) {
+            trackLink.href = safeUrl;
+            trackLink.rel = "noopener noreferrer";
+            trackLink.target = "_blank";
             trackLink.hidden = false;
           } else {
+            trackLink.removeAttribute("href");
             trackLink.hidden = true;
           }
         }

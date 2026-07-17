@@ -3,7 +3,9 @@
 This is the user-facing path from "I have a downloaded SD-card image"
 to "I've signed my first transaction." It describes the flow that
 ships **without compiling anything yourself**, using the prebuilt
-PiWalletSV image distributed from the [Download](download.md) page.
+PiWalletSV image from
+[GitHub Releases](https://github.com/mohrt/PiWalletSV/releases)
+([Download](download.md) links there).
 
 If you'd rather build the image yourself from source, see
 [Build &amp; deploy](build.md). Both paths produce a sealed appliance
@@ -15,15 +17,15 @@ including the USB backup mount daemon, FAT/exFAT tools, and bonnet
 
 !!! warning "Beta software"
 
-    PiWalletSV is beta. Use TESTNET and small amounts only. The image
-    artifact described here is published as a community beta — there
-    is no commercial support behind it, and you remain responsible
+    PiWalletSV software is **beta**. It is fully functional with **no currently
+    known issues**. Bugs that turn up will be fixed and released; all notices
+    are posted on [@PiWalletSV](https://x.com/PiWalletSV). You remain responsible
     for verifying signatures and reading the [Disclaimer](disclaimer.md).
 
 ## What you need
 
 - A downloaded image (`.img.xz`) and its `.asc` signature, both from
-  the official [Download](download.md) page.
+  [GitHub Releases](https://github.com/mohrt/PiWalletSV/releases).
 - A **microSD card**, 8&nbsp;GB or larger.
 - A **Raspberry Pi Zero W or Zero WH** with the Adafruit 1.3&quot; 240×240 TFT
   bonnet ([product 4506](https://www.adafruit.com/product/4506)) and an
@@ -54,9 +56,13 @@ gpg --verify piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz.asc \
 shasum -a 256 piwalletsv-<VERSION>-<BOARD>[-maturity].img.xz
 ```
 
-The Download page lists the expected fingerprint and the SHA-256.
-A successful signature check ends with **&ldquo;Good signature&rdquo;** and the
-release key fingerprint &mdash; nothing else counts. If the verification
+Assets and checksums are on
+[GitHub Releases](https://github.com/mohrt/PiWalletSV/releases)
+([Download](download.md) is only a landing page). The release-key
+fingerprint is in
+[Security § Release key](security.md#release-key).
+A successful signature check ends with **&ldquo;Good signature&rdquo;** against
+that fingerprint &mdash; nothing else counts. If the verification
 fails, **stop**: do not flash. Mismatched signatures are how
 supply-chain attacks reach end-user devices.
 
@@ -74,7 +80,7 @@ automatically so you don't need to unzip first.
     1. Download and install Raspberry Pi Imager from
        [raspberrypi.com/software](https://www.raspberrypi.com/software/).
     2. Launch Imager. Under **Raspberry Pi Device** choose
-       *No filtering* (or pick *Raspberry Pi Zero 2 W*).
+       *No filtering* (or pick *Raspberry Pi Zero W*).
     3. Under **Operating System** click
        **&ldquo;Use custom&rdquo;** and select the verified `.img.xz` file.
        Imager decompresses it for you — you do not need 7-Zip or
@@ -185,14 +191,18 @@ automatically so you don't need to unzip first.
         write command.
 
 !!! question "Received a pre-flashed kit?"
-    You should **re-flash from a verified download** (recommended) before
-    you create a wallet. Optional: compare Image ID on kit paperwork, or
-    hash the SD in a computer reader without booting the Pi.
+    The assembled kit was booted for factory diagnostics, so the shipped
+    card will not byte-match the pristine image checksum. You should
+    **re-flash from a signed, checksum-verified download** (recommended)
+    before you create a wallet. Accepting it as shipped relies on the
+    factory and delivery chain.
     See [User manual § Verify your SD card on arrival](user-manual.md#verify-sd-card-on-arrival).
+
+--8<-- "docs/includes/remove-microsd-tip.md"
 
 ## Step 3 &mdash; Assemble the hardware
 
-1. Insert the flashed SD card into the Pi Zero 2&nbsp;W.
+1. Insert the flashed SD card into the Pi Zero / Zero&nbsp;W.
 2. Plug the bonnet onto the Pi's GPIO header. The bonnet's PWR-IN
    micro-USB port is the one **farther from the SD slot**; that's
    where you'll connect power.
@@ -230,10 +240,9 @@ see this screen again unless the disclaimer version changes.
 
 You'll see **First setup** with two choices:
 
-- **New vault (set PIN)** &mdash; choose and confirm a vault PIN. Use
-  the joystick to scroll digits, **A** to confirm each digit, **B**
-  to delete. The PIN protects the encrypted vault on disk; use a
-  long PIN (12+ digits) for cold storage.
+- **New vault (set PIN)** &mdash; choose and confirm a **6-digit** vault
+  PIN. Use the joystick to scroll digits, **A** to confirm each digit,
+  **B** to delete. The PIN protects the encrypted vault on disk.
 - **Restore from USB** &mdash; import a backup stick if you're
   replacing the SD card or upgrading firmware
   ([User manual § USB backup](user-manual.md#usb-backup)).
@@ -294,6 +303,10 @@ broadcast). It never sees your private keys.
    [companion]({{ companion_url }}) in a modern browser.
 
 ### Add the companion to your Home Screen
+
+Prefer **Chrome** or **Firefox** over Safari — see
+[User manual § Add to Home Screen](user-manual.md#add-to-home-screen)
+for why. Then:
 
 --8<-- "docs/includes/pwa-install-steps.md"
 
@@ -363,7 +376,8 @@ Brief summary:
 1. Back up your mnemonic and/or run **Settings → Maintenance → USB backup → Backup to USB**
    (or copy `vault.bin` off the SD card)
    **before** flashing.
-2. Download and verify a new image from [Download](download.md)
+2. Download and verify a new image from
+   [GitHub Releases](https://github.com/mohrt/PiWalletSV/releases)
    (Step&nbsp;1 above).
 3. Re-flash the microSD (Step&nbsp;2 above).
 4. Restore from your written-down mnemonic, or copy `vault.bin` back

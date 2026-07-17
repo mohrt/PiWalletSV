@@ -105,8 +105,7 @@ piwallet vault --vault-path ~/v.bin init
 | *(none)* | — | — | — | Inherits `--vault-path` from the `vault` group. |
 
 **Interactive prompts:** PIN entered **twice** (the second is a
-confirmation). Minimum length is 6 digits — shorter PINs are rejected
-before the vault is created.
+confirmation). The PIN is **6 digits**.
 
 **Effects:**
 - Generates a fresh 16-byte scrypt salt + AES-GCM key wrap structure.

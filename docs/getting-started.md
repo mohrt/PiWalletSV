@@ -6,9 +6,10 @@ transaction in a CLI smoke test." For the user-facing journey
 
 ## What you need
 
-- A **Raspberry Pi Zero 2 WH** (the W has a wireless module the
+- A **Raspberry Pi Zero / Zero W / Zero WH** (round-one target). Prefer
+  **Zero W** or **Zero WH** — the W has the wireless module the
   enclosure design assumes; the H has the pre-soldered header the
-  bonnet plugs into).
+  bonnet plugs into. **Pi Zero 2 W is not yet supported OOTB.**
 - An **Adafruit 1.3" 240×240 TFT bonnet** ([product 4506](https://www.adafruit.com/product/4506)) —
   ST7789-class panel with a joystick and A/B buttons.
 - An **ArduCam OV5647** camera module (kit camera) plus the ribbon
@@ -17,14 +18,18 @@ transaction in a CLI smoke test." For the user-facing journey
 - A **5 V power supply** with a micro-USB connector that plugs into
   the bonnet's **PWR IN** port (the one farthest from the SD slot).
 - A **phone, tablet, or laptop** with a camera, to run the
-  companion web app. Any modern browser (Chrome/Safari/Firefox) works.
+  companion web app. Prefer **Chrome** or **Firefox** on mobile —
+  companion wallets are an ephemeral IndexedDB cache. Safari’s ITP can
+  purge that storage after ~7 days of idle Safari use. Re-import the
+  xpub from the Pi, or migrate via companion **Settings → Export /
+  Import** — funds are unaffected.
 
 ## Bring up the bonnet
 
 The bonnet hardware setup is its own multi-step process — SPI
 buffer tuning, the dual-stack Adafruit driver situation, and so on.
 Rather than duplicate it here, read the canonical guide in
-[`GETTING_STARTED.md`](https://github.com/example/piwallet/blob/main/GETTING_STARTED.md)
+[`GETTING_STARTED.md`](https://github.com/mohrt/PiWalletSV/blob/main/GETTING_STARTED.md)
 at the project root, which walks through:
 
 1. Flashing Raspberry Pi OS Lite (Bookworm) with `raspi-imager`.
@@ -82,8 +87,8 @@ the matching `dtoverlay` and apt packages — see
 On a **laptop** (offline protocol development):
 
 ```bash
-git clone https://github.com/example/piwallet.git
-cd piwallet
+git clone https://github.com/mohrt/PiWalletSV.git
+cd PiWalletSV
 python3.13 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"

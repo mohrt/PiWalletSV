@@ -144,7 +144,7 @@ source ~/.venvs/piwallet/bin/activate
 python3 st7789_solid_fill_test.py
 ```
 
-- **Whole panel** flashes **red / green / blue** evenly → wiring and ST7789 init are mostly OK; focus on **full-frame `image()` / RAMWR** (Pi Zero + Blinka + `adafruit_rgb_display`), or try a **Pi Zero 2 W** for the same Python stack.
+- **Whole panel** flashes **red / green / blue** evenly → wiring and ST7789 init are mostly OK; focus on **full-frame `image()` / RAMWR** (Pi Zero + Blinka + `adafruit_rgb_display`).
 - **Still a “good half + garbage”** (or wrong colors in bands) → treat as **hardware**: re-seat the bonnet, confirm **Adafruit SKU [4506](https://www.adafruit.com/product/4506)** (not a different 1.3" / ST7789 board), then try Adafruit **stack B** ([kernel installer](https://learn.adafruit.com/adafruit-1-3-color-tft-bonnet-for-raspberry-pi/kernel-module-install) with `--display=st7789v_bonnet_240x240`) to see if the **kernel** framebuffer is clean (uninstall stack B before going back to Python SPI).
 
 **Garbled / “good on one side, noise on the other”:** apply **`spidev.bufsiz=131072`** on **`/boot/firmware/cmdline.txt`** (§4). Confirm `cat /sys/module/spidev/parameters/bufsiz` → **131072**. Then run **§7** and **§7b** as above. **`modprobe.d` alone often does nothing** when `spidev` is built-in.

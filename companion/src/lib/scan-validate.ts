@@ -26,7 +26,17 @@ export type ValidatedPw1Result =
   | { workflow: "settings-backup"; json: string; bytes: Uint8Array };
 
 export type ScanValidation =
-  | { ok: true; result: ValidatedPw1Result | { workflow: "send-address"; address: string } }
+  | {
+      ok: true;
+      result:
+        | ValidatedPw1Result
+        | {
+            workflow: "send-address";
+            address: string;
+            /** Present when BIP21 `?amount=` (BSV) was in the QR / pasted URI. */
+            amountSats?: number;
+          };
+    }
   | { ok: false; message: string };
 
 const WORKFLOW_HINT: Record<ScanWorkflow, string> = {
@@ -34,7 +44,7 @@ const WORKFLOW_HINT: Record<ScanWorkflow, string> = {
     "this screen expects a pairing xpub QR from the Pi (Add wallet flow)",
   "send-signed-tx":
     "this screen expects the signed transaction QR from the Pi (Send → Step 2)",
-  "send-address": "this screen expects a plain BSV payment address QR",
+  "send-address": "this screen expects a BSV address or bitcoin: payment URI (BIP21)",
   "settings-backup":
     "this screen expects a wallet transfer QR from Settings on another phone",
 };
@@ -102,7 +112,28 @@ export async function validatePw1Bytes(
   return { ok: false, message: wrongKindMessage(workflow, env.kind) };
 }
 
-/** Validate a single-frame address QR (Send recipient field). */
+/** BIP21 amount is BTC/BSV as a decimal string → integer sats. */
+export function bip21AmountToSats(amountStr: string): number | null {
+  const raw = amountStr.trim();
+  if (!raw) return null;
+  if (!/^\d+(\.\d+)?$/.test(raw)) return null;
+  const [whole, frac = ""] = raw.split(".");
+  if (frac.length > 8) {
+    const kept = frac.slice(0, 8);
+    const next = Number(frac[8] ?? "0");
+    let sats =
+      BigInt(whole || "0") * 100_000_000n + BigInt(kept.padEnd(8, "0"));
+    if (next >= 5) sats += 1n;
+    if (sats <= 0n || sats > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+    return Number(sats);
+  }
+  const sats =
+    BigInt(whole || "0") * 100_000_000n + BigInt(frac.padEnd(8, "0"));
+  if (sats <= 0n || sats > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  return Number(sats);
+}
+
+/** Validate a single-frame address / BIP21 payment URI QR (Send recipient field). */
 export function validateAddressQr(raw: string): ScanValidation {
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -115,7 +146,16 @@ export function validateAddressQr(raw: string): ScanValidation {
         "Wrong QR — PiWallet multipart QR detected. Use + Add wallet or Send → Step 2 for those codes.",
     };
   }
-  const addr = trimmed.replace(/^bitcoin:/i, "").split("?")[0].trim();
+
+  let rest = trimmed.replace(/^bitcoin:/i, "");
+  // Rare `bitcoin://address?...` form
+  if (rest.startsWith("//")) {
+    rest = rest.slice(2);
+  }
+  const qIdx = rest.indexOf("?");
+  const addr = (qIdx >= 0 ? rest.slice(0, qIdx) : rest).trim();
+  const query = qIdx >= 0 ? rest.slice(qIdx + 1) : "";
+
   if (!addr) {
     return { ok: false, message: "Wrong QR — no address found." };
   }
@@ -125,5 +165,29 @@ export function validateAddressQr(raw: string): ScanValidation {
       message: "Wrong QR — does not look like a BSV address (expected 1…, m…, or n…).",
     };
   }
-  return { ok: true, result: { workflow: "send-address", address: addr } };
+
+  let amountSats: number | undefined;
+  if (query) {
+    const params = new URLSearchParams(query);
+    const amountParam = params.get("amount");
+    if (amountParam != null && amountParam !== "") {
+      const sats = bip21AmountToSats(amountParam);
+      if (sats == null) {
+        return {
+          ok: false,
+          message: `Wrong QR — invalid BIP21 amount "${amountParam}".`,
+        };
+      }
+      amountSats = sats;
+    }
+  }
+
+  return {
+    ok: true,
+    result: {
+      workflow: "send-address",
+      address: addr,
+      ...(amountSats != null ? { amountSats } : {}),
+    },
+  };
 }

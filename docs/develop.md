@@ -29,8 +29,8 @@ the full tree. The short version:
 ## 2. Dev setup
 
 ```bash
-git clone https://github.com/example/piwallet.git
-cd piwallet
+git clone https://github.com/mohrt/PiWalletSV.git
+cd PiWalletSV
 
 # --- Python core ---------------------------------------------------------
 python3.13 -m venv .venv

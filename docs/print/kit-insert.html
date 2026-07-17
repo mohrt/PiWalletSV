@@ -226,9 +226,12 @@
     .essentials {
       background: var(--paper);
       height: 100%;
-      padding: 0.44in 0.52in 0.4in;
-      font-size: 9.5pt;
-      line-height: 1.42;
+      padding: 0.36in 0.48in 0.32in;
+      font-size: 9pt;
+      line-height: 1.35;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
     }
 
     .essentials header {
@@ -236,23 +239,24 @@
       align-items: center;
       justify-content: space-between;
       gap: 0.2in;
-      padding-bottom: 0.12in;
-      margin-bottom: 0.16in;
+      padding-bottom: 0.08in;
+      margin-bottom: 0.1in;
       border-bottom: 2px solid var(--ink);
+      flex-shrink: 0;
     }
 
     .essentials header h1 {
       font-family: "DM Serif Display", Georgia, serif;
-      font-size: 17pt;
+      font-size: 15pt;
       font-weight: 400;
       line-height: 1;
     }
 
     .essentials header .urls {
       text-align: right;
-      font-size: 8pt;
+      font-size: 7.5pt;
       color: var(--muted);
-      line-height: 1.45;
+      line-height: 1.4;
     }
 
     .essentials header .urls strong { color: var(--ink); font-weight: 600; }
@@ -260,19 +264,19 @@
     .grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 0.18in;
-      margin-bottom: 0.14in;
+      gap: 0.14in;
+      margin-bottom: 0.1in;
     }
 
-    .essentials section.block { margin-bottom: 0.12in; }
+    .essentials section.block { margin-bottom: 0.08in; }
 
     section.block h2 {
-      font-size: 9.25pt;
+      font-size: 8.5pt;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--navy);
-      margin-bottom: 0.07in;
+      margin-bottom: 0.05in;
       display: flex;
       align-items: center;
       gap: 0.06in;
@@ -281,37 +285,37 @@
     section.block h2::before {
       content: "";
       display: inline-block;
-      width: 0.13in;
-      height: 0.13in;
+      width: 0.12in;
+      height: 0.12in;
       border-radius: 2px;
       background: linear-gradient(135deg, var(--gold), var(--green));
       flex-shrink: 0;
     }
 
     section.block p,
-    section.block li { font-size: 8.75pt; color: #243040; }
+    section.block li { font-size: 8pt; color: #243040; }
 
     section.block ul,
-    section.block ol { padding-left: 0.19in; margin: 0; }
+    section.block ol { padding-left: 0.17in; margin: 0; }
 
-    section.block li { margin-bottom: 0.04in; }
+    section.block li { margin-bottom: 0.03in; }
 
     .block-lead {
-      font-size: 8.75pt;
+      font-size: 8pt;
       color: #243040;
-      margin-bottom: 0.07in;
-      line-height: 1.4;
+      margin-bottom: 0.05in;
+      line-height: 1.35;
     }
 
     .callout {
       background: var(--green-soft);
       border-left: 3px solid var(--green);
       border-radius: 0 6px 6px 0;
-      padding: 0.1in 0.12in;
-      font-size: 8.5pt;
+      padding: 0.08in 0.1in;
+      font-size: 7.75pt;
       color: #1a3d24;
-      margin-bottom: 0.12in;
-      line-height: 1.4;
+      margin-bottom: 0.1in;
+      line-height: 1.35;
     }
 
     .callout.warn {
@@ -320,7 +324,7 @@
       color: #4a3a00;
     }
 
-    .callout strong { display: block; margin-bottom: 0.04in; }
+    .callout strong { display: block; margin-bottom: 0.03in; }
 
     .steps {
       counter-reset: step;
@@ -331,23 +335,23 @@
     .steps li {
       counter-increment: step;
       position: relative;
-      padding-left: 0.26in;
-      margin-bottom: 0.055in;
-      font-size: 8.5pt;
-      line-height: 1.38;
+      padding-left: 0.24in;
+      margin-bottom: 0.035in;
+      font-size: 7.75pt;
+      line-height: 1.32;
     }
 
     .steps li::before {
       content: counter(step);
       position: absolute;
       left: 0;
-      top: 0.02in;
-      width: 0.17in;
-      height: 0.17in;
+      top: 0.01in;
+      width: 0.16in;
+      height: 0.16in;
       border-radius: 50%;
       background: var(--navy);
       color: #fff;
-      font-size: 7pt;
+      font-size: 6.5pt;
       font-weight: 700;
       display: flex;
       align-items: center;
@@ -357,7 +361,7 @@
     table.do-dont {
       width: 100%;
       border-collapse: collapse;
-      font-size: 8.25pt;
+      font-size: 7.5pt;
     }
 
     table.do-dont th {
@@ -382,20 +386,21 @@
     table.do-dont tr:nth-child(even) td { background: #f3f6f9; }
 
     .footer-strip {
-      margin-top: 0.14in;
-      padding-top: 0.12in;
+      margin-top: auto;
+      padding-top: 0.08in;
       border-top: 1px solid var(--line);
       display: flex;
       justify-content: space-between;
       align-items: flex-end;
       gap: 0.2in;
-      font-size: 7.5pt;
+      font-size: 7pt;
       color: var(--muted);
-      line-height: 1.4;
+      line-height: 1.35;
+      flex-shrink: 0;
     }
 
     .footer-strip .qr-hint {
-      font-size: 8pt;
+      font-size: 7.5pt;
       color: var(--ink);
       font-weight: 600;
     }
@@ -463,14 +468,40 @@
         border-radius: 2px;
       }
     }
+
+    /* Docs-site iframe preview: flush letter pages, no chrome/margins. */
+    html.embed,
+    html.embed body {
+      background: #fff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      display: block !important;
+      gap: 0 !important;
+    }
+    html.embed .print-toolbar {
+      display: none !important;
+    }
+    html.embed .page {
+      margin: 0 !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
   </style>
+  <script>
+    (function () {
+      if (window.self !== window.top || /(?:^|[?&])embed=1(?:&|$)/.test(location.search)) {
+        document.documentElement.classList.add("embed");
+      }
+    })();
+  </script>
 </head>
 <body>
 
   <div class="print-toolbar" aria-label="Print controls">
     <span>PiWalletSV kit insert · US Letter · 2 pages</span>
     <button type="button" class="primary" onclick="window.print()">Print</button>
-    <a href="../purchase/">Back to purchase</a>
+    <a href="printables/">Back to docs</a>
   </div>
 
   <!-- Page 1 — Welcome -->
@@ -534,11 +565,12 @@
     <div class="beta-strip">
       <span class="beta-title">Beta software — read before funding</span>
       <p>
-        PiWalletSV is pre-release software. There is no warranty and no
-        custodial recovery service.
+        PiWalletSV software is beta. It is fully functional with no currently
+        known issues. Bugs will be fixed and released; all notices are posted
+        on @PiWalletSV (x.com/PiWalletSV).
       </p>
       <p>
-        Begin with testnet and small amounts until you trust the full flow.
+        There is no warranty and no custodial recovery service.
         The bonnet walks you through a disclaimer on first boot; the full
         text is at piwalletsv.com/disclaimer
       </p>
@@ -547,11 +579,11 @@
     <div class="meta-bar">
       <div class="meta-item">
         <span class="meta-label">Firmware</span>
-        <span class="meta-value">0.1.0-r3 (pi0 beta)</span>
+        <span class="meta-value">________</span>
       </div>
       <div class="meta-item">
         <span class="meta-label">Image ID</span>
-        <span class="meta-value">c05daabb</span>
+        <span class="meta-value">________</span>
       </div>
     </div>
   </div>
@@ -563,15 +595,15 @@
       <div class="urls">
         <strong>piwalletsv.com</strong><br>
         Companion: <strong>app.piwalletsv.com</strong><br>
-        Verify: <strong>piwalletsv.com/download</strong>
+        Verify: <strong>github.com/mohrt/PiWalletSV/releases</strong>
       </div>
     </header>
 
     <div class="callout warn">
       <strong>Before you fund — verify the microSD (strongly recommended)</strong>
-      Re-flash from a GPG-verified download at piwalletsv.com/download before creating a wallet.
-      That is the simplest way to trust the firmware. Do not boot the Pi only to "check" the card —
-      first boot already changes it.
+      Kits are boot-tested before shipment, so the card no longer byte-matches the pristine
+      image checksum. Proper cold-wallet practice: verify the signed download on
+      GitHub Releases and re-flash before creating a wallet or receiving funds.
     </div>
 
     <div class="grid-2">
@@ -580,12 +612,12 @@
         <p class="block-lead">Plug the included power cable into the <strong>right-most</strong> micro-USB port, then wait 1–2 minutes for the logo.</p>
         <ol class="steps">
           <li><strong>Disclaimer</strong> — read all pages; hold <strong>A</strong> to accept.</li>
-          <li><strong>Vault PIN</strong> — 4–12 digits; use a long PIN for cold storage.</li>
-          <li><strong>New or restore wallet</strong> — write every seed word offline.</li>
+          <li><strong>Vault PIN</strong> — 6 digits.</li>
+          <li><strong>Your first wallet</strong> — create (or restore) on the Pi; write every seed word offline. Keys stay on the device.</li>
           <li><strong>Airgap check</strong> — Settings → Maintenance → Airgap status.</li>
-          <li><strong>Pair companion</strong> — scan the QR at app.piwalletsv.com.</li>
+          <li><strong>Pair companion</strong> — open app.piwalletsv.com, then scan the Pi’s pairing QR to copy the <strong>xpub</strong> (watch-only; never the seed).</li>
         </ol>
-        <div class="callout" style="margin-top:0.08in;margin-bottom:0;">
+        <div class="callout" style="margin-top:0.06in;margin-bottom:0;">
           <strong>Wrong PIN 6× in a row wipes the vault on the device.</strong>
           Your seed phrase is the real backup — not the PIN, not support.
         </div>
@@ -599,7 +631,7 @@
           <li>From Wallets, press <strong>B</strong> → Settings</li>
           <li><strong>Receive</strong> — companion shows address; confirm on Pi for large amounts.</li>
           <li><strong>Send</strong> — companion builds tx → Pi scans QR → review → hold A → companion broadcasts.</li>
-          <li><strong>Backup / upgrade</strong> — <strong>optional:</strong> OTG adapter + USB stick (not included), left port → Settings → Maintenance → USB backup — exports/imports the vault when you re-flash. Optionally, restore each wallet from your written seed phrase(s) on the bonnet.</li>
+          <li><strong>Backup / upgrade</strong> — optional OTG + USB stick (left port) → Settings → Maintenance → USB backup, or restore from written seed.</li>
         </ul>
       </section>
     </div>
@@ -607,34 +639,37 @@
     <div class="grid-2">
       <section class="block">
         <h2>Swap or re-flash microSD</h2>
-        <p class="block-lead">For verify, upgrade, or card replacement. Export vault to USB (optional OTG + stick) <strong>or</strong> confirm you have your seed phrase(s) — you can restore manually after re-flash.</p>
+        <p class="block-lead">Export vault to USB (optional OTG + stick) <strong>or</strong> confirm you have your seed phrase(s) before re-flashing.</p>
+        <div class="callout" style="margin-bottom:0.06in;">
+          <strong>Tweezers shortcut (recommended for re-imaging)</strong>
+          Power off. Pull the microSD with a <strong>thin pair of tweezers</strong> through the case slot — no disassembly. Re-flash on your computer, then reinsert the same way.
+        </div>
+        <p class="block-lead"><strong>Full service</strong> (hardware repair / if tweezers won’t reach):</p>
         <ol class="steps">
-          <li><strong>Power off</strong> — unplug the power cable and wait a few seconds.</li>
-          <li><strong>Open the case</strong> — remove corner screws. <strong>Save the two button caps</strong> from the front lid — do not lose them.</li>
-          <li><strong>Remove the bonnet</strong> — remove its <strong>two screws</strong>, then gently pry up on either side (toward the top), a little at a time.</li>
-          <li><strong>Free the Pi board</strong> — remove the <strong>two Pi PCB screws</strong> and lift gently. The <strong>camera is on the back</strong> — do not pull hard or bend the ribbon cable.</li>
-          <li><strong>Remove the microSD</strong> — pull the card straight out (no spring latch — it simply pushes in and pulls out).</li>
-          <li><strong>On your computer</strong> — use a USB card reader; verify and re-flash from piwalletsv.com/download if needed.</li>
-          <li><strong>Reassemble</strong> — insert the card, seat the Pi and replace its screws, then seat the bonnet and replace its screws.</li>
-          <li><strong>Seat the front lid</strong> — center over the display, joystick, and <strong>A/B buttons</strong>; replace the button caps if they came out.</li>
-          <li><strong>Test before tightening</strong> — with corner screws still loose, press <strong>A</strong>, <strong>B</strong>, and the joystick; all must click freely. Then tighten the corner screws.</li>
+          <li><strong>Power off</strong> — unplug and wait a few seconds.</li>
+          <li><strong>Open the case</strong> — corner screws; <strong>save the two button caps</strong>.</li>
+          <li><strong>Bonnet</strong> — remove its two screws; pry up gently a little at a time.</li>
+          <li><strong>Pi board</strong> — remove its two screws; lift gently (camera ribbon on the back).</li>
+          <li><strong>microSD</strong> — pull straight out (no spring latch).</li>
+          <li><strong>Computer</strong> — USB reader; verify and re-flash from GitHub Releases.</li>
+          <li><strong>Reassemble</strong> — card → Pi screws → bonnet screws → lid + button caps.</li>
+          <li><strong>Test before tightening</strong> — A, B, and joystick must click freely, then tighten corners.</li>
         </ol>
       </section>
 
       <section class="block">
         <h2>Assembly</h2>
-        <p class="block-lead">Your kit ships <strong>fully assembled</strong>. Use these steps only if you took it apart for an upgrade or repair.</p>
+        <p class="block-lead">Your kit ships <strong>fully assembled</strong>. Use these only if you took it apart.</p>
         <ol class="steps">
-          <li><strong>Pi off.</strong> Press the heat sink onto the main chip.</li>
-          <li>Seat the bonnet straight on the 40-pin header and replace its <strong>two screws</strong>.</li>
-          <li>Connect the camera ribbon to the CSI port (latch open → insert → latch closed).</li>
+          <li><strong>Pi off.</strong> Seat the bonnet on the 40-pin header; replace its <strong>two screws</strong>.</li>
+          <li>Camera ribbon → CSI (latch open → insert → latch closed).</li>
           <li>Insert the microSD (label side as printed on the Pi).</li>
-          <li>Plug power into the <strong>right-most</strong> micro-USB port only.</li>
+          <li>Power into the <strong>right-most</strong> micro-USB port only.</li>
         </ol>
-        <div class="callout" style="margin-top:0.08in;margin-bottom:0;">
+        <div class="callout" style="margin-top:0.06in;margin-bottom:0;">
           <strong>USB ports</strong>
           <strong style="display:inline;font-weight:600;">Right-most</strong> — power only (included cable). Never plug a flash drive here.
-          <strong style="display:inline;font-weight:600;">Left</strong> — <strong>optional</strong> vault export/import (your OTG adapter + USB stick, not included) during upgrades; optionally restore from seed on the bonnet.
+          <strong style="display:inline;font-weight:600;">Left</strong> — optional vault USB backup (your OTG + stick); or restore from seed on the bonnet.
         </div>
       </section>
     </div>
@@ -671,7 +706,7 @@
         @PiWalletSV on X · piwalletsv.com/user-manual · piwalletsv.com/security
       </div>
       <div style="text-align:right;font-size:6.5pt;">
-        kit-insert · rev 5<br>
+        kit-insert · rev 10<br>
         US Letter · double-sided
       </div>
     </div>
