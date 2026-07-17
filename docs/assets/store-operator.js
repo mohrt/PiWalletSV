@@ -470,18 +470,131 @@
         "";
 
       if ((order.status === "paid" || order.status === "fulfilled") && !labelReady) {
+        const ratesPanel = el("div", "piwalletsv-operator-rates");
+        ratesPanel.hidden = true;
+        let selectedRateId = "";
+
+        const ratesBtn = btn("Get shipping rates", false);
         const buyBtn = btn("Buy label", true);
+        buyBtn.title = "Buy cheapest rate under the label cap (or the rate you selected)";
+
+        function formatRateAmount(amount, currency) {
+          if (amount == null || isNaN(Number(amount))) {
+            return "—";
+          }
+          const cur = currency || "USD";
+          if (String(cur).toUpperCase() === "USD") {
+            return "$" + Number(amount).toFixed(2);
+          }
+          return Number(amount).toFixed(2) + " " + cur;
+        }
+
+        function renderRates(quote) {
+          ratesPanel.innerHTML = "";
+          ratesPanel.hidden = false;
+          selectedRateId = "";
+
+          const charged = order.shipping_cents;
+          const chargedLabel = order.shipping_label || "Shipping charged";
+          if (charged != null) {
+            ratesPanel.appendChild(
+              el(
+                "p",
+                "piwalletsv-operator-rates-note",
+                "Customer paid " +
+                  formatUsd(charged) +
+                  (chargedLabel ? " (" + chargedLabel + ")" : "") +
+                  ". Cap $" +
+                  Number(quote.label_max_amount_usd || 25).toFixed(2) +
+                  "."
+              )
+            );
+          } else {
+            ratesPanel.appendChild(
+              el(
+                "p",
+                "piwalletsv-operator-rates-note",
+                "Label purchase cap $" +
+                  Number(quote.label_max_amount_usd || 25).toFixed(2) +
+                  ". Select a rate or Buy label for cheapest under cap."
+              )
+            );
+          }
+
+          const list = el("div", "piwalletsv-operator-rates-list");
+          const rates = quote.rates || [];
+          if (!rates.length) {
+            list.appendChild(el("p", "piwalletsv-operator-rates-note", "No rates returned."));
+          }
+          rates.forEach(function (rate) {
+            const row = el("label", "piwalletsv-operator-rate-row");
+            if (!rate.affordable) {
+              row.className += " piwalletsv-operator-rate-row--over-cap";
+            }
+            const radio = document.createElement("input");
+            radio.type = "radio";
+            radio.name = "label-rate-" + order.order_id;
+            radio.value = rate.rate_object_id || "";
+            radio.disabled = !rate.affordable;
+            radio.addEventListener("change", function () {
+              if (radio.checked) {
+                selectedRateId = radio.value;
+                buyBtn.textContent = "Buy selected label";
+              }
+            });
+            const text = el(
+              "span",
+              null,
+              (rate.provider || "Carrier") +
+                (rate.service ? " · " + rate.service : "") +
+                " — " +
+                formatRateAmount(rate.amount, rate.currency) +
+                (rate.affordable ? "" : " (over cap)")
+            );
+            row.appendChild(radio);
+            row.appendChild(text);
+            list.appendChild(row);
+          });
+          ratesPanel.appendChild(list);
+        }
+
+        ratesBtn.addEventListener("click", function () {
+          clearPanels(container);
+          setBusy(ratesBtn, true);
+          api(
+            "GET",
+            "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/label-rates"
+          )
+            .then(function (quote) {
+              renderRates(quote);
+            })
+            .catch(function (e) {
+              setActionError(container, e.message || String(e));
+            })
+            .finally(function () {
+              setBusy(ratesBtn, false);
+            });
+        });
+
         buyBtn.addEventListener("click", function () {
           clearPanels(container);
           setBusy(buyBtn, true);
-          api("POST", "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/fulfill", {})
+          const body = selectedRateId ? { rate_object_id: selectedRateId } : {};
+          api(
+            "POST",
+            "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/fulfill",
+            body
+          )
             .then(refresh)
             .catch(function (e) {
               setActionError(container, e.message || String(e));
               setBusy(buyBtn, false);
             });
         });
+
+        container.appendChild(ratesBtn);
         container.appendChild(buyBtn);
+        container.appendChild(ratesPanel);
       }
 
       if (labelReady && labelShipmentId) {

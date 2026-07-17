@@ -11,4 +11,4 @@
   </div>
 </div>
 
-<script src="/assets/store-operator.js?v=status-select-style"></script>
+<script src="/assets/store-operator.js?v=label-rates"></script>

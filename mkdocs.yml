@@ -123,7 +123,7 @@ plugins:
       on_undefined: strict
 
 extra_css:
-  - assets/extra.css?v=donate-header-1
+  - assets/extra.css?v=label-rates-1
 
 extra_javascript:
   - assets/env-links.js

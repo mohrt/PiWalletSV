@@ -1281,6 +1281,34 @@ body.piwalletsv-operator-page .md-content__inner > .md-source-file {
   padding: 0.75rem;
 }
 
+.piwalletsv-operator-rates {
+  flex: 1 1 100%;
+  margin-top: 0.35rem;
+}
+
+.piwalletsv-operator-rates-note {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.85rem;
+  margin: 0 0 0.45rem;
+}
+
+.piwalletsv-operator-rates-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.piwalletsv-operator-rate-row {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.piwalletsv-operator-rate-row--over-cap {
+  color: var(--md-default-fg-color--light);
+  opacity: 0.75;
+}
+
 .piwalletsv-operator-panel-copy {
   margin: 0;
 }
