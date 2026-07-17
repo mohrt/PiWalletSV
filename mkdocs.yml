@@ -141,7 +141,8 @@ extra:
   # building the dev mirror; otherwise this falls back to the
   # canonical prod host. Reference in markdown as {{ companion_url }}.
   companion_url: !ENV [PIWALLETSV_COMPANION_URL, "https://app.piwalletsv.com"]
-  # Store API (dev checkout). Empty on prod builds until prod store launches.
+  # Store API base URL. publish.sh sets store.dev for --env dev and
+  # store.piwalletsv.com for --env prod.
   store_api_url: !ENV [PIWALLETSV_STORE_API_URL, ""]
   store_dev_banner: !ENV [PIWALLETSV_STORE_DEV_BANNER, ""]
 

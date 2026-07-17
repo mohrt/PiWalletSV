@@ -75,7 +75,7 @@ if [[ "$ENV" == "dev" ]]; then
 else
   export PIWALLETSV_COMPANION_URL=https://app.piwalletsv.com
   export MKDOCS_SITE_URL=https://piwalletsv.com/
-  unset PIWALLETSV_STORE_API_URL
+  export PIWALLETSV_STORE_API_URL=https://store.piwalletsv.com
   unset PIWALLETSV_STORE_DEV_BANNER
   COMPANION_DOCS=https://piwalletsv.com
 fi

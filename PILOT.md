@@ -22,8 +22,8 @@ MkDocs site and store checkout UI for dev/prod.
 ### Next
 
 1. ~~Publish + browser-test BSV / donate / operator on dev~~ — done.
-2. **Commit + push** `store-dev` (large dirty tree).
-3. Prod cutover with infra (publish `--env prod` once `store.piwalletsv.com` exists).
+2. ~~Prod docs publish~~ — live at https://piwalletsv.com (store API wired).
+3. Soft smoke (card + BSV) clear enough; announce when ready; commit/push both repos.
 
 ## New chat starter
 
