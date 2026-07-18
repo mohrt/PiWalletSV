@@ -65,9 +65,42 @@
   }
 }
 
+/* ---- Product photo strip under hero CTAs --------------------------- */
+
+.pwsv-photo-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0.25rem 0 2rem;
+}
+
+.pwsv-photo-strip img {
+  display: block;
+  width: 100%;
+  height: 11.5rem;
+  object-fit: cover;
+  object-position: center top;
+}
+
+@media (max-width: 900px) {
+  .pwsv-photo-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .pwsv-photo-strip {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.45rem;
+  }
+
+  .pwsv-photo-strip img {
+    height: 8.5rem;
+  }
+}
+
 /* ---- "Launch wallet" call-to-action button --------------------------- */
-/*
- * Renders the Markdown link `[Launch wallet ↗]{.pwsv-cta}` (or
+/* * Renders the Markdown link `[Launch wallet ↗]{.pwsv-cta}` (or
  * `[…](url){.pwsv-cta}` via attr_list) as a solid pill button in the
  * theme's accent gradient. Used on the front page hero and at the
  * bottom of the architecture / security pages so a reader who has
@@ -1472,6 +1505,29 @@ body.piwalletsv-operator-page .md-content__inner > .md-source-file {
   transform-origin: top left;
   background: #fff;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* ---- Tutorials: responsive YouTube embeds --------------------------- */
+
+.pwsv-video {
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  margin: 0.75rem 0 2rem;
+  aspect-ratio: 16 / 9;
+  background: #0d0f14;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pwsv-video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border: 0;
+  display: block;
 }
 
 .piwalletsv-donate {
