@@ -18,6 +18,7 @@ phone or laptop talks to the chain; the Pi just signs.
 
 [Launch wallet ↗]({{ companion_url }}/){ .pwsv-cta }
 [Purchase](purchase/shop.md){ .pwsv-cta-secondary }
+[Tutorials](tutorials.md){ .pwsv-cta-secondary }
 [Read the docs](getting-started.md){ .pwsv-cta-secondary }
 
 </div>
