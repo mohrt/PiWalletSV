@@ -686,4 +686,4 @@ def test_qr_split_rejects_tiny_chunks() -> None:
     runner = CliRunner()
     res = runner.invoke(main, ["qr", "split", "--chunk-chars", "32"], input="ignored")
     assert res.exit_code != 0
-    assert "32" in res.output or "64" in res.output
+    assert "32" in res.output or "48" in res.output or "64" in res.output

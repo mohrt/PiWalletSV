@@ -10,13 +10,15 @@
 
 export const MAGIC = "PW1";
 export const SEP = "|";
-export const MIN_ENCODED_CHUNK_CHARS = 64;
-// 100 chars ≈ Version 7 QR @ error-correction L (45×45 modules).
-// Matches Pi outbound pairing / signed-tx chunking. At 640×480 capture
-// each module is ~9–10 px — easier for the OV5647 than the previous
-// 200-char (~v9) and far easier than the original 720-char (~v17+)
-// frames that were too dense to lock from a phone screen.
-export const DEFAULT_ENCODED_CHUNK_CHARS = 100;
+// Floor keeps each frame large enough that PW1 framing overhead still
+// leaves a useful payload; below this the frame count balloons for little
+// decode gain.
+export const MIN_ENCODED_CHUNK_CHARS = 48;
+// 48 chars ≈ Version 4–5 QR @ ECC M (~33–37 modules). At 640×480 capture
+// each module is ~12+ px — sparse enough for the OV5647 to lock from a
+// phone screen. Previous steps: 720 → 200 → 100 were still too dense in
+// practice for unsigned_proposal scans.
+export const DEFAULT_ENCODED_CHUNK_CHARS = 48;
 
 const PREFIX_RE = /^PW1\|(?<t>\d+)\|(?<i>\d+)\|(?<rest>.*)$/;
 

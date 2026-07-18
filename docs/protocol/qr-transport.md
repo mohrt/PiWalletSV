@@ -49,11 +49,10 @@ Given a `data` byte string (typically `gzip(cbor(envelope))`):
 1. Base64url-encode `data` with no padding. Call the result `b`.
 2. Pick a `chunk_size` ≤ the safe per-QR character count for your
    chosen QR version and error-correction level. The reference
-   transmitters default to `100` characters per fragment, which keeps
-   each frame around QR version 7 (byte mode) with large enough
-   modules for the OV5647 kit camera to decode from a phone screen.
-   Denser packing (larger chunks) is allowed when the scanner can
-   handle it; the assembler doesn't care.
+   transmitters default to `48` characters per fragment for
+   companion→Pi unsigned proposals (sparse Version 4–5 QRs the OV5647
+   can lock). Bonnet→phone pairing / signed-tx still use `100`. The
+   assembler doesn't care about chunk size.
 3. Let `n = ceil(len(b) / chunk_size)`. For `i` in `0..n-1`, the i-th
    line is:
 
@@ -124,16 +123,15 @@ assembler clears its state immediately on success.
 
 ## 4. Capacity and sizing
 
-The default chunk size of 100 characters per fragment gives:
+The companion default chunk size of 48 characters per fragment gives:
 
-- A `PW1|<total>|<index>|...` line of typically 100 + ~10 characters.
-  At QR version 7 with error-correction level L/M and byte mode, the
-  matrix is 45×45 modules — large enough for reliable Pi-camera decode
-  from a phone screen at arm's length.
+- A `PW1|<total>|<index>|...` line of typically 48 + ~10 characters.
+  At QR version 4–5 with error-correction level M and byte mode, modules
+  stay large enough for reliable Pi-camera decode from a phone screen.
 - A typical `unsigned_proposal` of ~2 KB encodes to ~2700 base64url
-  characters, which is ~27 frames. At **700 ms** per frame a full
-  cycle is ~19 s; the Pi camera usually completes within one or two
-  cycles as long as each individual frame is readable.
+  characters, which is ~56 frames. At **1000 ms** per frame a full
+  cycle is ~56 s; the Pi camera usually completes once each frame is
+  individually readable (missed frames replay on the next cycle).
 
 Implementations MAY use smaller chunks for noisier environments, or
 larger chunks if they have a stable mount and a high-density QR

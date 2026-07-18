@@ -35,14 +35,14 @@ describe("encodeMultipartLines", () => {
   });
 
   it("matches Python default chunking for fixture", () => {
-    // Default is 100 chars/frame (less dense for the Pi camera).
+    // Default is 48 chars/frame (sparse for the Pi camera).
     const bytes = new Uint8Array(readFileSync(FIXTURE));
     const lines = encodeMultipartLines(bytes);
     expect(lines.length).toBeGreaterThanOrEqual(1);
     for (let i = 0; i < lines.length; i++) {
       expect(lines[i].startsWith(`PW1|${lines.length}|${i}|`)).toBe(true);
-      // PW1|n|i| + ≤100 payload chars
-      expect(lines[i].length).toBeLessThanOrEqual(120);
+      // PW1|n|i| + ≤48 payload chars
+      expect(lines[i].length).toBeLessThanOrEqual(70);
     }
     const back = joinMultipartLines(lines);
     expect(Array.from(back)).toEqual(Array.from(bytes));

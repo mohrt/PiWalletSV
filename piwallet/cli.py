@@ -407,10 +407,10 @@ def qr_join(output: Path | None) -> None:
 @click.option(
     "-c",
     "--chunk-chars",
-    type=click.IntRange(min=64),
-    default=100,
+    type=click.IntRange(min=48),
+    default=48,
     show_default=True,
-    help="Max encoded chunk characters per QR frame (>=64).",
+    help="Max encoded chunk characters per QR frame (>=48).",
 )
 @click.option(
     "-o",
