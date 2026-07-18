@@ -49,10 +49,11 @@ Given a `data` byte string (typically `gzip(cbor(envelope))`):
 1. Base64url-encode `data` with no padding. Call the result `b`.
 2. Pick a `chunk_size` ≤ the safe per-QR character count for your
    chosen QR version and error-correction level. The reference
-   transmitters default to `720` characters per fragment, which gives
-   QR version 16-ish at byte mode (capacity ~1273 chars) with
-   comfortable margin and no compaction tricks. Smaller bonnet
-   displays SHOULD scale this down; the assembler doesn't care.
+   transmitters default to `100` characters per fragment, which keeps
+   each frame around QR version 7 (byte mode) with large enough
+   modules for the OV5647 kit camera to decode from a phone screen.
+   Denser packing (larger chunks) is allowed when the scanner can
+   handle it; the assembler doesn't care.
 3. Let `n = ceil(len(b) / chunk_size)`. For `i` in `0..n-1`, the i-th
    line is:
 
@@ -123,20 +124,20 @@ assembler clears its state immediately on success.
 
 ## 4. Capacity and sizing
 
-The default chunk size of 720 characters per fragment gives:
+The default chunk size of 100 characters per fragment gives:
 
-- A `PW1|<total>|<index>|...` line of typically 720 + ~10 characters.
-  At QR version 16 with error-correction level M and byte mode, the
-  capacity is 1273 characters — leaving comfortable headroom.
+- A `PW1|<total>|<index>|...` line of typically 100 + ~10 characters.
+  At QR version 7 with error-correction level L/M and byte mode, the
+  matrix is 45×45 modules — large enough for reliable Pi-camera decode
+  from a phone screen at arm's length.
 - A typical `unsigned_proposal` of ~2 KB encodes to ~2700 base64url
-  characters, which is ~4 frames. The transmitter animates through
-  them in ~0.5 s; in practice the receiver gets a full set within
-  one or two cycles.
+  characters, which is ~27 frames. At **700 ms** per frame a full
+  cycle is ~19 s; the Pi camera usually completes within one or two
+  cycles as long as each individual frame is readable.
 
-Implementations MAY use smaller chunks for noisy environments
-(consumer phone cameras on shaky hands), or larger chunks if they
-have a stable mount and a high-density QR generator. The format
-imposes no upper bound.
+Implementations MAY use smaller chunks for noisier environments, or
+larger chunks if they have a stable mount and a high-density QR
+generator. The format imposes no upper bound.
 
 A signer SHOULD have a fail-safe cap on the total payload size it
 will assemble (the reference implementation accepts up to ~16 KB of

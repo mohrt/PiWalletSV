@@ -35,14 +35,14 @@ describe("encodeMultipartLines", () => {
   });
 
   it("matches Python default chunking for fixture", () => {
-    // Default chunking still produces well-formed PW1 frames the
-    // assembler can rejoin; the v2 fixture spans multiple frames.
+    // Default is 100 chars/frame (less dense for the Pi camera).
     const bytes = new Uint8Array(readFileSync(FIXTURE));
     const lines = encodeMultipartLines(bytes);
     expect(lines.length).toBeGreaterThanOrEqual(1);
     for (let i = 0; i < lines.length; i++) {
       expect(lines[i].startsWith(`PW1|${lines.length}|${i}|`)).toBe(true);
-      expect(lines[i].length).toBeLessThan(800);
+      // PW1|n|i| + ≤100 payload chars
+      expect(lines[i].length).toBeLessThanOrEqual(120);
     }
     const back = joinMultipartLines(lines);
     expect(Array.from(back)).toEqual(Array.from(bytes));

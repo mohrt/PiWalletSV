@@ -53,7 +53,7 @@ Until the bonnet display (Phase 2) drives QR rendering directly, you can pipe th
 ```bash
 sudo apt install qrencode
 piwallet xpub-export --wallet-id <id> -o /tmp/xpub.bin
-piwallet qr split --chunk-chars 200 /tmp/xpub.bin |
+piwallet qr split --chunk-chars 100 /tmp/xpub.bin |
     while IFS= read -r line; do
         clear
         qrencode -t UTF8 -- "$line"

@@ -149,7 +149,7 @@ material crosses the gap.
     # On the Pi:
     sudo apt install qrencode
     piwallet xpub-export --wallet-id <id> -o /tmp/xpub.bin
-    piwallet qr split --chunk-chars 200 /tmp/xpub.bin |
+    piwallet qr split --chunk-chars 100 /tmp/xpub.bin |
         while IFS= read -r line; do
             clear
             qrencode -t UTF8 -- "$line"
@@ -341,7 +341,7 @@ at the QR canvas.
 
     # 4. Display the signed envelope back as an animated terminal
     #    QR for the companion to scan:
-    piwallet qr split --chunk-chars 200 /tmp/signed.bin |
+    piwallet qr split --chunk-chars 100 /tmp/signed.bin |
         while IFS= read -r line; do
             clear
             qrencode -t UTF8 -- "$line"

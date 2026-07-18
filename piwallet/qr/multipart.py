@@ -45,12 +45,14 @@ class MultipartQrError(ValueError):
     """Malformed multipart line or incompatible stream state."""
 
 
-def split_envelope_to_lines(data: bytes, *, max_encoded_chunk_chars: int = 720) -> list[str]:
+def split_envelope_to_lines(data: bytes, *, max_encoded_chunk_chars: int = 100) -> list[str]:
     """Split arbitrary bytes into `PW1` barcode lines.
 
-    Target default keeps each line under ~800 characters so version-6 QR
-    at byte mode or alphanumeric-heavy payloads stays scannable on the
-    bonnet camera at moderate distance.
+    Default of 100 characters per fragment keeps each frame around QR
+    version 7 (byte mode, ECC L) so modules stay large enough for the
+    OV5647 kit camera to decode from a phone screen. Callers that need
+    denser packing (e.g. phone scanning a bonnet TFT) may pass a
+    different size; pairing / signed-tx already use 100 explicitly.
 
     Chunks are *balanced*: when the payload doesn't divide evenly we
     pick ``n_chunks = ceil(len / max)`` and then size each chunk at

@@ -408,7 +408,7 @@ def qr_join(output: Path | None) -> None:
     "-c",
     "--chunk-chars",
     type=click.IntRange(min=64),
-    default=720,
+    default=100,
     show_default=True,
     help="Max encoded chunk characters per QR frame (>=64).",
 )
