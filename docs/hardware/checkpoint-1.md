@@ -119,7 +119,7 @@ empty vault.
 
 The display should:
 
-1. Show the **alpha-software disclaimer** page 1, with a blue
+1. Show the **beta-software disclaimer** page 1, with a blue
    accent border and a single highlighted page-indicator dot.
 2. Advance to pages 2 and 3 when you push the joystick right.
 3. Show a red-bordered "No liability" final page, with a

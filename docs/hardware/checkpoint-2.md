@@ -109,7 +109,7 @@ plus the two action rows.
 
 - The bonnet does not yet expose label entry; new wallets get a
   default name and must be renamed via the CLI (`piwallet vault
-  rename`, future). For v1 alpha this is acceptable.
+  rename`, future). For v1 beta this is acceptable.
 - The `time.sleep(2.0)` "wallet saved / failed" banner is blocking;
   the bonnet appears frozen during the hold. Acceptable, but worth a
   thumbs-up that the timing feels right.

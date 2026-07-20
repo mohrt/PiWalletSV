@@ -230,7 +230,7 @@ check HDMI tty2 or re-flash.
 ## Step 4 &mdash; Accept the disclaimer
 
 The bonnet will show the legal disclaimer the very first time it
-boots. Read it; the alpha-software language is not boilerplate. Use
+boots. Read it; the beta-software language is not boilerplate. Use
 the joystick to scroll, and press **A** to accept.
 
 The acceptance is recorded in `~/.piwallet/terms.json` and you won't
