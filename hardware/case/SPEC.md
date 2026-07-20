@@ -176,7 +176,7 @@ been opened post-shipment.
 | Button B | front, lower-left | Ø 4 mm | 5 mm below A |
 | micro-USB PWR-IN | top long edge, x=54.0 mm | 8 × 3.5 mm | sized for a standard micro-USB plug shroud, 0.5 mm slack |
 | micro-USB OTG (data) | top long edge, x=41.0 mm | 8 × 3.5 mm | same plug shroud as PWR-IN; second cutout on the same edge |
-| mini-HDMI | top long edge, x=12.4 mm | 11.5 × 4.5 mm | sealed by default (`hdmi_cutout_enabled = false`); enable for dev |
+| mini-HDMI | top long edge, x=12.4 mm | 12.5 × 4.5 mm | cutout centre raised vs USB so shell bottoms share the PCB floor (`hdmi_jack_z`); sealed by default in production (`hdmi_cutout_enabled = false`); enable for dev |
 | microSD card slot | left short edge | 14 × 3 mm | exposed by default for prototype + service; flip `sd_cutout_enabled = false` for production tamper resistance |
 | Lens cone | back, aligned to camera's optical axis | Ø 8.0 mm × 3.0 mm deep, 60° cone | reduces glare; sized to clear the OV5647 mini's ~Ø 7 mm lens housing |
 | Lanyard hole | (deferred) | `lanyard_enabled = false` | Loop 1 print showed the round-hole-through-curved-wall geometry was unusable. Will revisit as a flat tab + slot in a later iteration. |

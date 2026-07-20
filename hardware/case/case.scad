@@ -6,6 +6,7 @@
 // button_cap — flanged pad; actuates via lid platform pocket (×2).
 //
 // Render modes: mode = "tub" | "lid" | "cap" | "caps" | "lid_caps" | "all" | "preview"
+// Loop 44: raise HDMI cutout so shell bottoms align with USB (same PCB floor).
 // Loop 43: corner pillars stay square cubes; exterior overflow trimmed to outer_brick.
 // Loop 42: bonnet front-corner support shelves (45° gusset + annular pad at FL/FR holes).
 // Loop 40: M2 × 6 mm pan-head corner screws; 4.8 × 4.8 mm square pillars at corners.
@@ -487,12 +488,16 @@ pi_standoff_height = camera_post_height + camera_module_z + ribbon_under_pi;
 // + usb_jack_z_above_pi_top.
 usb_jack_z = wall + pi_standoff_height + pi_pcb_thickness
  + usb_jack_z_above_pi_top;
+// mini-HDMI shares the PCB floor with the micro-USB shells, but the
+// HDMI body is taller. Centre it higher so cutout bottoms align
+// (was sharing usb_jack_z, which dropped the HDMI hole into the PCB).
+hdmi_jack_z = usb_jack_z + (hdmi_cutout_h - usb_cutout_h) / 2;
 
 // Bonnet front-shelf z stack (Loop 42).
 pi_pcb_top_z = wall + pi_standoff_height + pi_pcb_thickness;
 bonnet_pcb_bottom_z = pi_pcb_top_z + bonnet_gap_above_pi_top;
 _usb_port_top_z = usb_jack_z + usb_cutout_h / 2;
-_hdmi_port_top_z = usb_jack_z + hdmi_cutout_h / 2;
+_hdmi_port_top_z = hdmi_jack_z + hdmi_cutout_h / 2;
 usb_port_top_z = hdmi_cutout_enabled
  ? max(_usb_port_top_z, _hdmi_port_top_z)
  : _usb_port_top_z;
@@ -940,15 +945,15 @@ module back_tub() {
  // body inside the cavity is fully cleared (Pi I/O edge is at
  // bonnet_origin_y; +1 mm gives a clean through-cut past it).
  for (port = [
- // [x_offset, w, h, enabled]
- [usb_pwr_x_offset, usb_cutout_w, usb_cutout_h, true],
- [usb_data_x_offset, usb_cutout_w, usb_cutout_h, true],
- [hdmi_x_offset, hdmi_cutout_w, hdmi_cutout_h, hdmi_cutout_enabled]
+ // [x_offset, w, h, enabled, jack_z]
+ [usb_pwr_x_offset, usb_cutout_w, usb_cutout_h, true, usb_jack_z],
+ [usb_data_x_offset, usb_cutout_w, usb_cutout_h, true, usb_jack_z],
+ [hdmi_x_offset, hdmi_cutout_w, hdmi_cutout_h, hdmi_cutout_enabled, hdmi_jack_z]
  ]) if (port[3]) {
  translate([
  bonnet_origin_x + port[0] - port[1]/2,
  -1,
- usb_jack_z - port[2]/2
+ port[4] - port[2]/2
  ])
  cube([
  port[1],
