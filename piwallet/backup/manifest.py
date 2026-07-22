@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -13,11 +13,13 @@ from piwallet.backup.constants import (
     MANIFEST_FILENAME,
     MANIFEST_FORMAT,
     SETTINGS_FILENAME,
+    STATE_FILENAME,
     VAULT_FILENAME,
 )
 
 #: Bump when export JSON shape changes in a non-additive way.
-BACKUP_BUNDLE_VERSION: int = 1
+BACKUP_BUNDLE_VERSION: int = 2
+"""v2 adds encrypted state.bin plus per-file SHA-256 checksums."""
 
 
 class BackupManifestError(ValueError):
@@ -39,6 +41,9 @@ class BackupManifest:
     vault_version: int
     wallet_summary: tuple[WalletSummary, ...]
     has_settings: bool
+    has_state: bool = False
+    state_version: int | None = None
+    checksums: dict[str, str] = field(default_factory=dict)
     backup_dir_name: str = ""
 
     @property
@@ -54,6 +59,7 @@ class BackupManifest:
                 "piwalletsvVersion": self.piwalletsv_version,
             },
             "vaultVersion": self.vault_version,
+            **({"stateVersion": self.state_version} if self.state_version is not None else {}),
             "walletSummary": [
                 {
                     "label": w.label,
@@ -64,8 +70,10 @@ class BackupManifest:
             ],
             "files": {
                 "vault": VAULT_FILENAME,
+                **({"state": STATE_FILENAME} if self.has_state else {}),
                 **({"settings": SETTINGS_FILENAME} if self.has_settings else {}),
             },
+            "checksums": dict(sorted(self.checksums.items())),
         }
 
     def write(self, directory: Path) -> None:
@@ -109,13 +117,30 @@ def load_manifest(directory: Path) -> BackupManifest:
     exporter = data.get("exporter") or {}
     piwalletsv_version = str(exporter.get("piwalletsvVersion", "?"))
     exported_at = str(data.get("exportedAt", ""))
-    summaries = tuple(
-        _parse_wallet_summary(w) for w in (data.get("walletSummary") or [])
-    )
+    summaries = tuple(_parse_wallet_summary(w) for w in (data.get("walletSummary") or []))
     files = data.get("files") or {}
     if files.get("vault") != VAULT_FILENAME:
         raise BackupManifestError("manifest files.vault must name vault.bin")
     has_settings = files.get("settings") == SETTINGS_FILENAME
+    has_state = files.get("state") == STATE_FILENAME
+    raw_checksums = data.get("checksums") or {}
+    if not isinstance(raw_checksums, dict):
+        raise BackupManifestError("manifest checksums must be an object")
+    checksums = {str(k): str(v).lower() for k, v in raw_checksums.items()}
+    if bundle_version >= 2:
+        expected_files = {VAULT_FILENAME}
+        if has_state:
+            expected_files.add(STATE_FILENAME)
+        if has_settings:
+            expected_files.add(SETTINGS_FILENAME)
+        if set(checksums) != expected_files:
+            raise BackupManifestError(
+                "manifest checksums must exactly match the declared backup files"
+            )
+        for name in expected_files:
+            digest = checksums.get(name, "")
+            if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+                raise BackupManifestError(f"missing or invalid checksum for {name}")
     return BackupManifest(
         bundle_version=bundle_version,
         exported_at=exported_at,
@@ -123,6 +148,9 @@ def load_manifest(directory: Path) -> BackupManifest:
         vault_version=vault_version,
         wallet_summary=summaries,
         has_settings=has_settings,
+        has_state=has_state,
+        state_version=(int(data["stateVersion"]) if data.get("stateVersion") is not None else None),
+        checksums=checksums,
         backup_dir_name=directory.name,
     )
 
@@ -146,6 +174,9 @@ def build_manifest(
     vault_version: int,
     wallet_summary: tuple[WalletSummary, ...],
     include_settings: bool,
+    include_state: bool = False,
+    state_version: int | None = None,
+    checksums: dict[str, str] | None = None,
 ) -> BackupManifest:
     return BackupManifest(
         bundle_version=BACKUP_BUNDLE_VERSION,
@@ -154,4 +185,7 @@ def build_manifest(
         vault_version=vault_version,
         wallet_summary=wallet_summary,
         has_settings=include_settings,
+        has_state=include_state,
+        state_version=state_version,
+        checksums=dict(checksums or {}),
     )

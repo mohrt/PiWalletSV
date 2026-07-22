@@ -1,11 +1,26 @@
 import { PRICE_CACHE_TTL_MS } from "../../lib/config.js";
 import { splitConfirmedPending } from "../../lib/balance-split.js";
 import { relativeTimeFrom } from "../../lib/relative-time.js";
-import { scanWalletUtxos } from "../../lib/utxo.js";
-import { RECEIVE_BRANCH } from "../../lib/derive.js";
-import { WocClient, WocError, effectiveWocBase } from "../../lib/woc.js";
-import { setLastScan, setNextReceiveIndex } from "../../lib/wallets.js";
+import { deriveAddress } from "../../lib/derive.js";
+import { encodeEnvelope } from "../../lib/envelope.js";
+import {
+  applyStateReceipt,
+  buildStateSyncEnvelope,
+  stateBalanceSats,
+  stateUtxos,
+} from "../../lib/wallet-state.js";
+import { encodeMultipartLines } from "../../pw1.js";
+import {
+  startPw1QrPlayback,
+  wirePw1QrControls,
+  type Pw1QrPlayback,
+} from "../../lib/pw1-qr-playback.js";
+import {
+  WocClient,
+  effectiveWocBase,
+} from "../../lib/woc.js";
 import { getFiatCurrency } from "../settings-page.js";
+import { mountCameraScanner, type CameraScannerHandle } from "../camera-scanner.js";
 import {
   SATS_PER_BSV,
   escapeHtml,
@@ -28,6 +43,10 @@ export function createBalanceTab(
   rt: WalletDetailRuntime,
   actions: WalletDetailActions,
 ): BalanceTab {
+  let syncPlayback: Pw1QrPlayback | null = null;
+  let syncQrUnwire: (() => void) | null = null;
+  let receiptScanner: CameraScannerHandle | null = null;
+
   function formatBalance(sats: number): string {
     if (rt.displayUnit === "bsv") {
       return `${(sats / SATS_PER_BSV).toFixed(8)} BSV`;
@@ -80,21 +99,26 @@ export function createBalanceTab(
     const $sendBal = root.querySelector<HTMLElement>("#sendBalanceHero");
     const $sendPending = root.querySelector<HTMLElement>("#sendBalancePending");
 
-    const scan = rt.wallet.lastScan;
-    if (!scan) {
+    const secured = rt.wallet.walletState;
+    const legacy = secured ? undefined : rt.wallet.lastScan;
+    const utxos = secured ? stateUtxos(secured) : (legacy?.utxos ?? []);
+    const totalSats = secured ? stateBalanceSats(secured) : (legacy?.totalSats ?? 0);
+    if (!secured && !legacy) {
       $hero.textContent = "—";
       $bsv.textContent = "";
-      $meta.textContent = "Not scanned yet — click Refresh to query WhatsOnChain.";
+      $meta.textContent =
+        "No secured wallet state yet — import a sender's Atomic BEEF or use Advanced disaster recovery once to migrate.";
       $pending.hidden = true;
       $details.hidden = true;
       if ($spvNote) $spvNote.hidden = true;
       if ($sendBal) $sendBal.textContent = "—";
       if ($sendPending) $sendPending.hidden = true;
       actions.renderSendPendingBanner();
+      renderStateSyncPanel();
       return;
     }
 
-    const split = splitConfirmedPending(scan.utxos);
+    const split = splitConfirmedPending(utxos);
     if ($sendBal) {
       $sendBal.textContent = formatBalance(split.confirmedSats);
     }
@@ -109,16 +133,18 @@ export function createBalanceTab(
       }
     }
     actions.renderSendPendingBanner();
-    $hero.textContent = formatBalance(scan.totalSats);
+    $hero.textContent = formatBalance(totalSats);
     $bsv.textContent =
       rt.displayUnit === "sats"
-        ? formatBsv(scan.totalSats)
+        ? formatBsv(totalSats)
         : rt.displayUnit === "bsv"
-          ? formatSats(scan.totalSats)
-          : formatSats(scan.totalSats);
-    $meta.textContent =
-      `${scan.utxos.length} UTXO${scan.utxos.length === 1 ? "" : "s"} · ` +
-      `last refreshed ${relativeTimeFrom(scan.at)}`;
+          ? formatSats(totalSats)
+          : formatSats(totalSats);
+    $meta.textContent = secured
+      ? `${utxos.length} secured UTXO${utxos.length === 1 ? "" : "s"} · ` +
+        `state revision ${secured.revision} · updated ${relativeTimeFrom(secured.updatedAt)}`
+      : `${utxos.length} legacy cached UTXO${utxos.length === 1 ? "" : "s"} · ` +
+        "not secured on the Pi; use Advanced disaster recovery to migrate";
 
     if (split.hasPending) {
       $pending.hidden = false;
@@ -134,15 +160,28 @@ export function createBalanceTab(
       $spvNote.hidden = true;
     }
 
-    $details.hidden = scan.utxos.length === 0;
-    $count.textContent = String(scan.utxos.length);
+    $details.hidden = utxos.length === 0;
+    $count.textContent = String(utxos.length);
 
     $list.innerHTML = "";
-    for (const u of scan.utxos) {
+    for (const u of utxos) {
       const li = document.createElement("li");
       const isPending = u.height === 0;
       li.className = isPending ? "utxo-row pending" : "utxo-row";
       const branchLabel = u.derivation[0] === 0 ? "recv" : "change";
+      let address = u.address;
+      if (!address) {
+        try {
+          address = deriveAddress(
+            rt.wallet.xpub,
+            u.derivation[0],
+            u.derivation[1],
+            rt.wallet.network,
+          ).address;
+        } catch {
+          address = "address unavailable";
+        }
+      }
       li.innerHTML = `
         <div class="utxo-top">
           <code title="${escapeHtml(u.txid)}">${escapeHtml(shortTxid(u.txid))}:${u.vout}</code>
@@ -150,12 +189,22 @@ export function createBalanceTab(
         </div>
         <div class="muted-line">
           ${branchLabel} m/${u.derivation[0]}/${u.derivation[1]} ·
-          ${escapeHtml(u.address)} ·
+          ${escapeHtml(address)} ·
           ${isPending ? '<span class="utxo-pending-tag">pending</span>' : `block ${u.height}`}
         </div>
       `;
       $list.appendChild(li);
     }
+    renderStateSyncPanel();
+  }
+
+  function renderStateSyncPanel(): void {
+    const panel = rt.root.querySelector<HTMLElement>("#stateSyncPanel");
+    const count = rt.root.querySelector<HTMLElement>("#stateSyncCount");
+    if (!panel || !count || !rt.wallet) return;
+    const pending = rt.wallet.pendingStateSync;
+    panel.hidden = !pending || pending.coins.length === 0;
+    count.textContent = String(pending?.coins.length ?? 0);
   }
 
   async function refreshBalance(options: { thenHistory?: boolean } = {}): Promise<void> {
@@ -165,66 +214,31 @@ export function createBalanceTab(
     const $status = rt.root.querySelector<HTMLElement>("#balanceStatus");
     if ($refresh) {
       $refresh.disabled = true;
-      $refresh.textContent = "Scanning…";
+      $refresh.textContent = "Refreshing…";
     }
     if ($status) {
       $status.classList.remove("error");
-      $status.textContent = "Starting gap-limit scan…";
-    }
-    if (!rt.woc) {
-      rt.woc = new WocClient({ baseUrl: effectiveWocBase(rt.wallet.network) });
+      $status.textContent = "Loading the Pi-authoritative local state…";
     }
 
     try {
-      const result = await scanWalletUtxos(rt.wallet.xpub, rt.woc, {
-        network: rt.wallet.network,
-        onProgress: ({ branch, index, address, found }) => {
-          if (rt.cancelled || !$status) return;
-          const branchLabel = branch === RECEIVE_BRANCH ? "recv" : "change";
-          $status.textContent =
-            `Probing ${branchLabel} m/${branch}/${index} ` +
-            `(${address.slice(0, 6)}…${address.slice(-4)}) — ` +
-            `${found} UTXO${found === 1 ? "" : "s"}`;
-        },
-      });
-      if (rt.cancelled) return;
-      const snapshot = {
-        at: new Date().toISOString(),
-        totalSats: result.totalSats,
-        utxos: result.utxos,
-        lastReceiveUsed: result.lastReceiveUsed,
-        lastChangeUsed: result.lastChangeUsed,
-        addressesScanned: result.addressesScanned,
-        stoppedAt: result.stoppedAt,
-      };
-      await setLastScan(rt.wallet.id, snapshot);
-      rt.wallet.lastScan = snapshot;
-
-      const autoNext = result.lastReceiveUsed + 1;
-      const didAdvance = autoNext > rt.wallet.nextReceiveIndex;
-      if (didAdvance) {
-        await setNextReceiveIndex(rt.wallet.id, autoNext);
-        rt.wallet.nextReceiveIndex = autoNext;
-      }
-
+      // No address or UTXO lookup belongs on this path. New payments arrive
+      // as Atomic BEEF, and legacy discovery lives behind Advanced recovery.
       renderBalance();
-      void actions.renderReceive();
-      actions.renderRecentList();
       if ($status) {
-        $status.textContent =
-          `Scan complete — ${result.utxos.length} UTXO(s), ` +
-          `${result.addressesScanned} addresses probed.` +
-          (didAdvance ? ` · receive index → ${rt.wallet.nextReceiveIndex}` : "");
+        const state = rt.wallet.walletState;
+        $status.textContent = state
+          ? `Up to date from local state revision ${state.revision}; no addresses scanned.`
+          : "No secured local state. Import Atomic BEEF or run Advanced disaster recovery.";
       }
       if (options.thenHistory) {
         await actions.refreshHistory();
       }
     } catch (e) {
       if (rt.cancelled) return;
-      const msg = e instanceof WocError ? e.message : (e as Error).message;
       if ($status) {
         $status.classList.add("error");
-        $status.textContent = `scan failed: ${msg}`;
+        $status.textContent = `local state refresh failed: ${(e as Error).message}`;
       }
     } finally {
       rt.scanRunning = false;
@@ -233,6 +247,83 @@ export function createBalanceTab(
         $refresh.textContent = "Refresh";
       }
     }
+  }
+
+  async function showStateSyncQr(): Promise<void> {
+    if (!rt.wallet) return;
+    const status = rt.root.querySelector<HTMLElement>("#stateSyncStatus");
+    try {
+      const envelope = buildStateSyncEnvelope(rt.wallet);
+      const blob = await encodeEnvelope(envelope);
+      const frames = encodeMultipartLines(blob);
+      const panel = rt.root.querySelector<HTMLElement>("#stateSyncQrPanel");
+      const canvas = rt.root.querySelector<HTMLCanvasElement>("#stateSyncQr");
+      const total = rt.root.querySelector<HTMLElement>("#stateSyncFrames");
+      const current = rt.root.querySelector<HTMLElement>("#stateSyncFrame");
+      const toggle = rt.root.querySelector<HTMLButtonElement>("#stateSyncToggle");
+      const prev = rt.root.querySelector<HTMLButtonElement>("#stateSyncPrev");
+      const next = rt.root.querySelector<HTMLButtonElement>("#stateSyncNext");
+      const hint = rt.root.querySelector<HTMLElement>("#stateSyncQrHint");
+      if (!panel || !canvas || !total || !current || !toggle || !prev || !next) return;
+      syncQrUnwire?.();
+      syncPlayback?.stop();
+      panel.hidden = false;
+      total.textContent = String(frames.length);
+      syncPlayback = await startPw1QrPlayback(canvas, frames, {
+        width: 320,
+        onFrame: (index) => { current.textContent = String(index); },
+      });
+      syncQrUnwire = wirePw1QrControls(syncPlayback, {
+        autoToggle: toggle,
+        prev,
+        next,
+        hint,
+      });
+      if (status) status.textContent = "After the Pi commits, scan its state receipt.";
+    } catch (e) {
+      if (status) {
+        status.classList.add("error");
+        status.textContent = (e as Error).message;
+      }
+    }
+  }
+
+  function scanStateReceipt(): void {
+    if (!rt.wallet) return;
+    receiptScanner?.destroy();
+    const panel = rt.root.querySelector<HTMLElement>("#stateReceiptScanner");
+    const host = rt.root.querySelector<HTMLElement>("#stateReceiptScannerHost");
+    const status = rt.root.querySelector<HTMLElement>("#stateSyncStatus");
+    if (!panel || !host) return;
+    panel.hidden = false;
+    receiptScanner = mountCameraScanner(host, {
+      workflow: "state-receipt",
+      variant: "compact",
+      autoStart: true,
+      onAccept: (validation) => {
+        if (validation.result.workflow !== "state-receipt" || !rt.wallet) return;
+        void applyStateReceipt(rt.wallet, validation.result.envelope)
+          .then(() => {
+            renderBalance();
+            if (status) {
+              status.classList.remove("error");
+              status.textContent = "Payment state secured and mirrored from the Pi.";
+            }
+            panel.hidden = true;
+            syncQrUnwire?.();
+            syncPlayback?.stop();
+          })
+          .catch((e: Error) => {
+            if (status) {
+              status.classList.add("error");
+              status.textContent = `receipt rejected: ${e.message}`;
+            }
+          });
+      },
+      onStopped: () => {
+        panel.hidden = true;
+      },
+    });
   }
 
   async function onUnitSelectChange(unit: DisplayUnit): Promise<void> {
@@ -267,6 +358,16 @@ export function createBalanceTab(
     rt.root.querySelector<HTMLSelectElement>("#unitSelect")?.addEventListener("change", (e) =>
       void onUnitSelectChange((e.target as HTMLSelectElement).value as DisplayUnit),
     );
+    rt.root.querySelector<HTMLButtonElement>("#stateSyncShow")
+      ?.addEventListener("click", () => void showStateSyncQr());
+    rt.root.querySelector<HTMLButtonElement>("#stateReceiptScan")
+      ?.addEventListener("click", scanStateReceipt);
+  }
+
+  function dispose(): void {
+    syncQrUnwire?.();
+    syncPlayback?.stop();
+    receiptScanner?.destroy();
   }
 
   return {
@@ -277,5 +378,6 @@ export function createBalanceTab(
     fetchBsvPrice,
     onUnitSelectChange,
     onToggleDisplayUnit,
+    dispose,
   };
 }

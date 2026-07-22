@@ -375,13 +375,13 @@ post-upgrade verification — is documented in
 Brief summary:
 
 1. Back up your mnemonic and/or run **Settings → Maintenance → USB backup → Backup to USB**
-   (or copy `vault.bin` off the SD card)
+   (or copy both `vault.bin` and `state.bin` off the SD card)
    **before** flashing.
 2. Download and verify a new image from
    [GitHub Releases](https://github.com/mohrt/PiWalletSV/releases)
    (Step&nbsp;1 above).
 3. Re-flash the microSD (Step&nbsp;2 above).
-4. Restore from your written-down mnemonic, or copy `vault.bin` back
+4. Restore from your written-down mnemonic plus `state.bin`, or copy both wallet files back
    onto the new image — see the user manual for step-by-step detail.
 5. Re-run **Airgap status** and a TESTNET smoke test.
 

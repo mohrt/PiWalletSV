@@ -24,12 +24,15 @@ from pathlib import Path
 from typing import Literal
 
 from piwallet.bonnet.companion_pairing import pairing_pw1_lines
-from piwallet.bonnet.sign_scan import run_sign_flow
 from piwallet.bonnet.qr_settings import qr_brightness_screen_kwargs
-from piwallet.core.settings import BonnetSettings
+from piwallet.bonnet.sign_scan import _show_signed_qr, run_sign_flow
+from piwallet.bonnet.state_sync import run_state_sync_flow
 from piwallet.bonnet.wallet_detail import WalletDetailScreen
 from piwallet.bonnet.wallet_info import WalletInfoScreen
 from piwallet.core import derivation as deriv
+from piwallet.core import envelope as env
+from piwallet.core.settings import BonnetSettings
+from piwallet.core.state import WalletStateError, WalletStateStore
 from piwallet.core.vault import Vault, VaultError, VaultWipedError, WalletRecord
 from piwallet.ui.app import IdleWakeTracker, run_screen
 from piwallet.ui.display import COLOR_DANGER, COLOR_OK, Display, FrameBuffer
@@ -47,7 +50,9 @@ class WalletManageAction(Enum):
 
     RECEIVE = "receive"
     COMPANION_QR = "companion_qr"
+    SECURE_PAYMENTS = "secure_payments"
     SIGN = "sign"
+    REEXPORT_SIGNED = "reexport_signed"
     INFO = "info"
     RENAME = "rename"
     DELETE = "delete"
@@ -83,6 +88,8 @@ class WalletManageMenuScreen:
                 ListItem(label="Show xpub (QR)", value=WalletManageAction.COMPANION_QR),
                 ListItem(label="Sign transaction", value=WalletManageAction.SIGN),
                 ListItem(label="Wallet info", value=WalletManageAction.INFO),
+                ListItem(label="Secure payments", value=WalletManageAction.SECURE_PAYMENTS),
+                ListItem(label="Re-export signed tx", value=WalletManageAction.REEXPORT_SIGNED),
                 ListItem(label="Rename", value=WalletManageAction.RENAME),
                 ListItem(label="Erase from Pi", value=WalletManageAction.DELETE),
             ],
@@ -178,9 +185,7 @@ def run_wallet_manage(
             derive = _make_derive_address_fn(vault, wallet.id, pin)
         except (VaultError, VaultWipedError) as exc:
             log.exception("derive xpub failed from manage")
-            _brief_modal(
-                display, title="Derive failed", body=str(exc)[:96], accent=COLOR_DANGER
-            )
+            _brief_modal(display, title="Derive failed", body=str(exc)[:96], accent=COLOR_DANGER)
             time.sleep(toast_seconds)
             return "stay"
         detail = WalletDetailScreen(
@@ -192,9 +197,7 @@ def run_wallet_manage(
                 on_settings_changed=on_settings_changed,
             ),
         )
-        run_screen(
-            display, input_mgr, detail, target_fps=target_fps, idle_wake=idle_wake
-        )
+        run_screen(display, input_mgr, detail, target_fps=target_fps, idle_wake=idle_wake)
         return "stay"
 
     if choice == WalletManageAction.COMPANION_QR:
@@ -218,7 +221,7 @@ def run_wallet_manage(
 
     if choice == WalletManageAction.SIGN:
         try:
-            outcome = run_sign_flow(
+            run_sign_flow(
                 display,
                 input_mgr,
                 vault,
@@ -236,6 +239,65 @@ def run_wallet_manage(
             _brief_modal(display, title="Sign failed", body=str(exc)[:96], accent=COLOR_DANGER)
             time.sleep(toast_seconds)
             return "stay"
+        return "stay"
+
+    if choice == WalletManageAction.SECURE_PAYMENTS:
+        try:
+            run_state_sync_flow(
+                display,
+                input_mgr,
+                vault,
+                pin,
+                wallet,
+                target_fps=target_fps,
+                toast_seconds=toast_seconds,
+                idle_wake=idle_wake,
+                settings=settings,
+                settings_path=settings_path,
+                on_settings_changed=on_settings_changed,
+            )
+        except (VaultError, VaultWipedError, WalletStateError) as exc:
+            log.exception("run_state_sync_flow failed")
+            _brief_modal(display, title="Sync failed", body=str(exc)[:96], accent=COLOR_DANGER)
+            time.sleep(toast_seconds)
+        return "stay"
+
+    if choice == WalletManageAction.REEXPORT_SIGNED:
+        try:
+            state_key = vault.derive_state_key(pin, wallet.id)
+            pending = WalletStateStore(vault.state_path).latest_pending(wallet, state_key)
+            if pending is None:
+                _brief_modal(
+                    display,
+                    title="Nothing pending",
+                    body="No signed transaction is waiting to be exported.",
+                    accent=COLOR_OK,
+                )
+                time.sleep(toast_seconds)
+                return "stay"
+            atomic, receipt = pending
+            _show_signed_qr(
+                display,
+                input_mgr,
+                env.SignedTx(
+                    wallet_fp=wallet.fingerprint,
+                    atomic_beef=atomic,
+                    state_receipt=receipt,
+                ),
+                target_fps=target_fps,
+                idle_wake=idle_wake,
+                settings=settings,
+                settings_path=settings_path,
+                on_settings_changed=on_settings_changed,
+            )
+        except (VaultError, VaultWipedError, WalletStateError) as exc:
+            _brief_modal(
+                display,
+                title="Export failed",
+                body=str(exc)[:96],
+                accent=COLOR_DANGER,
+            )
+            time.sleep(toast_seconds)
         return "stay"
 
     if choice == WalletManageAction.INFO:
@@ -287,7 +349,8 @@ def run_wallet_manage(
         ),
         second_prompt=(
             "This is the last step. The wallet will be deleted from the "
-            "vault on this Pi with no undo. Your backup is the phrase only. "
+            "vault and wallet state on this Pi with no undo. Keep both your "
+            "seed phrase and latest state backup. "
             "Press A to erase permanently or B to stop."
         ),
         second_step_warning=True,

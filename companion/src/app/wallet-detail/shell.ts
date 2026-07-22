@@ -76,6 +76,29 @@ export function renderWalletDetailShell(
           <p class="muted-line" id="balanceMeta"></p>
           <p class="muted-line balance-spv-note" id="balanceSpvNote" hidden></p>
           <p class="muted-line balance-status" id="balanceStatus" aria-live="polite"></p>
+          <div id="stateSyncPanel" class="send-pending-banner" hidden>
+            <strong><span id="stateSyncCount">0</span> payment(s) ready to secure on your Pi.</strong>
+            <p class="muted-line">
+              These confirmed transactions are saved locally but do not become
+              spendable until the Pi verifies and commits them.
+            </p>
+            <div class="actions">
+              <button id="stateSyncShow" class="primary" type="button">Show secure QR</button>
+              <button id="stateReceiptScan" type="button">Scan Pi receipt</button>
+            </div>
+            <div id="stateSyncQrPanel" hidden>
+              <p id="stateSyncQrHint" class="muted-line">On the Pi, choose Secure payments and scan this QR.</p>
+              <canvas id="stateSyncQr" width="320" height="320"></canvas>
+              <p class="muted-line">Frame <span id="stateSyncFrame">0</span> / <span id="stateSyncFrames">0</span></p>
+              <div class="actions pw1-qr-controls">
+                <button id="stateSyncPrev" type="button" hidden>Previous</button>
+                <button id="stateSyncNext" type="button" hidden>Next</button>
+                <button id="stateSyncToggle" class="primary" type="button">Pause</button>
+              </div>
+            </div>
+            <div id="stateReceiptScanner" hidden><div id="stateReceiptScannerHost"></div></div>
+            <p id="stateSyncStatus" class="muted-line" aria-live="polite"></p>
+          </div>
           <details id="utxoDetails" class="panel-details" hidden>
             <summary><span class="panel-details-label">UTXOs (<span id="utxoCount">0</span>)</span></summary>
             <div class="panel-details-body">
@@ -391,7 +414,7 @@ export function renderWalletDetailShell(
           <p class="muted-line" id="historyStatus" aria-live="polite"></p>
           <div id="historyEmpty" class="empty-state" hidden>
             <p id="historyEmptyTitle">No transaction history yet.</p>
-            <p class="muted-line" id="historyEmptyHint">Click Refresh to fetch history from Bitails.</p>
+            <p class="muted-line" id="historyEmptyHint">Click Refresh to rebuild history from local Atomic BEEF.</p>
             <button id="scanBalanceForHistory" class="primary" type="button" hidden>
               Scan balance first
             </button>
@@ -465,6 +488,39 @@ export function renderWalletDetailShell(
                 <button id="renameSaveBtn" type="button" class="primary" disabled>Save label</button>
               </div>
               <p id="renameStatus" class="muted-line"></p>
+            </div>
+          </details>
+
+          <details class="backup-fold advanced-fold" id="advancedFoldRecovery">
+            <summary>Disaster recovery discovery</summary>
+            <div class="backup-fold-body">
+              <p class="warning-text">
+                Use this only when every state backup is lost. It queries an
+                external address index from m/0/0 and m/1/0, may be slow, and
+                is not the normal backup or balance path. Fully spent addresses
+                are checked as used so they cannot terminate the gap early.
+              </p>
+              <div class="actions">
+                <button id="recoveryScanBtn" type="button">Run recovery discovery</button>
+              </div>
+              <p id="recoveryScanStatus" class="muted-line" aria-live="polite"></p>
+            </div>
+          </details>
+
+          <details class="backup-fold advanced-fold" id="advancedFoldIncomingBeef">
+            <summary>Import confirmed Atomic BEEF</summary>
+            <div class="backup-fold-body">
+              <p class="muted-line">
+                Paste confirmed Atomic BEEF delivered by a sender, payment
+                protocol, or confirmation service. Wallet payments and your
+                own confirmed change are recognized without querying an address indexer.
+              </p>
+              <textarea id="incomingBeefHex" class="hex-blob" rows="5"
+                placeholder="01010101…" spellcheck="false" autocorrect="off"></textarea>
+              <div class="actions">
+                <button id="incomingBeefImport" class="primary" type="button">Verify &amp; stage</button>
+              </div>
+              <p id="incomingBeefStatus" class="muted-line" aria-live="polite"></p>
             </div>
           </details>
 

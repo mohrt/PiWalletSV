@@ -177,6 +177,7 @@ nav:
           - Overview: protocol/README.md
           - Derivation: protocol/derivation.md
           - Envelopes: protocol/envelopes.md
+          - Persistent wallet state: protocol/wallet-state.md
           - QR transport: protocol/qr-transport.md
           - SPV requirements: protocol/spv.md
           - Conformance: protocol/conformance.md

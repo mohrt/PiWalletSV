@@ -17,30 +17,33 @@ PiWalletSV is a **two-host system**:
 flowchart TB
   subgraph air["Air-gapped signer (Pi)"]
     direction TB
-    seed[("BIP39 seed<br/>encrypted vault")]
+    seed[("vault.bin<br/>encrypted account xprv")]
+    state[("state.bin<br/>coins · Atomic BEEF · anchors<br/>counters · journal")]
     decrypt["unlock_vault<br/>(PIN → scrypt → KEK → DEK → xprv)"]
-    verify["verify_proposal()<br/>BEEF + BUMP path<br/>+ anchored merkle root match<br/>+ derivation match<br/>+ change re-derive<br/>+ value conservation"]
-    sign["sign_transaction()<br/>→ Atomic BEEF (BRC-95)"]
+    verify["verify state/proposal<br/>BEEF + BUMP + anchor<br/>derivation · change · value"]
+    sign["sign + commit state<br/>before response QR"]
     seed --> decrypt --> verify --> sign
+    state --> verify
+    sign --> state
   end
 
   subgraph online["Online companion (PWA)"]
     direction TB
-    woc[("WhatsOnChain<br/>UTXOs · proofs · fees<br/>broadcast")]
-    bitails[("Bitails<br/>tx history")]
-    scan["UTXO scan<br/>(gap-limit 20)"]
-    select["greedy coin selection"]
-    proof["proof fetcher<br/>(TSC + per-block header)"]
-    build["build unsigned_proposal<br/>(+ headerAnchors map)"]
+    mirror[("IndexedDB public mirror<br/>revision · coins · Atomic BEEF")]
+    package["incoming Atomic BEEF<br/>or explicit recovery package"]
+    select["local coin selection"]
+    build["state-bound proposal<br/>(reuse retained BEEF + anchors)"]
     bcast["broadcast (Atomic BEEF)"]
-    woc --> scan --> select --> proof --> build
+    woc[("WhatsOnChain<br/>fees · broadcast<br/>explicit recovery only")]
+    package --> mirror --> select --> build
     bcast --> woc
-    bitails --> history["tx history tab"]
   end
 
+  package -- "stateSync QR" --> verify
+  verify -- "stateReceipt QR" --> mirror
   build -- "PW1 multipart QR<br/>(animated)" --> verify
   sign -- "PW1 multipart QR<br/>(animated)" --> bcast
-  seed -.->|"once, on pairing<br/>xpub_export"| backend
+  seed -.->|"once, on pairing<br/>xpub_export"| mirror
 ```
 
 The horizontal arrows are the **only** channel between the two
@@ -51,10 +54,12 @@ hosts. They carry:
 | `xpub_export`        | Pi → companion         | ~0.2 KB, once per wallet|
 | `unsigned_proposal`  | companion → Pi         | ~1–10 KB, per send      |
 | `signed_tx`          | Pi → companion         | ~0.3–2 KB, per send     |
+| `state_sync`         | companion → Pi         | transaction-sized, per receive/migration |
+| `state_receipt`      | Pi → companion         | small state delta       |
 
-That's it. No master keys ever cross the boundary; no companion-side
-state is replicated on the Pi; no Pi-side state is replicated on
-the companion. Each envelope is self-contained.
+No master keys ever cross the boundary. Public transaction state is mirrored,
+but the Pi is authoritative: only a Pi-authored receipt advances companion
+state. See [Persistent wallet state](protocol/wallet-state.md).
 
 ## 2. Why this split
 
@@ -107,37 +112,31 @@ A real send looks like this:
 2. **Receive.**
     - The companion derives `m/0/<nextReceiveIndex>` from the
       account xpub, displays the base58 P2PKH address as text and
-      QR, and the user shares it. No Pi involvement.
+      QR, and the user shares it.
+    - A confirmed sender-delivered Atomic BEEF package is staged on the
+      companion. During legacy migration only, the explicit Advanced recovery
+      walker discovers transactions and builds the same package.
+    - The Pi verifies the output, derivation, BUMP, height, and anchor, commits
+      it to encrypted state, and returns a receipt that advances the companion
+      mirror.
 
 3. **Send.**
     - User taps "Send" on the wallet detail page, enters a
       recipient address and amount.
-    - Companion runs a gap-limit UTXO scan to refresh balances,
-      using WhatsOnChain's bulk unspent endpoints (up to 20
-      addresses per POST). Confirmation status comes straight from
-      the WoC response; PiWalletSV trusts the explorer for "this
-      UTXO is in block N at merkle root R" rather than
-      independently validating a header chain (see
-      [SPV requirements](protocol/spv.md) §1).
+    - Balance and confirmed input selection read only the Pi-authored mirror.
+      No address lookup or gap walk runs on refresh or send.
     - Live fee rates are fetched from WoC's
       `GET /feerecommendation` and presented as Economy / Standard
       / Priority tiers (100 sat/kB BSV recommended default; used
       as fallback when the endpoint is unreachable).
     - Greedy coin selection picks from the confirmed UTXOs and
       computes the fee under a P2PKH byte model.
-    - For each selected UTXO, the proof fetcher calls
-      `/tx/<txid>/proof/tsc` on WhatsOnChain, translates the TSC
-      proof into a `MerklePath` (`@bsv/sdk` format), pulls the
-      block's header (and merkle root) by hash, self-checks that
-      the path computes to the declared root, and assembles a
-      BRC-62 BEEF blob whose embedded BRC-74 BUMP path covers the
-      prior tx.
+    - For each selected UTXO, the proposal reuses the BEEF and header anchor
+      already verified and retained during the receive/recovery transition.
     - The proposal builder packages `{walletFp, inputs, outputs,
       changeIndex, changeDerivation, feeRate, locktime,
-      headerAnchors}` into an `unsigned_proposal` envelope. The
-      `headerAnchors` map is built directly from the per-input
-      proofs above (one entry per unique block height); no extra
-      header fetches are needed. The envelope is gzipped + CBORed,
+      headerAnchors, stateRevision, stateHash, proposalId}` into an
+      `unsigned_proposal` envelope. The envelope is gzipped + CBORed,
       framed as PW1, and animated on a canvas.
 
 4. **Verify and sign (Pi).**
@@ -160,6 +159,9 @@ A real send looks like this:
       the raw tx, then wraps the tx + each input's BEEF as a
       single **BRC-95 Atomic BEEF** blob, returned in the
       `signed_tx` envelope.
+    - Before showing that QR, the Pi removes consumed coins, adds pending
+      change, advances the counter/revision, stores the signed Atomic BEEF and
+      replay record, then atomically replaces `state.bin`.
 
 5. **Broadcast.**
     - Companion's `/#/scan` page assembles the `signed_tx`,
@@ -171,12 +173,8 @@ A real send looks like this:
       WhatsOnChain's broadcast endpoint (`POST /tx/raw`), surfaces
       the returned txid, and warns if it differs from the one the
       Atomic BEEF wrapper declared (a hint at tx malleability).
-    - Transaction history (the History tab on the wallet detail
-      page) is fetched separately from
-      [Bitails](https://bitails.io) via `POST /address/history/multi`,
-      which returns per-tx satoshi deltas inline without requiring
-      additional tx lookups. This does not consume WoC quota and
-      runs independently of the send/receive flow.
+    - Transaction history is rebuilt locally from retained Atomic BEEF and
+      issued derivation counters; it performs no address lookup.
 
 The user never sees a master key, never enters a password into a
 networked machine, and never authorises a payment without seeing the
@@ -192,20 +190,22 @@ A useful way to summarise:
 | BIP39 mnemonic (cleartext)     | RAM only, signing-path-scoped | never |
 | Master xprv (cleartext)        | RAM only, signing-path-scoped | never |
 | Vault file (encrypted xprvs)   | disk (`~/.piwallet/vault.bin`) | never |
+| Wallet state (encrypted)       | disk (`~/.piwallet/state.bin`) | public mirror only |
 | PIN                            | RAM only, prompt-scoped | never |
 | Account xpub                   | disk (Pi) + IndexedDB (companion) | yes |
 | Receive / change addresses     | derived on demand | derived on demand |
-| UTXO snapshot                  | derived per proposal | cached in IndexedDB |
-| Block-header merkle roots      | per-proposal, supplied by companion as `headerAnchors` | fetched per BUMP block from the explorer |
-| Merkle proofs (BUMP, embedded in BEEF) | per-proposal, BUMP root compared to anchor | fetched + self-checked against the explorer's stated root |
-| Signed transactions (Atomic BEEF) | yes (after sign) | yes (received via QR) |
+| Coins / derivation counters    | authoritative encrypted state | Pi-authored mirror |
+| Block-header merkle roots      | retained by height in encrypted state | mirrored after receipt |
+| Merkle proofs (BUMP, embedded in BEEF) | retained and reused | mirrored after receipt |
+| Signed transactions (Atomic BEEF) | persisted before QR | yes (received via QR) |
 
-The companion holds **public data only**. Its IndexedDB is an ephemeral
-watch-only cache and can be wiped without losing funds (Safari ITP may
-purge it after ~7 days of idle browser use). Restore by re-pairing the
-xpub from the Pi or importing a companion Settings export. The Pi's
-vault is the single source of private material; the BIP39 mnemonic on
-paper (or steel) outside the device is the recovery channel.
+The companion holds **public data only**. Its IndexedDB mirror can be wiped
+without losing keys or funds (Safari ITP may purge it after ~7 days of idle
+browser use), but the mirror must then be restored from a companion Settings
+export or Pi-authored state receipts, or rebuilt through explicit recovery.
+The Pi's vault is the source of private material; `state.bin` is the source of
+transaction facts; the BIP39 mnemonic on paper (or steel) outside the device
+is the key-recovery channel.
 
 ## 5. Module layout
 
@@ -215,12 +215,13 @@ paper (or steel) outside the device is the recovery channel.
 │   ├── core/
 │   │   ├── mnemonic.py           # BIP39 generate / validate / to_seed
 │   │   ├── derivation.py         # BIP32 + BIP44 + P2PKH addresses
-│   │   ├── envelope.py           # CBOR + gzip codec (3 message kinds, v2)
+│   │   ├── envelope.py           # CBOR + gzip codec (5 message kinds, v2)
 │   │   ├── vault.py              # scrypt → KEK → DEK → AES-GCM xprv
+│   │   ├── state.py              # encrypted coins/BEEF/anchors/journal
 │   │   ├── atomic_beef.py        # BRC-95 Atomic BEEF wrap / split
 │   │   ├── verify.py             # BEEF + BUMP-root ↔ anchor check + derivation
 │   │   └── sign.py               # change re-derive + sign + Atomic BEEF
-│   ├── backup/                   # USB vault export/import (bundle, mount socket)
+│   ├── backup/                   # USB vault + state export/import
 │   ├── bonnet/                   # on-device UI flows (wallet list, USB backup, sign)
 │   ├── qr/multipart.py           # PW1 framing + assembler
 │   ├── ui/                       # bonnet display + joystick widgets
@@ -230,17 +231,18 @@ paper (or steel) outside the device is the recovery channel.
 │   └── src/
 │       ├── lib/
 │       │   ├── envelope.ts       # CBOR + gzip codec (mirrors Python, v2)
+│       │   ├── wallet-state.ts   # Pi-authoritative public mirror + local history
 │       │   ├── pw1.ts            # PW1 framing
 │       │   ├── derive.ts         # BIP32 + P2PKH (scure + noble)
 │       │   ├── woc.ts            # WhatsOnChain client — UTXOs, proofs, fees, broadcast
 │       │   ├── bitails.ts        # Bitails client — tx history with inline sat amounts
-│       │   ├── utxo.ts           # gap-limit scanner (WoC bulk unspent)
-│       │   ├── history.ts        # tx history fetcher (Bitails bulk history)
+│       │   ├── utxo.ts           # explicit history-aware disaster recovery
+│       │   ├── history.ts        # legacy/recovery history helpers
 │       │   ├── fee.ts            # fee rate recommendation (WoC /feerecommendation)
 │       │   ├── coin-select.ts    # greedy P2PKH coin selection + dust
 │       │   ├── proof-fetcher.ts  # TSC → MerklePath + per-block header lookup + BEEF
 │       │   ├── proposal.ts       # build_unsigned_proposal (+ headerAnchors map)
-│       │   ├── wallets.ts        # IndexedDB store (schema v2)
+│       │   ├── wallets.ts        # IndexedDB store (schema v3)
 │       │   └── terms.ts          # disclaimer acceptance state
 │       └── app/                  # UI pages: wallets / detail / scan / settings
 │

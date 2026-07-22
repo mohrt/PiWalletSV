@@ -133,8 +133,8 @@ Import**.
 ## 4. Pair the Pi with the companion
 
 Pairing copies the **public** account xpub from the Pi onto the
-companion so the companion can watch the wallet (discover UTXOs,
-display the next receive address, build proposals). No private
+companion so it can derive receive addresses, mirror Pi-authored state,
+and build state-bound proposals. No private
 material crosses the gap.
 
 === "Bonnet"
@@ -168,6 +168,9 @@ Once the assembler completes:
    wallet locally before saving.
 3. Click **Save**. The wallet shows up under `/#/wallets`.
 
+Wallet cards show balances from the local Pi-authored state mirror. Their reload
+button only rereads that local state; it never performs address discovery.
+
 The companion verifies the 4-byte self-fingerprint of the xpub
 matches the envelope's `fp` field. If it doesn't (corrupted scan,
 malicious source), saving is refused.
@@ -183,21 +186,30 @@ On `/#/wallets/<id>` you'll see a **Receive** card.
   current one. The "next" pointer is persisted; clicking past it
   advances the counter.
 
-The receive flow is **purely client-side** — no Pi involvement.
-The companion derives the address from the cached xpub. The Pi
-never knows or cares which addresses you've handed out.
+Address display remains client-side: the companion derives it from the cached
+xpub. The issued receive counter is included in the next Pi state transition so
+the signer and companion cannot silently drift.
 
-When a payment arrives, you don't need to do anything on the Pi.
-Hit **Refresh balance** on the companion's **Balance** card to
-re-scan. The scanner walks both `m/0/*` and `m/1/*` with a default
-gap-limit of 20 and reports total sats, total BSV, UTXO count, and
-the per-UTXO details (txid, vout, amount, derivation).
+When a confirmed payment arrives, import its **Atomic BEEF** on the
+companion under **Advanced → Import confirmed Atomic BEEF**. The companion stages
+the transaction and shows **payment(s) ready to secure** on Balance. Select
+**Secure payments** for that wallet on the Pi, scan the companion QR, then scan
+the Pi's receipt back into the companion. Balance and history now refresh from
+that persisted state without scanning addresses.
+
+The same import promotes pending change after a send: once a confirmation
+service supplies Atomic BEEF with a Merkle path, import and secure it through the
+same receipt flow. No address walk is required.
+
+For a wallet created before persistent state, or when the sender cannot supply
+Atomic BEEF, use **Advanced → Disaster recovery discovery** once. It performs a
+history-aware gap walk, obtains proofs for recovered coins, and stages the same
+secure-payment flow. It is deliberately not part of normal Refresh.
 
 ### Confirmed vs. pending (mempool) balance
 
-The balance scan includes **both** confirmed on-chain UTXOs and
-**pending** UTXOs still in the mempool (shown with `height = 0` /
-"mempool" in the UTXO list). Your **total** includes both.
+The local state includes confirmed coins and pending change from transactions
+the Pi has just signed. Your **total** includes both.
 
 Only **confirmed** coins can be used as inputs when you send. This is
 a deliberate SPV requirement, not a bug:
@@ -239,16 +251,13 @@ What happens next, in order:
 1. **Select confirmed inputs.** Greedy coin selection picks from
    confirmed UTXOs only (largest-first) until the target + estimated
    fee is covered. Mempool UTXOs are skipped entirely.
-2. **Fetch and verify SPV proofs.** For each selected UTXO, the proof
-   fetcher calls the block-explorer endpoint to get the prior tx hex,
-   its TSC Merkle proof, and the containing block's header.
-3. **Cross-check Merkle roots.** The TSC proof is translated into the
-   `@bsv/sdk` `MerklePath` format, then re-checked against the
-   header's Merkle root. If the computed root doesn't match the
-   header, the build aborts with a clear error — that's the
-   companion's last-mile sanity check before it relies on the proof.
-4. A BEEF blob is assembled from the prior tx + path.
-5. The change address is derived at `m/1/<lastChangeUsed + 1>`.
+2. **Load retained SPV proofs.** Each selected coin already references Atomic
+   BEEF and a header anchor committed by the Pi. No address or per-spend proof
+   lookup is performed.
+3. **Bind the state.** The proposal carries the current Pi-authored revision,
+   state hash, and a unique proposal ID so stale browser state cannot be signed.
+4. The existing BEEF body and anchor are copied into the proposal.
+5. The change address is derived at the state's next change index.
    If the residue after fees is below the 546-sat dust threshold,
    change is folded into the fee instead.
 6. An `unsigned_proposal` envelope is built per the
@@ -414,9 +423,10 @@ original with the companion, the new device will pair to the same
 companion record — the companion verifies the
 `(walletFp, path, xpub)` triple matches.
 
-The companion's local state (receive index, scan cache, label) is
-**not** restored along with the wallet — that's companion-side
-metadata and is rebuildable from the chain.
+The seed recreates the same keys and the deterministic key used to decrypt
+`state.bin`, but it does not recreate transaction state by itself. Restore the
+USB bundle's `state.bin` after entering the mnemonic, or run Advanced disaster
+recovery discovery. Companion full backups also retain the public state mirror.
 
 ## 10. Wipe a wallet / wipe the vault
 
@@ -430,7 +440,7 @@ piwallet vault remove --wallet-id <id>   # removes the encrypted xprv entry
 To wipe the vault entirely, delete the vault file:
 
 ```bash
-rm ~/.piwallet/vault.bin
+rm ~/.piwallet/vault.bin ~/.piwallet/state.bin
 ```
 
 Or use **Settings → Maintenance → Factory reset** on the bonnet to securely overwrite
@@ -501,7 +511,7 @@ On the **current** firmware, before you re-flash:
    return to Settings.
 
 Backups are stored under `PiWalletSV/backups/<timestamp>/` on the stick
-(`vault.bin`, optional `settings.json`, and a manifest). **`terms.json`
+(`vault.bin`, encrypted `state.bin`, optional `settings.json`, and a manifest). **`terms.json`
 is never exported** — you will re-accept the disclaimer after upgrading.
 
 Keep the stick offline with the device. Anyone with the stick **and**
@@ -509,12 +519,15 @@ your PIN can sign.
 
 #### Path B — Mnemonic (always works)
 
-If you have the 12- or 24-word seed written down, you do **not** need
-a USB or SD backup. After re-flash, restore via the bonnet ([§9](#9-restore-from-mnemonic)).
+If you have the 12- or 24-word seed written down, you can always recover the
+keys and funds without a USB or SD backup. After re-flash, restore via the
+bonnet ([§9](#9-restore-from-mnemonic)), then restore `state.bin` or explicitly
+rediscover wallet state before spending.
 
-#### Path C — Copy `vault.bin` off the SD card (fallback)
+#### Path C — Copy `vault.bin` and `state.bin` off the SD card (fallback)
 
-Copying `vault.bin` lets you skip re-typing every word, but you must
+Copying both wallet files preserves keys and transaction state. `vault.bin`
+lets you skip re-typing every word, but you must
 still know the **same PIN** as before. The file is encrypted at rest;
 treat the backup like a second copy of the vault — store it securely.
 
@@ -524,6 +537,7 @@ directory (nothing else on the card is user-writable):
 ```text
 /home/pwsv/.piwallet/
 ├── vault.bin       ← required for vault restore
+├── state.bin       ← encrypted coins, BEEF, counters, and journal
 └── settings.json   ← optional (brightness, sleep timeout)
 ```
 
@@ -645,8 +659,9 @@ it is still sealed:
 ### Companion app after a Pi upgrade
 
 - **Mnemonic or vault restore** with the same seed → same xpub → your
-  existing companion wallet record should work; hit **Refresh balance**
-  to resync UTXOs.
+  existing companion wallet record should work. Restore `state.bin` and the
+  companion full backup when available; otherwise run Advanced disaster
+  recovery once and secure its receipt on the Pi.
 - **Companion version**: if the release notes mention a wire-format
   change, update the PWA on your phone/laptop to match the new Pi
   firmware before signing.
@@ -671,8 +686,8 @@ has no network and no editable app tree under `/opt/piwallet`.
 
 ## 12. USB backup and restore { #usb-backup }
 
-PiWalletSV can export and import the encrypted vault (and optional
-display settings) to a **FAT32 or exFAT USB stick**. This is the
+PiWalletSV can export and import the encrypted vault, authenticated wallet
+state, and optional display settings to a **FAT32 or exFAT USB stick**. This is the
 recommended path before re-flashing the SD card
 ([§11 Upgrade your device](#upgrade-your-device)) and works any time
 from Settings.
@@ -709,8 +724,9 @@ UI running on tty1.
 but Balance shows a non-zero total.**
 
 - Your wallet may hold only **mempool (unconfirmed)** UTXOs — for
-  example change from a send you just broadcast. Refresh Balance,
-  check the UTXO list for "mempool" tags, and wait for confirmation.
+  example change from a send you just broadcast. Check the UTXO list for
+  "pending" tags and wait for confirmation. Then import confirmed Atomic BEEF
+  and secure its state receipt; Balance reload itself never scans.
 - SPV requires each input to be anchored in a mined block. Until
   pending coins confirm, they count toward your displayed total but
   cannot be spent. This is by design; see §5 "Confirmed vs. pending."
@@ -729,13 +745,10 @@ but Balance shows a non-zero total.**
 
 **The Pi's verify step fails with "merkle root mismatch."**
 
-- Confirm the companion's chosen block-explorer endpoint is the
-  same chain you intend to operate on (mainnet, not testnet — v1
-  is mainnet-only).
-- Re-run **Refresh balance** in the companion so the UTXO snapshot
-  is current. A stale snapshot can point at UTXOs that have since
-  been spent; their proofs won't recompute against the current
-  chain headers.
+- Confirm the payment package or recovery operation used the intended network
+  and header anchor.
+- Re-import the sender's confirmed Atomic BEEF. For migrated wallets, rerun
+  **Advanced → Disaster recovery discovery** and secure the staged state.
 - Display the on-bonnet anchor pair on the Pi (height + root) and
   compare against a public block explorer. If they match the
   explorer but the verify still fails, file a bug.
@@ -745,9 +758,9 @@ derivation."**
 
 - The companion claimed an input came from `m/0/i`, but the prior
   tx output isn't a P2PKH spend to the address at that derivation.
-  This almost always means the companion's UTXO scanner has a bug
-  or the wallet was restored without resetting the scan state.
-  Force a re-scan and try again.
+  This means the supplied Atomic BEEF package or recovery result declared the
+  wrong derivation. Reject it. For a legacy wallet, rerun the explicit Advanced
+  recovery and secure its receipt before building another proposal.
 
 **The companion's broadcast returns a different txid than the Pi
 signed.**

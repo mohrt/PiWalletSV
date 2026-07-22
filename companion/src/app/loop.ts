@@ -6,7 +6,7 @@
  *
  *   build → CBOR + gzip → PW1 multipart split → assemble → gunzip + CBOR → decode
  *
- * All three round-trips fire on mount and the page renders a status
+ * All five round-trips fire on mount and the page renders a status
  * table. No camera, no hardware — it's a one-page proof that the
  * PWA's encode/decode/framing stack agrees with itself, which (paired
  * with the fixture-decode test in vitest) also proves it agrees with
@@ -19,6 +19,8 @@ import {
   type XpubExportT,
   KIND_PROPOSAL,
   KIND_SIGNED,
+  KIND_STATE_RECEIPT,
+  KIND_STATE_SYNC,
   KIND_XPUB,
   bytesToHex,
   decodeEnvelope,
@@ -175,6 +177,12 @@ function summarize(env: Envelope): string {
       `${env.inputs.length} input → ${env.outputs.length} output, ` +
       `change@${env.changeIndex}, ${anchorSummary}`
     );
+  }
+  if (env.kind === KIND_STATE_SYNC) {
+    return `walletFp ${bytesToHex(env.walletFp)}, state revision ${env.expectedRevision}`;
+  }
+  if (env.kind === KIND_STATE_RECEIPT) {
+    return `walletFp ${bytesToHex(env.walletFp)}, state revision ${env.newRevision}`;
   }
   // signed_tx envelopes carry the txid in the BRC-95 Atomic BEEF
   // header; surface only the byte size + the leading magic so the

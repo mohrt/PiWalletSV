@@ -77,6 +77,27 @@ def test_full_sign_pipeline(tmp_path: Path) -> None:
     assert decoded.wallet_fp.hex() == "cf987d8c"
     assert decoded.txid
 
+    # Repeating the exact legacy proposal after a restart must replay the
+    # durable response byte-for-byte instead of making another signature.
+    replay_path = tmp_path / "signed-replayed.cbor"
+    replay = runner.invoke(
+        main,
+        [
+            "sign",
+            "--vault-path",
+            str(vault_path),
+            "--wallet-id",
+            wallet_id,
+            "-o",
+            str(replay_path),
+            str(PROPOSAL_PATH),
+        ],
+        input=f"{PIN}\n",
+    )
+    assert replay.exit_code == 0, replay.output
+    assert "replayed persisted signed response" in replay.output
+    assert replay_path.read_bytes() == signed_path.read_bytes()
+
 
 def test_sign_hex_in_hex_out_round_trip(tmp_path: Path) -> None:
     """Hex-bridge SSH workflow: --hex input + hex on stdout decode cleanly.
@@ -151,9 +172,7 @@ def test_sign_hex_in_hex_out_round_trip(tmp_path: Path) -> None:
     assert decoded.txid
 
 
-def test_sign_tty_stdout_is_label_prefixed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sign_tty_stdout_is_label_prefixed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """When stdout is a TTY, the signed_tx hex is prefixed `signed_tx: `.
 
     Pipelines (`piwallet sign … | xclip`) still get bare hex — that's
@@ -204,9 +223,7 @@ def test_sign_tty_stdout_is_label_prefixed(
     )
     assert res.exit_code == 0, res.output
 
-    label_lines = [
-        ln for ln in res.output.splitlines() if ln.startswith("signed_tx: ")
-    ]
+    label_lines = [ln for ln in res.output.splitlines() if ln.startswith("signed_tx: ")]
     assert label_lines, f"no labelled line in TTY-mode output: {res.output!r}"
     hex_part = label_lines[-1].removeprefix("signed_tx: ").strip()
     # The hex portion after the prefix must round-trip cleanly.
@@ -242,9 +259,7 @@ def test_sign_rejects_both_file_and_hex(tmp_path: Path) -> None:
         input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
     )
     assert res.exit_code == 0
-    wid = runner.invoke(
-        main, ["vault", "--vault-path", str(vault_path), "list"]
-    ).output.split()[0]
+    wid = runner.invoke(main, ["vault", "--vault-path", str(vault_path), "list"]).output.split()[0]
 
     res = runner.invoke(
         main,
@@ -279,9 +294,7 @@ def test_sign_rejects_neither_file_nor_hex(tmp_path: Path) -> None:
         input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
     )
     assert res.exit_code == 0
-    wid = runner.invoke(
-        main, ["vault", "--vault-path", str(vault_path), "list"]
-    ).output.split()[0]
+    wid = runner.invoke(main, ["vault", "--vault-path", str(vault_path), "list"]).output.split()[0]
 
     res = runner.invoke(
         main,
@@ -313,9 +326,7 @@ def test_sign_rejects_invalid_hex(tmp_path: Path) -> None:
         input=f"{PIN}\n{CANONICAL_MNEMONIC}\n",
     )
     assert res.exit_code == 0
-    wid = runner.invoke(
-        main, ["vault", "--vault-path", str(vault_path), "list"]
-    ).output.split()[0]
+    wid = runner.invoke(main, ["vault", "--vault-path", str(vault_path), "list"]).output.split()[0]
 
     # Odd length
     res = runner.invoke(
@@ -362,9 +373,7 @@ def test_sign_rejects_wrong_wallet_for_proposal(tmp_path: Path) -> None:
     )
     assert res.exit_code == 0
 
-    other_phrase = (
-        "legal winner thank year wave sausage worth useful legal winner thank yellow"
-    )
+    other_phrase = "legal winner thank year wave sausage worth useful legal winner thank yellow"
     res = runner.invoke(
         main,
         ["vault", "--vault-path", str(vault_path), "add", "--label", "other"],
@@ -518,9 +527,7 @@ def test_vault_list_renders_network_column(tmp_path: Path) -> None:
     )
     assert res.exit_code == 0, res.output
 
-    other = (
-        "legal winner thank year wave sausage worth useful legal winner thank yellow"
-    )
+    other = "legal winner thank year wave sausage worth useful legal winner thank yellow"
     res = runner.invoke(
         main,
         [
@@ -676,9 +683,7 @@ def test_qr_split_output_file(tmp_path: Path) -> None:
         ["qr", "split", "--chunk-chars", "120", "-o", str(out_path), str(in_path)],
     )
     assert res.exit_code == 0, res.output
-    lines = [
-        line for line in out_path.read_text().splitlines() if line.startswith("PW1|")
-    ]
+    lines = [line for line in out_path.read_text().splitlines() if line.startswith("PW1|")]
     assert join_multipart_lines(lines) == blob
 
 

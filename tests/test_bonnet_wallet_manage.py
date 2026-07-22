@@ -243,6 +243,8 @@ def test_menu_lists_every_action_in_order() -> None:
         WalletManageAction.COMPANION_QR,
         WalletManageAction.SIGN,
         WalletManageAction.INFO,
+        WalletManageAction.SECURE_PAYMENTS,
+        WalletManageAction.REEXPORT_SIGNED,
         WalletManageAction.RENAME,
         WalletManageAction.DELETE,
     ]

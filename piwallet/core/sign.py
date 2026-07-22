@@ -29,7 +29,7 @@ from bsv.transaction_input import TransactionInput
 from bsv.transaction_output import TransactionOutput
 
 from piwallet.core import atomic_beef
-from piwallet.core.envelope import SignedTx, UnsignedProposal
+from piwallet.core.envelope import SignedTx, StateReceipt, UnsignedProposal
 from piwallet.core.verify import (
     VerifiedInput,
     VerifiedProposal,
@@ -106,8 +106,7 @@ def build_signed_tx(
             )
 
         tx_outputs: list[TransactionOutput] = [
-            TransactionOutput(Script(script_hex), sats)
-            for script_hex, sats in verified.outputs
+            TransactionOutput(Script(script_hex), sats) for script_hex, sats in verified.outputs
         ]
 
         tx = Transaction(
@@ -166,7 +165,12 @@ def verify_then_sign(
     return build_signed_tx(verified, derive_key)
 
 
-def to_signed_envelope(result: SignedResult, wallet_fp: bytes) -> SignedTx:
+def to_signed_envelope(
+    result: SignedResult,
+    wallet_fp: bytes,
+    *,
+    state_receipt: StateReceipt | None = None,
+) -> SignedTx:
     """Wrap a `SignedResult` into a `SignedTx` envelope ready to encode.
 
     The envelope's payload is the Atomic BEEF (BRC-95) form of the
@@ -178,6 +182,7 @@ def to_signed_envelope(result: SignedResult, wallet_fp: bytes) -> SignedTx:
     return SignedTx(
         wallet_fp=wallet_fp,
         atomic_beef=result.atomic_beef,
+        state_receipt=state_receipt,
     )
 
 

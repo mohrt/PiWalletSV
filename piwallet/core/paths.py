@@ -4,6 +4,7 @@ Single source of truth for ``~/.piwallet/`` and the three files
 that live in it:
 
   * ``vault.bin``    — encrypted seeds + per-wallet metadata.
+  * ``state.bin``    — encrypted coins, BEEF, counters, anchors, and journal.
   * ``settings.json`` — bonnet UI settings (brightness, sleep timeout).
   * ``terms.json``   — disclaimer-acceptance state (one-shot per
     disclaimer version).
@@ -61,6 +62,11 @@ def app_dir() -> Path:
 def default_vault_path() -> Path:
     """``<app_dir>/vault.bin``."""
     return app_dir() / "vault.bin"
+
+
+def default_state_path() -> Path:
+    """``<app_dir>/state.bin``."""
+    return app_dir() / "state.bin"
 
 
 def default_settings_path() -> Path:
@@ -128,6 +134,7 @@ __all__ = [
     "LEGACY_APP_DIR_NAME",
     "app_dir",
     "default_settings_path",
+    "default_state_path",
     "default_terms_path",
     "default_vault_path",
     "migrate_legacy_dev_dir",

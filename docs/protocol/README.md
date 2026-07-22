@@ -1,4 +1,4 @@
-# PiWalletSV companion-interop protocol — v1
+# PiWalletSV companion-interop protocol — v2
 
 This directory is the **canonical specification** for the wire formats,
 QR transport, key derivation, and SPV requirements that connect a
@@ -31,10 +31,11 @@ You are reading this if you want to:
 You are **not** reading this if you only want to use PiWalletSV — that
 audience belongs in [`../user-manual.md`](../user-manual.md) (coming).
 
-## Scope of v1
+## Scope of v2
 
-Everything in this directory is **protocol version 1**. The current
-envelope `v` field is `1` and the multipart QR magic is `PW1`. When a
+Everything in this directory is **envelope protocol version 2**. The current
+envelope `v` field is `2`; the independent multipart QR transport remains
+`PW1`. When a
 breaking change is needed:
 
 - The CBOR envelope's `v` integer is incremented and old versions are
@@ -48,8 +49,8 @@ not implement, and surface a clear error to the user.
 ## Files
 
 1. [`envelopes.md`](envelopes.md) — CBOR + gzip payload shapes for the
-   three message kinds: `xpub_export`, `unsigned_proposal`,
-   `signed_tx`. Includes byte-order rules, canonical encoding
+   five message kinds: `xpub_export`, `unsigned_proposal`,
+   `signed_tx`, `state_sync`, and `state_receipt`. Includes byte-order rules, canonical encoding
    requirements, and field-by-field types.
 2. [`qr-transport.md`](qr-transport.md) — the `PW1` multipart QR
    framing: line grammar, base64url alphabet, chunk sizing, assembler
@@ -62,7 +63,9 @@ not implement, and surface a clear error to the user.
    signatures: BEEF parse, MerklePath ↔ header-anchor cross-check,
    prevout script ↔ derivation match, change re-derivation,
    conservation of value, fee-rate cap.
-5. [`conformance.md`](conformance.md) — canonical test vectors:
+5. [`wallet-state.md`](wallet-state.md) — the Pi-authoritative encrypted
+   state model, state transitions, crash consistency, migration, and backup.
+6. [`conformance.md`](conformance.md) — canonical test vectors:
    `addresses_canonical.json`, `proposal_01.cbor`,
    `proposal_01.json`, and a field-by-field decoded form
    (`proposal_01_decoded.json`) that an implementation can diff
@@ -79,8 +82,8 @@ These are the rules the reference implementation follows; they explain
 the "why" behind decisions that the per-file specs only state.
 
 1. **The signer is the trust anchor.** The companion is online but
-   semi-trusted. Every claim the companion makes (which UTXOs you
-   have, how much each is worth, which address is change) is
+   semi-trusted. Every state-changing claim the companion makes (which
+   coins to add or spend, how much each is worth, which address is change) is
    cryptographically re-verified on the signer using `BEEF` proofs
    anchored to user-displayed block headers. A malicious companion
    cannot exfiltrate keys or trick the signer into producing a
@@ -95,22 +98,22 @@ the "why" behind decisions that the per-file specs only state.
 4. **Short keys, gzipped CBOR.** PW1 multipart QR has bounded
    per-frame capacity, so envelope key names are short and the
    payload is compressed before framing.
-5. **No mutable shared state.** Each envelope is self-contained;
-   nothing is implicit or carried over between QR sessions.
+5. **State changes are explicit and receipt-driven.** Transaction packages
+   are self-contained, and every mutation names the Pi's current revision and
+   hash. Nothing becomes companion authority until the Pi returns a receipt.
 
 ## Stability promise
 
-Protocol version 1 is **stable** in the sense that:
+Protocol version 2 is **stable** in the sense that:
 
-- The bytes a v1 signer emits today MUST still parse identically on
-  every v1 implementation forever.
-- Optional fields that may be added in v1 (such as a `meta` map for
-  future extensions) MUST be additive — a v1 decoder that ignores
-  unknown keys SHOULD still succeed if the required v1 keys are
+- The bytes a v2 signer emits today MUST still parse identically on
+  every v2 implementation forever.
+- Optional fields that may be added in v2 MUST be additive — a v2 decoder that ignores
+  unknown keys SHOULD still succeed if the required v2 keys are
   present and well-typed.
 
-If we ever need a breaking change, we'll cut v2 in a clearly-named
-sibling directory (`docs/protocol/v2/`) and run the two protocols
+If we ever need a breaking change, we'll cut v3 in a clearly-named
+sibling directory and run the two protocols
 side-by-side for a deprecation window.
 
 ## Where to start
@@ -123,5 +126,6 @@ If you're new to the protocol, read in order:
    across the air gap).
 4. [`spv.md`](spv.md) (what a signer must verify; informs what your
    companion must include).
-5. [`conformance.md`](conformance.md) (run your decoder against the
+5. [`wallet-state.md`](wallet-state.md) (how verified facts persist and migrate).
+6. [`conformance.md`](conformance.md) (run your decoder against the
    golden fixtures before shipping).

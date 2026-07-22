@@ -7,6 +7,7 @@ import {
   decodeEnvelope,
   KIND_PROPOSAL,
   KIND_SIGNED,
+  KIND_STATE_RECEIPT,
   KIND_XPUB,
   type Envelope,
   type XpubExportT,
@@ -18,11 +19,13 @@ export type ScanWorkflow =
   | "pair-xpub"
   | "send-signed-tx"
   | "send-address"
+  | "state-receipt"
   | "settings-backup";
 
 export type ValidatedPw1Result =
   | { workflow: "pair-xpub"; envelope: XpubExportT; bytes: Uint8Array }
   | { workflow: "send-signed-tx"; envelope: Extract<Envelope, { kind: typeof KIND_SIGNED }>; bytes: Uint8Array }
+  | { workflow: "state-receipt"; envelope: Extract<Envelope, { kind: typeof KIND_STATE_RECEIPT }>; bytes: Uint8Array }
   | { workflow: "settings-backup"; json: string; bytes: Uint8Array };
 
 export type ScanValidation =
@@ -45,6 +48,8 @@ const WORKFLOW_HINT: Record<ScanWorkflow, string> = {
   "send-signed-tx":
     "this screen expects the signed transaction QR from the Pi (Send → Step 2)",
   "send-address": "this screen expects a BSV address or bitcoin: payment URI (BIP21)",
+  "state-receipt":
+    "this screen expects the state receipt QR from the Pi (Balance → Secure payments)",
   "settings-backup":
     "this screen expects a wallet transfer QR from Settings on another phone",
 };
@@ -107,6 +112,13 @@ export async function validatePw1Bytes(
       return { ok: false, message: wrongKindMessage(workflow, env.kind) };
     }
     return { ok: true, result: { workflow: "send-signed-tx", envelope: env, bytes } };
+  }
+
+  if (workflow === "state-receipt") {
+    if (env.kind !== KIND_STATE_RECEIPT) {
+      return { ok: false, message: wrongKindMessage(workflow, env.kind) };
+    }
+    return { ok: true, result: { workflow: "state-receipt", envelope: env, bytes } };
   }
 
   return { ok: false, message: wrongKindMessage(workflow, env.kind) };

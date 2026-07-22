@@ -470,7 +470,7 @@ Exit codes are documented under [Operate § Exit codes](operate.md#exit-codes).
 
 ## `piwallet backup` { #piwallet-backup }
 
-Export or import encrypted vault backups to a USB stick (FAT32/exFAT)
+Export or import encrypted vault and wallet-state backups to a USB stick (FAT32/exFAT)
 under `PiWalletSV/backups/<timestamp>/`. **`terms.json` is never
 included** — disclaimer is re-accepted after a firmware upgrade.
 
@@ -500,8 +500,10 @@ piwallet backup list-backups --stick-root /mnt/piwallet-usb
 
 ### `backup export`
 
-Write the vault (and `settings.json` by default) to a new timestamped
-directory on the stick. Prompts for the vault PIN.
+Write `vault.bin`, its sibling `state.bin` when present, and
+`settings.json` by default to a new timestamped directory on the stick.
+The v2 manifest contains SHA-256 checksums and is written last. Prompts for the
+vault PIN.
 
 ```bash
 piwallet backup export --stick-root /mnt/piwallet-usb
@@ -512,7 +514,8 @@ piwallet backup export --stick-root /mnt/piwallet-usb \
 
 ### `backup import`
 
-Replace the local vault from a backup directory. Prompts for the
+Replace the local vault and included wallet state from a backup directory.
+Prompts for the
 **backup vault PIN** (unless `--pin` is passed).
 
 ```bash
@@ -526,6 +529,19 @@ piwallet backup import \
 
 Import **replaces** the entire vault. See
 [User manual § Upgrade your device](user-manual.md#upgrade-your-device).
+
+### `backup import-state`
+
+Restore only the encrypted state snapshot after recreating wallet keys from a
+mnemonic. The same mnemonic/account path derives the same state key even when
+the new vault uses a different PIN or wallet UUID.
+
+```bash
+piwallet backup import-state \
+  --backup-dir /mnt/piwallet-usb/PiWalletSV/backups/20260527-120000Z/
+```
+
+Run this after adding the recovered wallet. It does not import keys or settings.
 
 ## `piwallet diag airgap`
 

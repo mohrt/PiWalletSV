@@ -101,13 +101,12 @@ RestartPreventExitStatus=3
 operators are better served by the default — exit 3 is rare in
 normal use.
 
-## Vault stewardship
+## Wallet-file stewardship
 
-The encrypted vault is a single file (typically
-`~/.piwallet/vault.bin`). Treat it as the source of truth for
-what wallets exist on the device. The mnemonic is the source of
-truth for the *funds* — the vault is destroyed by a wipe; the
-mnemonic is not.
+The signer has two encrypted files: `~/.piwallet/vault.bin` is the source of
+keys/PIN policy and `~/.piwallet/state.bin` is the source of coins, retained
+BEEF/anchors, counters, and journal. The mnemonic is the source of key truth for
+the funds, but does not encode the transaction state.
 
 ### Listing wallets without unlocking
 
@@ -147,12 +146,12 @@ piwallet backup import \
   --import-settings
 ```
 
-Import **replaces** the entire vault. The CLI prompts for the backup
+Import **replaces** the entire vault and included state. The CLI prompts for the backup
 vault PIN unless you pass `--pin`. See [CLI § `piwallet backup`](cli.md#piwallet-backup).
 
-### Backing up the vault file (manual copy)
+### Backing up wallet files (manual copy)
 
-Copying `vault.bin` is fine; the file is encrypted at rest. A copy
+Copying `vault.bin` and `state.bin` is fine; both are encrypted at rest. A copy
 on a USB stick is acceptable — the bonnet **USB backup** flow writes
 a timestamped bundle under `PiWalletSV/backups/` with a manifest for
 easier restore. Keep in mind:
@@ -160,8 +159,9 @@ easier restore. Keep in mind:
 - Restoring from a backup is **not the same** as restoring from the
   mnemonic. The backup includes the same scrypt parameters and PIN
   verifier; its security is only as strong as the PIN.
-- The mnemonic is always the canonical recovery path. If you have
-  the mnemonic, you don't need the vault file. If you have only the
+- The mnemonic is always the canonical key-recovery path. Without the state
+  snapshot, the companion must run explicit disaster discovery before the
+  replacement signer can resume state-bound spending. If you have only the
   vault file, you also need the PIN.
 
 For the full re-flash upgrade workflow (sealed SD-card image), see
@@ -178,7 +178,7 @@ Two ways:
 
 ```bash
 sudo systemctl stop piwallet-bonnet
-shred -uz ~/.piwallet/vault.bin
+shred -uz ~/.piwallet/vault.bin ~/.piwallet/state.bin
 sudo systemctl start piwallet-bonnet
 ```
 

@@ -1,8 +1,6 @@
 import QRCode from "qrcode";
 
 import { RECEIVE_BRANCH, deriveAddress, deriveAddressBatch } from "../../lib/derive.js";
-import { scanNextReceiveIndex } from "../../lib/utxo.js";
-import { WocClient, effectiveWocBase } from "../../lib/woc.js";
 import { setNextReceiveIndex } from "../../lib/wallets.js";
 import {
   RECENT_WINDOW,
@@ -57,16 +55,16 @@ export function createReceiveTab(
 
   function receiveAdvanceWarning(nextIndex: number): string | null {
     if (!rt.wallet || nextIndex <= rt.wallet.nextReceiveIndex) return null;
-    if (!rt.wallet.lastScan) {
-      return "Refresh Balance first so the companion knows which receive addresses are in use.";
+    if (!rt.wallet.walletState) {
+      return "Secure wallet state on the Pi before skipping receive addresses.";
     }
-    const recommended = rt.wallet.lastScan.lastReceiveUsed + 1;
+    const recommended = rt.wallet.walletState.nextReceiveIndex;
     if (nextIndex <= recommended) return null;
-    const lastUsed = rt.wallet.lastScan.lastReceiveUsed;
+    const lastUsed = recommended - 1;
     if (lastUsed < 0) {
       return (
-        `Address #${nextIndex} is ahead of the scanned range. ` +
-        `Refresh Balance if you are not sure this address is unused.`
+        `Address #${nextIndex} is ahead of secured wallet state. ` +
+        `Only advance after you no longer expect payment to the current address.`
       );
     }
     return (
@@ -239,14 +237,9 @@ export function createReceiveTab(
     if (!rt.wallet || rt.receiveIndexScanRunning) return;
     rt.receiveIndexScanRunning = true;
     try {
-      if (!rt.woc) {
-        rt.woc = new WocClient({ baseUrl: effectiveWocBase(rt.wallet.network) });
-      }
-      const fresh = await scanNextReceiveIndex(
-        rt.wallet.xpub,
-        rt.woc,
+      const fresh = Math.max(
         rt.wallet.nextReceiveIndex,
-        rt.wallet.network,
+        rt.wallet.walletState?.nextReceiveIndex ?? 0,
       );
       if (rt.cancelled) return;
       if (fresh !== rt.wallet.nextReceiveIndex) {

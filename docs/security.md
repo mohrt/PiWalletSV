@@ -17,18 +17,17 @@ The complete disclosure / reporting policy lives in the project's
   runs locally.
 - **Nothing about your wallet is sent back to the site.** No login,
   no telemetry, no analytics, no "sync" anywhere. Paired-wallet
-  metadata (xpub, fingerprint, label, derivation path, cached UTXO
-  snapshots) lives in your browser's `IndexedDB` (prefs in
-  `localStorage`). That list is an **ephemeral watch-only cache**, not
-  custody — the browser can delete it at any time.
+  metadata (xpub, fingerprint, label, derivation path, the Pi-authored
+  revision/hash, coins, and public Atomic BEEF mirror) lives in your browser's
+  `IndexedDB` (prefs in `localStorage`). That data is an **ephemeral
+  watch-only mirror**, not custody — the browser can delete it at any time.
 - **The only outbound calls** the companion makes are to two
   public blockchain APIs — neither receives anything private:
-    - [WhatsOnChain](https://whatsonchain.com/) for UTXO discovery,
-      Merkle proofs, fee rate recommendations, and broadcasting
-      signed transactions.
-    - [Bitails](https://bitails.io) for transaction history (the
-      History tab fetches per-address tx history with satoshi
-      deltas inline).
+    - [WhatsOnChain](https://whatsonchain.com/) for fee recommendations,
+      broadcasting, and explicit disaster-recovery discovery/proof retrieval.
+    - [Bitails](https://bitails.io) remains available to legacy tooling, but
+      normal Balance and History views are rebuilt from local Pi-authoritative
+      state and do not enumerate wallet addresses.
   Both services see only public data: BSV addresses, transaction
   IDs, and raw transaction hex. They never see your seed, PIN,
   or private keys.
@@ -52,22 +51,27 @@ The complete disclosure / reporting policy lives in the project's
 - The Pi's vault file (`~/.piwallet/vault.bin`) is AES-GCM encrypted.
   The key is derived from your PIN with
   [scrypt](https://en.wikipedia.org/wiki/Scrypt), which is
-  intentionally slow and memory-hard. That makes offline guessing
-  expensive — but it is **not impossible**.
-- **The vault PIN is 6–16 letters and digits** (case-sensitive). Classic
-  6-digit PINs still work. Treat it as a barrier against casual
-  access to the encrypted file on the device, not as a substitute for
-  your seed phrase backup.
-- **Six wrong PIN attempts in a row wipe the vault** from the Pi. This
+  intentionally slow and memory-hard. That makes brute-forcing a long
+  PIN very expensive — but it is **not impossible**.
+- **The vault PIN is 6–16 ASCII letters and digits** (case-sensitive).
+  Classic 6-digit PINs still work, but a 6-digit PIN has only a million
+  combinations. Use a long PIN — ideally 12+ characters — if you treat
+  your seed as a high-value secret.
+- **Ten wrong PIN attempts in a row wipe the vault** from the Pi. This
   is a circuit breaker, not a guarantee: if someone copies
   `vault.bin` off the device they can retry forever offline. Your
   seed phrase backup is what protects you in that scenario.
-- **USB backup sticks hold the same encrypted vault file** as the SD
-  card. Treat a stick like a second copy of `vault.bin`: store it
+- **USB backup sticks hold the encrypted vault and state files** from the SD
+  card. Treat a stick like a second copy of the wallet files: store it
   offline. Anyone with the stick **and** your vault PIN can sign.
   See [User manual § USB backup](user-manual.md#usb-backup).
 - **The seed itself is never persisted.** It only exists in transient
   memory long enough to derive the master xprv and is then zeroed.
+- **Transaction state is independently encrypted.** `state.bin` uses AES-GCM
+  with a deterministic key derived from a reserved hardened account child and
+  domain-separated HKDF. It is not protected by the PIN directly, cannot be
+  decrypted from the xpub, and can be reopened after a mnemonic restore under
+  a different PIN. See [Persistent wallet state](protocol/wallet-state.md).
 
 ## 3. Treat the device like the seed phrase itself
 
@@ -79,7 +83,7 @@ The complete disclosure / reporting policy lives in the project's
   designed for long-term, infrequent signing of larger amounts. If
   you need to move funds every day, use a hot wallet on a phone or
   laptop and keep PiWalletSV for the savings stack.
-- **Your seed phrase is the source of truth, not the Pi.** Back it up
+- **Your seed phrase is the source of key truth, not the Pi.** Back it up
   on something durable (steel plates, multiple geographic locations)
   and store it the way you would store the deed to a house. Losing
   the Pi is annoying; losing the seed is permanent. If the device is
@@ -88,6 +92,9 @@ The complete disclosure / reporting policy lives in the project's
   [Recover without device](recover-without-device.md)
   ([iancoleman.io/bip39](https://iancoleman.io/bip39/),
   [satofinder.com](https://satofinder.com), ElectrumSV, and others).
+  Also back up `state.bin` so a replacement device can resume without
+  address discovery. The seed still controls the funds if state is lost,
+  but recovery then requires an explicit chain scan.
 - **Air-gap discipline still applies.** Don't plug the Pi into the
   internet, don't type the seed into anything online, and don't let
   cameras or screen-recorders see the disclaimer-revealed phrase

@@ -1,13 +1,8 @@
 import { relativeTimeFrom } from "../../lib/relative-time.js";
-import {
-  enrichWalletHistorySlice,
-  fetchWalletHistory,
-  formatTxTimestamp,
-  historyAddressesForWallet,
-} from "../../lib/history.js";
+import { formatTxTimestamp } from "../../lib/history.js";
 import { HISTORY_PAGE_SIZE } from "../../lib/config.js";
-import { BitailsClient, effectiveBitailsBase } from "../../lib/bitails.js";
-import { WocClient, effectiveWocBase, wocExplorerTxUrl } from "../../lib/woc.js";
+import { wocExplorerTxUrl } from "../../lib/woc.js";
+import { historyFromState } from "../../lib/wallet-state.js";
 import { setLastHistory } from "../../lib/wallets.js";
 import { escapeHtml, formatSats, shortTxid } from "./shared.js";
 import type { WalletDetailActions, WalletDetailRuntime, WalletDetailTab } from "./types.js";
@@ -35,8 +30,10 @@ export function createHistoryTab(
     const truncatedNote = snap.truncated ? " (list capped)" : "";
     return (
       `${countPart}${truncatedNote} · ` +
-      `${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} checked · ` +
-      `last fetched ${relativeTimeFrom(snap.at)}`
+      (snap.addressesQueried === 0
+        ? "local Atomic BEEF · "
+        : `${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} checked · `) +
+      `updated ${relativeTimeFrom(snap.at)}`
     );
   }
 
@@ -64,10 +61,10 @@ export function createHistoryTab(
     const $status = root.querySelector<HTMLElement>("#historyStatus");
     if (!$list || !$empty) return;
 
-    const needsScan = !rt.wallet.lastScan;
-    if ($scanBtn) $scanBtn.hidden = !needsScan;
+    const needsScan = !rt.wallet.walletState;
+    if ($scanBtn) $scanBtn.hidden = true;
     if ($refreshBtn) {
-      $refreshBtn.textContent = needsScan ? "Scan balance first" : "Refresh";
+      $refreshBtn.textContent = needsScan ? "Secure state first" : "Refresh";
     }
 
     const snap = rt.wallet.lastHistory;
@@ -76,15 +73,13 @@ export function createHistoryTab(
       $list.innerHTML = "";
       if ($emptyTitle) {
         $emptyTitle.textContent = needsScan
-          ? "Balance scan required"
+          ? "Secured wallet state required"
           : "No transaction history yet.";
       }
       if ($emptyHint) {
         $emptyHint.textContent = needsScan
-          ? "Refresh balance first so we know which addresses to check."
-          : rt.wallet.network === "test"
-            ? "Click Refresh to fetch history from WhatsOnChain."
-            : "Click Refresh to fetch history from Bitails.";
+          ? "Secure a payment on the Pi so history uses persisted derivation counters."
+          : "Click Refresh to rebuild history from locally persisted Atomic BEEF.";
       }
       if ($status) $status.textContent = "";
       const $loadMore = root.querySelector<HTMLButtonElement>("#historyLoadMore");
@@ -97,7 +92,9 @@ export function createHistoryTab(
     }
     if ($emptyHint && snap.entries.length === 0) {
       $emptyHint.textContent =
-        `Checked ${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} — none had history.`;
+        snap.addressesQueried === 0
+          ? "No committed Atomic BEEF transactions are available yet."
+          : `Checked ${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} — none had history.`;
     }
     if ($status) {
       $status.textContent = historyStatusLine(snap);
@@ -139,8 +136,7 @@ export function createHistoryTab(
 
   async function refreshHistory(): Promise<void> {
     if (!rt.wallet || rt.historyRunning) return;
-    if (!rt.wallet.lastScan) {
-      await actions.refreshBalance({ thenHistory: true });
+    if (!rt.wallet.walletState) {
       return;
     }
     rt.historyRunning = true;
@@ -148,41 +144,15 @@ export function createHistoryTab(
     const $status = rt.root.querySelector<HTMLElement>("#historyStatus");
     if ($btn) {
       $btn.disabled = true;
-      $btn.textContent = "Fetching…";
+      $btn.textContent = "Rebuilding…";
     }
     if ($status) {
       $status.classList.remove("error");
-      $status.textContent =
-        rt.wallet.network === "test"
-          ? "Fetching history from WhatsOnChain…"
-          : "Fetching history from Bitails…";
-    }
-
-    if (!rt.bitails) {
-      rt.bitails = new BitailsClient({
-        baseUrl: effectiveBitailsBase(rt.wallet.network),
-      });
-    }
-    if (!rt.woc) {
-      rt.woc = new WocClient({ baseUrl: effectiveWocBase(rt.wallet.network) });
+      $status.textContent = "Rebuilding from locally persisted Atomic BEEF…";
     }
 
     try {
-      const snap = await fetchWalletHistory(rt.wallet.xpub, rt.bitails, {
-        network: rt.wallet.network,
-        woc: rt.wallet.network === "test" ? rt.woc : undefined,
-        stoppedAtReceive: rt.wallet.lastScan.stoppedAt?.receive,
-        stoppedAtChange: rt.wallet.lastScan.stoppedAt?.change,
-        lastReceiveUsed: rt.wallet.lastScan.lastReceiveUsed,
-        lastChangeUsed: rt.wallet.lastScan.lastChangeUsed,
-        onProgress: (done, total, phase) => {
-          if (rt.cancelled || !$status) return;
-          $status.textContent =
-            phase === "transactions"
-              ? `Loading transaction details (${done}/${total})…`
-              : `Fetching history (${done}/${total} addresses)…`;
-        },
-      });
+      const snap = historyFromState(rt.wallet);
       if (rt.cancelled) return;
       historyVisibleCount = HISTORY_PAGE_SIZE;
       await setLastHistory(rt.wallet.id, snap);
@@ -195,15 +165,13 @@ export function createHistoryTab(
             ? `Showing ${shown} of ${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"}`
             : `${snap.entries.length} transaction${snap.entries.length === 1 ? "" : "s"}`;
         $status.textContent =
-          `${countPart} · ` +
-          `${snap.addressesQueried} address${snap.addressesQueried === 1 ? "" : "es"} checked · ` +
-          `last fetched just now`;
+          `${countPart} · rebuilt locally · no addresses scanned`;
       }
     } catch (e) {
       if (rt.cancelled) return;
       if ($status) {
         $status.classList.add("error");
-        $status.textContent = `history fetch failed: ${(e as Error).message}`;
+        $status.textContent = `local history rebuild failed: ${(e as Error).message}`;
       }
     } finally {
       rt.historyRunning = false;
@@ -219,76 +187,11 @@ export function createHistoryTab(
     const snap = rt.wallet.lastHistory;
     if (historyVisibleCount >= snap.entries.length) return;
 
-    const prevVisible = historyVisibleCount;
     historyVisibleCount = Math.min(
       historyVisibleCount + HISTORY_PAGE_SIZE,
       snap.entries.length,
     );
-
-    const needsEnrich =
-      rt.wallet.network === "test" &&
-      snap.entries
-        .slice(prevVisible, historyVisibleCount)
-        .some((e) => e.deltaKnown === false);
-
-    if (!needsEnrich) {
-      renderHistory();
-      return;
-    }
-
-    rt.historyRunning = true;
-    const $loadMore = rt.root.querySelector<HTMLButtonElement>("#historyLoadMore");
-    const $status = rt.root.querySelector<HTMLElement>("#historyStatus");
-    if ($loadMore) {
-      $loadMore.disabled = true;
-      $loadMore.textContent = "Loading…";
-    }
-    if ($status) {
-      $status.classList.remove("error");
-      $status.textContent = "Loading transaction details…";
-    }
-    if (!rt.woc) {
-      rt.woc = new WocClient({ baseUrl: effectiveWocBase(rt.wallet.network) });
-    }
-
-    try {
-      const addresses = historyAddressesForWallet(rt.wallet.xpub, {
-        network: rt.wallet.network,
-        stoppedAtReceive: rt.wallet.lastScan?.stoppedAt?.receive,
-        stoppedAtChange: rt.wallet.lastScan?.stoppedAt?.change,
-        lastReceiveUsed: rt.wallet.lastScan?.lastReceiveUsed,
-        lastChangeUsed: rt.wallet.lastScan?.lastChangeUsed,
-      });
-      await enrichWalletHistorySlice(
-        snap.entries,
-        addresses,
-        rt.woc,
-        prevVisible,
-        historyVisibleCount,
-        (done, total) => {
-          if (rt.cancelled || !$status) return;
-          $status.textContent = `Loading transaction details (${done}/${total})…`;
-        },
-      );
-      if (rt.cancelled) return;
-      await setLastHistory(rt.wallet.id, snap);
-      renderHistory();
-    } catch (e) {
-      if (rt.cancelled) return;
-      historyVisibleCount = prevVisible;
-      if ($status) {
-        $status.classList.add("error");
-        $status.textContent = `history load failed: ${(e as Error).message}`;
-      }
-      updateLoadMoreButton(snap);
-    } finally {
-      rt.historyRunning = false;
-      if ($loadMore && historyVisibleCount < snap.entries.length) {
-        $loadMore.disabled = false;
-        const remaining = snap.entries.length - historyVisibleCount;
-        $loadMore.textContent = `Load ${Math.min(HISTORY_PAGE_SIZE, remaining)} more`;
-      }
-    }
+    renderHistory();
   }
 
   function bind(): void {

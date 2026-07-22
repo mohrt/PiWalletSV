@@ -63,6 +63,10 @@ export interface BuildProposalArgs {
   /** sats per 1000 bytes; persisted on the envelope. */
   feeRateSatskb: number;
   locktime?: number;
+  /** Pi-authored state binding used to reject stale companion proposals. */
+  stateRevision?: number;
+  stateHash?: Uint8Array;
+  proposalId?: string;
 }
 
 function hexToBytes(hex: string): Uint8Array {
@@ -119,6 +123,24 @@ export function buildUnsignedProposal(args: BuildProposalArgs): UnsignedProposal
   }
   if (typeof args.changeAddress !== "string" || args.changeAddress.length === 0) {
     throw new ProposalBuilderError("changeAddress is required");
+  }
+  const hasStateRevision = args.stateRevision !== undefined;
+  const hasStateHash = args.stateHash !== undefined;
+  if (hasStateRevision !== hasStateHash) {
+    throw new ProposalBuilderError(
+      "stateRevision and stateHash must be supplied together",
+    );
+  }
+  if (hasStateRevision) {
+    if (!Number.isInteger(args.stateRevision) || args.stateRevision! < 0) {
+      throw new ProposalBuilderError("stateRevision must be a non-negative integer");
+    }
+    if (args.stateHash!.byteLength !== 32) {
+      throw new ProposalBuilderError("stateHash must be 32 bytes");
+    }
+    if (!args.proposalId) {
+      throw new ProposalBuilderError("state-bound proposals require proposalId");
+    }
   }
 
   // Every input must carry a confirmed height + Merkle root; the
@@ -188,5 +210,8 @@ export function buildUnsignedProposal(args: BuildProposalArgs): UnsignedProposal
     feeRate: args.feeRateSatskb,
     locktime: args.locktime ?? 0,
     headerAnchors,
+    ...(args.stateRevision !== undefined ? { stateRevision: args.stateRevision } : {}),
+    ...(args.stateHash !== undefined ? { stateHash: args.stateHash } : {}),
+    ...(args.proposalId ? { proposalId: args.proposalId } : {}),
   };
 }
