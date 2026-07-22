@@ -77,7 +77,7 @@
     if (!url) {
       return;
     }
-    const statusBtn = btn("Status", false);
+    const statusBtn = btn("Customer status page", false);
     statusBtn.title = "Open customer order status page";
     statusBtn.addEventListener("click", function () {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -784,8 +784,11 @@
       }
       return;
     }
+  }
 
-    container.appendChild(el("span", "piwalletsv-operator-muted", "—"));
+  function appendOrderActionsIfAny(order, container, options) {
+    appendOrderActions(order, container, options);
+    return container.childElementCount > 0;
   }
 
   function selectedOrderIdFromUrl() {
@@ -930,8 +933,9 @@
     card.appendChild(meta);
 
     const actions = el("div", "piwalletsv-operator-actions");
-    appendOrderActions(order, actions, { detail: true });
-    card.appendChild(actions);
+    if (appendOrderActionsIfAny(order, actions, { detail: true })) {
+      card.appendChild(actions);
+    }
     wrap.appendChild(card);
     wrap.appendChild(renderEventHistory(order.events));
     return wrap;
@@ -1006,8 +1010,9 @@
     card.appendChild(meta);
 
     const actions = el("div", "piwalletsv-operator-actions");
-    appendOrderActions(order, actions);
-    card.appendChild(actions);
+    if (appendOrderActionsIfAny(order, actions)) {
+      card.appendChild(actions);
+    }
     return card;
   }
 
