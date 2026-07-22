@@ -15,10 +15,11 @@ from piwallet.ui.input import Button, FakeInputBackend, InputManager
 
 @pytest.fixture(autouse=True)
 def _mock_display_lock(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Avoid /tmp/piwallet-display.lock collisions across tests and CI."""
+    """Bypass hardware-process and splash concerns in boot-loop tests."""
     from piwallet.bonnet import app as bonnet_app
 
     monkeypatch.setattr(bonnet_app, "_acquire_display_lock", lambda: True)
+    monkeypatch.setattr(bonnet_app, "run_boot_splash", lambda *a, **kw: "continue")
 
 
 @pytest.fixture()
@@ -79,6 +80,7 @@ def test_no_vault_drives_vault_setup_flow(
     monkeypatch.setattr(bonnet_app, "run_vault_setup", lambda *a, **kw: None)
 
     backend = FakeInputBackend()
+    backend.press(Button.A)
     mgr = InputManager(backend)
     display = HeadlessDisplay()
     code = run_bonnet(
@@ -215,6 +217,7 @@ def test_persisted_settings_apply_at_run_bonnet_boot(
     assert reloaded.sleep_timeout_ms == 0
 
     backend = FakeInputBackend()
+    backend.press(Button.A)
     mgr = InputManager(backend)
     display = HeadlessDisplay()
 

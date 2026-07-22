@@ -25,7 +25,7 @@ def test_pairing_multipart_qr_requires_non_empty() -> None:
         PairingMultipartQrScreen([])
 
 
-def test_pairing_multipart_qr_auto_advances_on_draw() -> None:
+def test_pairing_multipart_qr_auto_advances_after_entry_hint() -> None:
     t = {"ms": [0]}
 
     def clock() -> int:
@@ -43,9 +43,15 @@ def test_pairing_multipart_qr_auto_advances_on_draw() -> None:
 
     t["ms"][0] = 100
     s.draw(fb)
+    assert s.idx == 0
+
+    # The initial QR-brightness hint deliberately holds the first frame long
+    # enough to read; rotation resumes when that 1.5 second hint expires.
+    t["ms"][0] = 1500
+    s.draw(fb)
     assert s.idx == 1
 
-    t["ms"][0] = 200
+    t["ms"][0] = 1600
     s.draw(fb)
     assert s.idx == 0
 
@@ -98,4 +104,3 @@ def test_up_down_adjusts_qr_background_and_restarts_sequence() -> None:
     s.on_event(Event(button=Button.DOWN, kind=EventKind.PRESS, at_ms=0))
     assert s.qr_background == 31
     assert s.idx == 0
-
