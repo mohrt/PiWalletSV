@@ -426,6 +426,27 @@
     return true;
   }
 
+  function applyPreferredCountry() {
+    if (!form) {
+      return;
+    }
+    const countrySelect = form.querySelector('select[name="country"]');
+    if (!countrySelect) {
+      return;
+    }
+    const preferred =
+      (params.get("country") || "").trim().toUpperCase() ||
+      rememberedShipCountry();
+    if (
+      preferred &&
+      countrySelect.querySelector('option[value="' + preferred + '"]')
+    ) {
+      countrySelect.value = preferred;
+      rememberShipCountry(preferred);
+    }
+    applyCountryFieldCopy(countrySelect.value || "US");
+  }
+
   function applyVerifiedSession(session) {
     if (!session || !session.customer_email || !session.email_verification_token) {
       return;
@@ -449,6 +470,10 @@
     }
     if (shippingStep) {
       shippingStep.hidden = false;
+      if (session.country) {
+        rememberShipCountry(session.country);
+      }
+      applyPreferredCountry();
       invalidateAddress();
     }
   }
@@ -654,6 +679,10 @@
       if (sku) {
         payload.sku = sku;
       }
+      const country = rememberedShipCountry();
+      if (country) {
+        payload.country = country;
+      }
       const resp = await fetch(apiUrl + "/v1/checkout/bsv/request-verification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -737,17 +766,7 @@
   if (shippingStep) {
     const countrySelect = form.querySelector('select[name="country"]');
     if (countrySelect) {
-      const preferred =
-        (params.get("country") || "").trim().toUpperCase() ||
-        rememberedShipCountry();
-      if (
-        preferred &&
-        countrySelect.querySelector('option[value="' + preferred + '"]')
-      ) {
-        countrySelect.value = preferred;
-        rememberShipCountry(preferred);
-      }
-      applyCountryFieldCopy(countrySelect.value || "US");
+      applyPreferredCountry();
       countrySelect.addEventListener("change", function () {
         rememberShipCountry(countrySelect.value || "");
         applyCountryFieldCopy(countrySelect.value || "US");

@@ -43,6 +43,7 @@
     <option value="DE">Germany</option>
     <option value="IE">Ireland</option>
     <option value="IT">Italy</option>
+    <option value="JP">Japan</option>
     <option value="LU">Luxembourg</option>
     <option value="NL">Netherlands</option>
     <option value="NZ">New Zealand</option>

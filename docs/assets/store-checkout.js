@@ -154,11 +154,15 @@
     }
   }
 
-  async function postCheckout(path, sku, shippingZone) {
+  async function postCheckout(path, sku, shippingZone, country) {
+    const body = { sku: sku, shipping_zone: shippingZone };
+    if (country) {
+      body.country = country;
+    }
     const resp = await fetch(apiUrl + path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sku: sku, shipping_zone: shippingZone }),
+      body: JSON.stringify(body),
     });
     const data = await resp.json().catch(function () {
       return {};
@@ -195,7 +199,7 @@
       setBusy(btn, true);
       try {
         if (method === "stripe") {
-          const data = await postCheckout("/v1/checkout/stripe", sku, zone);
+          const data = await postCheckout("/v1/checkout/stripe", sku, zone, country);
           if (data.checkout_url) {
             window.location.href = data.checkout_url;
             return;

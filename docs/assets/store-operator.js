@@ -65,6 +65,26 @@
     return node;
   }
 
+  function orderStatusUrl(orderId) {
+    if (!orderId) {
+      return "";
+    }
+    return "/store/order-status/?order_id=" + encodeURIComponent(orderId);
+  }
+
+  function appendStatusPageLink(order, container) {
+    const url = orderStatusUrl(order && order.order_id);
+    if (!url) {
+      return;
+    }
+    const statusBtn = btn("Status", false);
+    statusBtn.title = "Open customer order status page";
+    statusBtn.addEventListener("click", function () {
+      window.open(url, "_blank", "noopener,noreferrer");
+    });
+    container.appendChild(statusBtn);
+  }
+
   function shortId(id) {
     if (!id || id.length <= 12) {
       return id || "—";
@@ -402,6 +422,9 @@
     const opts = options || {};
     const onDetail = !!opts.detail;
     appendDevTools(order, container);
+    if (onDetail || order.status === "shipped") {
+      appendStatusPageLink(order, container);
+    }
     if (order.status === "pending_bsv" || order.status === "pending_stripe") {
       const paidBtn = btn("Mark paid", true);
       paidBtn.addEventListener("click", function () {

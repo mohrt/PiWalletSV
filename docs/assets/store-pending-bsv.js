@@ -129,6 +129,36 @@
   const cancelConfirm = pendingEl.querySelector("[data-cancel-confirm]");
   const cancelBack = pendingEl.querySelector("[data-cancel-back]");
   const cancelError = pendingEl.querySelector("[data-cancel-error]");
+  const expiryNote = pendingEl.querySelector("[data-expiry-note]");
+
+  function formatExpiry(iso) {
+    if (!iso) {
+      return "";
+    }
+    const dt = new Date(iso);
+    if (Number.isNaN(dt.getTime())) {
+      return "";
+    }
+    return dt.toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
+
+  function updateExpiryNote(data) {
+    if (!expiryNote) {
+      return;
+    }
+    if (data.status !== "pending_bsv" || !data.expires_at) {
+      expiryNote.hidden = true;
+      return;
+    }
+    const when = formatExpiry(data.expires_at);
+    expiryNote.hidden = !when;
+    expiryNote.textContent = when
+      ? "Unpaid orders expire at " + when + " (3 hours after checkout)."
+      : "";
+  }
 
   function stopPolling() {
     if (pollTimer) {
@@ -304,6 +334,7 @@
     if (statusEl) {
       statusEl.textContent = data.status;
     }
+    updateExpiryNote(data);
     if (data.product_name) {
       const productEl = pendingEl.querySelector("[data-product-name]");
       if (productEl) {

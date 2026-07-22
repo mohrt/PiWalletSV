@@ -23,40 +23,45 @@ QR_BACKGROUND_MAX: int = 255
 #: Step size for UP/DOWN adjustment (eight levels total).
 QR_BACKGROUND_STEP: int = 31
 
+
 def clamp_qr_background(level: int) -> int:
- """Clamp ``level`` into ``[QR_BACKGROUND_MIN, QR_BACKGROUND_MAX]``."""
- return max(QR_BACKGROUND_MIN, min(QR_BACKGROUND_MAX, int(level)))
+    """Clamp ``level`` into ``[QR_BACKGROUND_MIN, QR_BACKGROUND_MAX]``."""
+    return max(QR_BACKGROUND_MIN, min(QR_BACKGROUND_MAX, int(level)))
+
 
 def qr_background_rgb(level: int) -> tuple[int, int, int]:
- """Return an RGB triple for QR quiet-zone / matte fill."""
- v = clamp_qr_background(level)
- return (v, v, v)
+    """Return an RGB triple for QR quiet-zone / matte fill."""
+    v = clamp_qr_background(level)
+    return (v, v, v)
+
 
 def increase_qr_background(level: int) -> int:
- """Joystick UP — brighter quiet zone (+31)."""
- return clamp_qr_background(level + QR_BACKGROUND_STEP)
+    """Joystick UP — brighter quiet zone (+31)."""
+    return clamp_qr_background(level + QR_BACKGROUND_STEP)
+
 
 def decrease_qr_background(level: int) -> int:
- """Joystick DOWN — dimmer quiet zone (−31)."""
- return clamp_qr_background(level - QR_BACKGROUND_STEP)
+    """Joystick DOWN — dimmer quiet zone (−31)."""
+    return clamp_qr_background(level - QR_BACKGROUND_STEP)
+
 
 def try_qr_brightness_event(
- event: Event,
- level: int,
- *,
- on_changed: Callable[[int], None] | None = None,
+    event: Event,
+    level: int,
+    *,
+    on_changed: Callable[[int], None] | None = None,
 ) -> int | None:
- """Apply UP/DOWN press/repeat; return new level or ``None`` if unchanged."""
- if event.kind not in (EventKind.PRESS, EventKind.REPEAT):
- return None
- if event.button == Button.UP:
- new_level = increase_qr_background(level)
- elif event.button == Button.DOWN:
- new_level = decrease_qr_background(level)
- else:
- return None
- if new_level == level:
- return None
- if on_changed is not None:
- on_changed(new_level)
- return new_level
+    """Apply UP/DOWN press/repeat; return new level or ``None`` if unchanged."""
+    if event.kind not in (EventKind.PRESS, EventKind.REPEAT):
+        return None
+    if event.button == Button.UP:
+        new_level = increase_qr_background(level)
+    elif event.button == Button.DOWN:
+        new_level = decrease_qr_background(level)
+    else:
+        return None
+    if new_level == level:
+        return None
+    if on_changed is not None:
+        on_changed(new_level)
+    return new_level

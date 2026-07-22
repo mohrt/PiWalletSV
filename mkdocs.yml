@@ -131,7 +131,7 @@ extra_javascript:
   - assets/store-checkout.js?v=zone-required
   - assets/store-checkout-bsv.js?v=validate-disabled
   - assets/store-verify-email.js?v=auto-redirect
-  - assets/store-pending-bsv.js?v=cancel-hide-intro3
+  - assets/store-pending-bsv.js?v=bsv-expiry-3h
   - assets/store-donate.js?v=qr-local
 
 extra:

@@ -9,7 +9,10 @@
 
 <p data-pay-intro>
   Send <strong>exactly</strong> the satoshi amount shown below to the receive address for this order. Payment is detected automatically.
+  Unpaid orders expire after <strong>3 hours</strong> and release reserved stock.
 </p>
+
+<p class="piwalletsv-bsv-expiry" data-expiry-note hidden></p>
 
 <div class="piwalletsv-bsv-waiting" data-waiting-banner hidden>
   <span class="piwalletsv-bsv-waiting-spinner" aria-hidden="true"></span>

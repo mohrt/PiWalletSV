@@ -8,9 +8,9 @@ address; shipping fees are shown before you pay.
 
 Checkout accepts shipping addresses in:
 
-**US, Canada, UK, Australia, New Zealand**, plus **Austria, Belgium, Czechia, Denmark,
-Finland, France, Germany, Ireland, Italy, Luxembourg, Netherlands, Norway, Poland,
-Portugal, Spain, Sweden, Switzerland**.
+**US, Canada, UK, Australia, New Zealand, Japan**, plus **Austria, Belgium, Czechia,
+Denmark, Finland, France, Germany, Ireland, Italy, Luxembourg, Netherlands, Norway,
+Poland, Portugal, Spain, Sweden, Switzerland**.
 
 ## How shipping is priced
 
@@ -30,7 +30,7 @@ Typical transit (after we ship — usually within a few business days of payment
 | Region | Estimate |
 |--------|----------|
 | US domestic | 3–7 business days |
-| Canada / UK / EU / AU / NZ | 7–21 business days |
+| Canada / UK / EU / AU / NZ / Japan | 7–21 business days |
 
 These are estimates, not guarantees. Customs can add delay internationally.
 

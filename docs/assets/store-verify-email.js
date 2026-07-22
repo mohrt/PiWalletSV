@@ -14,7 +14,9 @@
   const params = new URLSearchParams(window.location.search);
   const token = (params.get("token") || "").trim();
   const sku = (params.get("sku") || "").trim();
+  const countryFromLink = (params.get("country") || "").trim().toUpperCase();
   const SESSION_KEY = "piwalletsv_bsv_email_verification";
+  const DEST_COUNTRY_KEY = "piwalletsv_bsv_ship_country";
 
   function showError(message) {
     statusEl.hidden = true;
@@ -52,28 +54,32 @@
         prev = {};
       }
       var country = (
+        countryFromLink ||
         prev.country ||
-        sessionStorage.getItem("piwalletsv_bsv_ship_country") ||
+        sessionStorage.getItem(DEST_COUNTRY_KEY) ||
         ""
       )
         .toString()
         .trim()
         .toUpperCase();
+      if (country.length !== 2) {
+        country = "";
+      }
       sessionStorage.setItem(
         SESSION_KEY,
         JSON.stringify({
           customer_email: data.customer_email,
           email_verification_token: data.email_verification_token,
-          country: country || prev.country || undefined,
+          country: country || undefined,
         })
       );
       if (country) {
-        sessionStorage.setItem("piwalletsv_bsv_ship_country", country);
+        sessionStorage.setItem(DEST_COUNTRY_KEY, country);
       }
 
       var next =
         "/store/checkout-bsv/?sku=" + encodeURIComponent(sku || "full-kit");
-      if (country && country.length === 2) {
+      if (country) {
         next += "&country=" + encodeURIComponent(country);
       }
       window.location.replace(next);
