@@ -193,12 +193,15 @@ microSD matches it.
 
 ## Assembly & power
 
-1. **Pi off.** Seat the **bonnet** on the 40-pin GPIO header (straight, fully
-   seated).
-2. Connect the **camera ribbon** to the Pi CSI port (under/near the SD
-   slot — latch open, insert, latch closed).
-3. Insert the **microSD** (label side as printed on the Pi).
-4. **Two micro-USB ports** (bonnet display facing you):
+1. **Pi off.** Connect the **camera ribbon** to the Pi CSI port (latch open →
+   insert → latch closed); **exposed ribbon pins facing the board**.
+2. Install the **camera** in the case; fasten with screws.
+3. Insert the **microSD** in the Pi (label side as printed on the Pi).
+4. Install the **Pi** in the case; **two screws**, one on each side of the header.
+5. Seat the **bonnet** on the 40-pin GPIO header (straight, fully seated);
+   **two screws** on the front side.
+6. Seat the **button caps** and **lid**; fasten the lid screws.
+7. **Two micro-USB ports** (bonnet display facing you):
    - **Right-most port — POWER ONLY.** Plug the included **micro-USB cable**
      (from the 5 V adapter) here. Labeled **PWR IN** on the bonnet.
      **Never** plug a flash drive or OTG adapter into this port.
@@ -231,7 +234,7 @@ disclaimer appears.
 ### 2. Vault PIN
 
 - Choose **New vault** and set a **PIN** (6 digits).
-- **Wrong PIN six times in a row wipes the vault** on the device.
+- **Wrong PIN ten times in a row wipes the vault** on the device.
 - The PIN protects the encrypted file on the SD card — **not** your seed.
 
 ### 3. Your first wallet (on the device)
@@ -379,4 +382,4 @@ This insert is a summary. The authoritative manual lives at
 
 ---
 
-*Document: kit-insert · Rev. 1 · For PiWalletSV round-one kits*
+*Document: kit-insert · Rev. 13 · For PiWalletSV round-one kits*

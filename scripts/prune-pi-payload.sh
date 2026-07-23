@@ -45,6 +45,19 @@ prune_glob() {
     fi
 }
 
+# Runtime dirs created on the Pi after sync (venv, local vault). Must stay
+# excluded from rsync (Mac → Pi) but must NOT be deleted by prune on a live
+# ~/PiWallet — otherwise every sync-to-pi wipes the bootstrap venv.
+RUNTIME_KEEP=(.venv venv env .piwallet .piwallet-dev)
+
+is_runtime_keep() {
+    local rel=$1 item
+    for item in "${RUNTIME_KEEP[@]}"; do
+        [[ "$rel" == "$item" ]] && return 0
+    done
+    return 1
+}
+
 while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line%%#*}"
     line="${line%"${line##*[![:space:]]}"}"
@@ -55,6 +68,9 @@ while IFS= read -r line || [[ -n "$line" ]]; do
             prune_glob "$line"
             ;;
         *)
+            if is_runtime_keep "$line"; then
+                continue
+            fi
             prune_literal "$line"
             ;;
     esac

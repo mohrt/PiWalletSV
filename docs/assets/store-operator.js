@@ -177,6 +177,7 @@
       shipment.tracking_number,
       shipment.carrier,
       formatShipTo(order),
+      formatBillTo(order),
     ];
     return parts
       .filter(Boolean)
@@ -880,6 +881,10 @@
     if (order.customer_email) {
       meta.appendChild(metaRow("Customer", order.customer_email));
     }
+    const billTo = formatBillTo(order);
+    if (billTo !== "—") {
+      meta.appendChild(metaRow("Bill to", billTo));
+    }
     const shipTo = formatShipTo(order);
     if (shipTo !== "—") {
       meta.appendChild(metaRow("Ship to", shipTo));
@@ -1003,6 +1008,10 @@
     if (order.customer_email) {
       meta.appendChild(metaRow("Customer", order.customer_email));
     }
+    const billTo = formatBillTo(order);
+    if (billTo !== "—") {
+      meta.appendChild(metaRow("Bill to", billTo));
+    }
     const shipTo = formatShipTo(order);
     if (shipTo !== "—") {
       meta.appendChild(metaRow("Ship to", shipTo));
@@ -1034,6 +1043,15 @@
   function formatShipTo(order) {
     const name = String((order && order.shipping_name) || "").trim();
     const addr = formatAddress(order && order.shipping_address);
+    if (name && addr !== "—") {
+      return name + ", " + addr;
+    }
+    return name || addr;
+  }
+
+  function formatBillTo(order) {
+    const name = String((order && order.billing_name) || "").trim();
+    const addr = formatAddress(order && order.billing_address);
     if (name && addr !== "—") {
       return name + ", " + addr;
     }

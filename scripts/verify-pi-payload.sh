@@ -60,6 +60,14 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         continue
     fi
 
+    # Allow Pi-local runtime dirs that rsync correctly excludes from the Mac.
+    # (Otherwise verify would fail — or prune would delete — a live .venv.)
+    case "$line" in
+        .venv|venv|env|.piwallet|.piwallet-dev)
+            continue
+            ;;
+    esac
+
     if [[ -e "$ROOT/$line" ]]; then
         fail "forbidden path present: $line"
     fi

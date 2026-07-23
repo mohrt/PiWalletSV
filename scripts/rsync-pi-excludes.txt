@@ -15,7 +15,8 @@
 .idea
 .DS_Store
 
-# Python env & build artifacts
+# Python env & build artifacts (rsync-only: never push Mac venv to the Pi).
+# prune-pi-payload / verify-pi-payload leave these alone on a live Pi tree.
 .venv
 venv
 env
