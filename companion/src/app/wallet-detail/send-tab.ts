@@ -1,6 +1,6 @@
 import { Transaction } from "@bsv/sdk/transaction";
 
-import { CHANGE_BRANCH, deriveAddress } from "../../lib/derive.js";
+import { CHANGE_BRANCH, addressFromP2pkhLockHex, deriveAddress } from "../../lib/derive.js";
 import {
   KIND_SIGNED,
   type SignedTxT,
@@ -955,10 +955,11 @@ export function createSendTab(
     let txid = "";
     let rawHex = "";
     let sizeBytes = 0;
+    let parsedTx: Transaction | null = null;
     try {
-      const tx = Transaction.fromAtomicBEEF(Array.from(signed.atomicBeef));
-      txid = tx.id("hex") as string;
-      rawHex = tx.toHex();
+      parsedTx = Transaction.fromAtomicBEEF(Array.from(signed.atomicBeef));
+      txid = parsedTx.id("hex") as string;
+      rawHex = parsedTx.toHex();
       sizeBytes = rawHex.length / 2;
     } catch (e) {
       if ($info) {
@@ -973,6 +974,44 @@ export function createSendTab(
     if ($info) {
       $info.innerHTML = `Ready to broadcast<br><code class="mono" style="font-size:0.75rem;word-break:break-all">${txid}</code>${sizeBytes ? `<br><span class="muted-line">${sizeBytes} bytes</span>` : ""}`;
     }
+
+    const $readySummary = rt.root.querySelector<HTMLElement>("#broadcastSuccessSummary");
+    if ($readySummary) {
+      let recipient = lastSendSummary?.recipient ?? "";
+      let sats = lastSendSummary?.sats;
+      const feeSats = lastSendSummary?.feeSats;
+      if (!recipient && parsedTx) {
+        const network = rt.wallet?.network ?? "main";
+        const outs = parsedTx.outputs ?? [];
+        // Companion v1: recipient is output 0; change is last when present.
+        const scriptHex = outs[0]?.lockingScript?.toHex?.() ?? "";
+        recipient = addressFromP2pkhLockHex(scriptHex, network) ?? "";
+        if (sats == null && outs[0]?.satoshis != null) {
+          sats = Number(outs[0].satoshis);
+        }
+      }
+      if (recipient) {
+        $readySummary.hidden = false;
+        const amountRow =
+          sats != null
+            ? `<dt>Amount</dt><dd>${escapeHtml(formatSats(sats))}</dd>`
+            : "";
+        const feeRow =
+          feeSats != null
+            ? `<dt>Fee</dt><dd>${escapeHtml(formatSats(feeSats))}</dd>`
+            : "";
+        $readySummary.innerHTML =
+          `<dl class="broadcast-success-details">` +
+          `<dt>To</dt><dd>${escapeHtml(shortAddress(recipient))}</dd>` +
+          amountRow +
+          feeRow +
+          `</dl>`;
+      } else {
+        $readySummary.hidden = true;
+        $readySummary.innerHTML = "";
+      }
+    }
+
     if ($broadcastStatus) $broadcastStatus.textContent = "";
     showBroadcastWidget();
     switchSendQrTab("scan");

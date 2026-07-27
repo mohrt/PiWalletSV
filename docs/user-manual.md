@@ -296,7 +296,7 @@ at the QR canvas.
     a green **SPV verified** badge (input count and block height
     range) above:
 
-    - **Send** / **Fee** / **Net** (sats and network).
+    - **To** (destination address), **Send** / **Fee** / **Net** (sats and network).
 
     This is the Pi's **second SPV gate**: it re-parses each input's
     BEEF, recomputes the Merkle root from the embedded BUMP path,

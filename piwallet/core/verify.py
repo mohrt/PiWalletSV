@@ -412,5 +412,6 @@ __all__ = [
     "ProposalVerificationError",
     "VerifiedInput",
     "VerifiedProposal",
+    "script_address_or_none",
     "verify_proposal",
 ]

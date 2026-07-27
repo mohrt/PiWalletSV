@@ -10,6 +10,7 @@ import {
   CHANGE_BRANCH,
   DerivationError,
   RECEIVE_BRANCH,
+  addressFromP2pkhLockHex,
   deriveAddress,
   deriveAddressBatch,
   encodeP2pkhAddress,
@@ -146,5 +147,18 @@ describe("network-aware address rendering", () => {
     for (let i = 0; i < 3; i++) {
       expect(batch[i].address).toBe(TESTNET_RECEIVE[i]);
     }
+  });
+
+  it("addressFromP2pkhLockHex round-trips a derived address", () => {
+    const got = deriveAddress(fixture.xpub, RECEIVE_BRANCH, 0, "main");
+    const lockHex =
+      "76a914" +
+      Array.from(got.hash160)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("") +
+      "88ac";
+    expect(addressFromP2pkhLockHex(lockHex, "main")).toBe(got.address);
+    expect(addressFromP2pkhLockHex(lockHex, "test")).not.toBe(got.address);
+    expect(addressFromP2pkhLockHex("00")).toBeNull();
   });
 });
