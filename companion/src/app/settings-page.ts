@@ -321,7 +321,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
                   accept=".json,application/json" hidden />
               </label>
               <textarea id="importPasteJson" class="hex-blob" rows="6"
-                placeholder='{"format":"piwallet-companion-wallets",…}'
+                placeholder="Paste backup JSON here"
                 spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
               <div class="actions">
                 <button id="importPasteBtn" class="primary" type="button">
@@ -435,6 +435,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $backupExportFold = root.querySelector<HTMLDetailsElement>("#backupFold-export")!;
   const $backupImportFold = root.querySelector<HTMLDetailsElement>("#backupFold-import")!;
   const $backupStatus     = root.querySelector<HTMLElement>("#backupStatus")!;
+  const $importTabJson    = root.querySelector<HTMLElement>("#importTab-json")!;
 
   let exportQrPlayback: Pw1QrPlayback | null = null;
   let exportQrUnwire: (() => void) | null = null;
@@ -683,11 +684,27 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     $backupStatus.classList.toggle("error", isError);
   }
 
+  const IMPORT_PASTE_BTN_LABEL = "Import pasted JSON";
+
+  function setImportBusy(busy: boolean): void {
+    $importPasteBtn.disabled = busy;
+    $importPasteClear.disabled = busy;
+    $importFile.disabled = busy;
+    $importPaste.disabled = busy;
+    $importPasteBtn.textContent = busy ? "Importing…" : IMPORT_PASTE_BTN_LABEL;
+    $importTabJson.setAttribute("aria-busy", busy ? "true" : "false");
+  }
+
   function applyImportResult(result: Awaited<ReturnType<typeof importWalletBackup>>): void {
     const summary = formatImportWalletResult(result);
     const isError = result.failed.length > 0 && result.imported === 0;
-    setBackupStatus(summary, isError);
-    if (!isError) flashSaved("✓ Import complete");
+    if (isError) {
+      setBackupStatus(summary, isError);
+      return;
+    }
+    $importPaste.value = "";
+    hideReplaceStrip();
+    window.location.hash = "#/wallets";
   }
 
   async function loadBackupJson(): Promise<string> {
@@ -917,12 +934,15 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       }
     }
 
+    setImportBusy(true);
     setBackupStatus("Importing…");
     try {
       const result = await importWalletBackup(raw.trim(), { mode });
       applyImportResult(result);
     } catch (e) {
       setBackupStatus(`import failed: ${(e as Error).message}`, true);
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -940,6 +960,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       }
     }
 
+    setImportBusy(true);
     setBackupStatus("Importing…");
     try {
       const result = await importWalletBackupBytes(bytes, { mode });
@@ -950,13 +971,18 @@ export function mountSettingsPage(root: HTMLElement): () => void {
           "Make sure you scanned the transfer QR from Settings on the other phone.",
         true,
       );
+    } finally {
+      setImportBusy(false);
     }
   }
 
   $importReplaceConfirm.addEventListener("click", () => {
     const raw = pendingReplaceRaw;
     if (!raw) return;
-    void runImportRaw(raw, true);
+    $importReplaceConfirm.disabled = true;
+    void runImportRaw(raw, true).finally(() => {
+      $importReplaceConfirm.disabled = false;
+    });
   });
 
   $importReplaceCancel.addEventListener("click", hideReplaceStrip);
@@ -1107,6 +1133,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       },
       onAccept: (validation) => {
         if (validation.result.workflow === "settings-backup") {
+          setBackupStatus("Importing…");
           stopImportQrScan();
           void runImportBytes(validation.result.bytes);
         }

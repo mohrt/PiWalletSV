@@ -18,7 +18,9 @@ The complete disclosure / reporting policy lives in the project's
 - **Nothing about your wallet is sent back to the site.** No login,
   no telemetry, no analytics, no "sync" anywhere. Paired-wallet
   metadata (xpub, fingerprint, label, derivation path, cached UTXO
-  snapshots) lives in your browser's `IndexedDB` and stays there.
+  snapshots) lives in your browser's `IndexedDB` (prefs in
+  `localStorage`). That list is an **ephemeral watch-only cache**, not
+  custody — the browser can delete it at any time.
 - **The only outbound calls** the companion makes are to two
   public blockchain APIs — neither receives anything private:
     - [WhatsOnChain](https://whatsonchain.com/) for UTXO discovery,
@@ -32,19 +34,29 @@ The complete disclosure / reporting policy lives in the project's
   or private keys.
 - **Losing the browser profile is not a loss of funds.** The companion
   only holds *public* material; spending still requires the Pi (and
-  ultimately your seed phrase).
+  ultimately your seed phrase). Prefer **Chrome** or **Firefox** on
+  mobile. **Safari** (Intelligent Tracking Prevention) can delete all
+  script-writable site data — including IndexedDB and localStorage —
+  after about **seven days of Safari use** with no click, tap, or
+  keyboard interaction on the companion site. That is not the same as
+  closing a tab, but it often feels sudden. Clearing history or
+  “Prevent Cross-Site Tracking” can also wipe the list.
+- **Restore is easy.** Re-pair from the Pi (Show pairing QR / re-import
+  the xpub), or migrate from another companion via **Settings → Export /
+  Import** (QR or JSON). Prefer installing the companion to the Home
+  Screen; standalone Home Screen apps are largely exempt from Safari’s
+  seven-day ITP timer.
 
 ## 2. The PIN protects an encrypted vault, not magic
 
 - The Pi's vault file (`~/.piwallet/vault.bin`) is AES-GCM encrypted.
   The key is derived from your PIN with
   [scrypt](https://en.wikipedia.org/wiki/Scrypt), which is
-  intentionally slow and memory-hard. That makes brute-forcing a long
-  PIN very expensive — but it is **not impossible**.
-- **PIN length matters.** A 6-digit PIN has only a million
-  combinations; a determined attacker with the vault file and a GPU
-  farm can chew through that. Use a long PIN — ideally 12+ digits —
-  if you treat your seed as a high-value secret.
+  intentionally slow and memory-hard. That makes offline guessing
+  expensive — but it is **not impossible**.
+- **The vault PIN is 6 digits.** Treat it as a barrier against casual
+  access to the encrypted file on the device, not as a substitute for
+  your seed phrase backup.
 - **Six wrong PIN attempts in a row wipe the vault** from the Pi. This
   is a circuit breaker, not a guarantee: if someone copies
   `vault.bin` off the device they can retry forever offline. Your
@@ -69,7 +81,12 @@ The complete disclosure / reporting policy lives in the project's
 - **Your seed phrase is the source of truth, not the Pi.** Back it up
   on something durable (steel plates, multiple geographic locations)
   and store it the way you would store the deed to a house. Losing
-  the Pi is annoying; losing the seed is permanent.
+  the Pi is annoying; losing the seed is permanent. If the device is
+  unavailable, you can still recover funds with any BIP44-compatible
+  BSV tool (same BIP39 mnemonic, path `m/44'/236'/0'`) — see
+  [Recover without device](recover-without-device.md)
+  ([iancoleman.io/bip39](https://iancoleman.io/bip39/),
+  [satofinder.com](https://satofinder.com), ElectrumSV, and others).
 - **Air-gap discipline still applies.** Don't plug the Pi into the
   internet, don't type the seed into anything online, and don't let
   cameras or screen-recorders see the disclaimer-revealed phrase
@@ -172,23 +189,33 @@ gpg --keyserver hkps://keys.openpgp.org --recv-keys 9E048B6E7F54C49DE2D5AEB5DA26
 gpg --verify piwalletsv-<VERSION>.img.xz.asc piwalletsv-<VERSION>.img.xz
 ```
 
-The release key fingerprint is pinned in the table above. Import it from
-`keys.openpgp.org` before verifying downloads.
+Import the fingerprint from the **Release key** table on this page (or from
+`keys.openpgp.org`) before verifying. Filenames and checksums for each
+release come from
+[GitHub Releases](https://github.com/mohrt/PiWalletSV/releases) — not from
+this site.
 
-For **v0.1.0-r3 beta**, releases are signed on the build host with the
-software key listed here. A hardware keystore (YubiKey or OpenPGP card)
-is the long-term target for production releases.
+Current releases are signed on the build host with the software key listed
+here. A hardware keystore (YubiKey or OpenPGP card) is the long-term target
+for production releases.
 
 ## Verify a pre-flashed SD card
 
-Kits may ship with the microSD already written. Before you fund the
-device:
+Kits ship with a pre-flashed card that has been booted for factory
+diagnostics and hardware tests. That testing changes card contents, so
+the shipped card cannot byte-match the pristine release image or be
+validated against its whole-image checksum. The checksum still verifies
+the downloadable release file.
+
+Before you fund the device:
 
 - **Re-flash a verified image** (recommended) — download, GPG-verify,
-  and flash the card yourself before first boot. Easiest real assurance.
-- **Light checks** (optional) — Image ID on the **kit insert** vs
-  piwalletsv.com (paperwork only); or remove the SD and hash it on a
-  computer without booting the Pi (advanced). No on-device verification.
+  checksum, and flash the card yourself. Easiest real assurance.
+- **Light checks** (optional) — Image ID on the **kit insert** vs the
+  matching [GitHub release](https://github.com/mohrt/PiWalletSV/releases)
+  (paperwork only). Accepting the tested card as shipped
+  relies on the factory and delivery chain; there is no on-device
+  verification of the full card.
 
 Full steps: [User manual § Verify your SD card on arrival](user-manual.md#verify-sd-card-on-arrival).
 

@@ -98,4 +98,23 @@ describe("scan-validate", () => {
     expect(validateAddressQr("PW1|3|0|abc").ok).toBe(false);
     expect(validateAddressQr("not-an-address").ok).toBe(false);
   });
+
+  it("parses BIP21 amount into sats", () => {
+    const uri =
+      "bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa?amount=0.00001000&label=test";
+    const got = validateAddressQr(uri);
+    expect(got.ok).toBe(true);
+    if (!got.ok) return;
+    expect(got.result.workflow).toBe("send-address");
+    if (got.result.workflow !== "send-address") return;
+    expect(got.result.address).toBe("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa");
+    expect(got.result.amountSats).toBe(1000);
+  });
+
+  it("rejects invalid BIP21 amounts", () => {
+    const bad = validateAddressQr(
+      "bitcoin:1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa?amount=abc",
+    );
+    expect(bad.ok).toBe(false);
+  });
 });

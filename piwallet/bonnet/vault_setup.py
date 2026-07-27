@@ -21,7 +21,7 @@ gesture inside PIN entry.
 Failure modes
 -------------
 :meth:`Vault.create` validates the PIN format independently — but the
-:class:`PinSetupScreen` only emits 6..12 ASCII digits, so the only
+:class:`PinSetupScreen` only emits a 6-digit ASCII PIN, so the only
 realistic failure is a stale ``vault.bin`` appearing on disk between
 the existence-check at boot and the create call here. In that case
 we surface a red modal and return ``None``; the caller should treat
@@ -80,8 +80,7 @@ def run_vault_setup(
         display,
         title="Welcome",
         body=(
-            "Set a PIN to encrypt the vault. "
-            "Use a long PIN — 12 digits or more — for cold storage."
+            "Set a 6-digit PIN to encrypt the vault."
         ),
         accent=COLOR_OK,
     )

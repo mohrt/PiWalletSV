@@ -10,14 +10,15 @@
 
 export const MAGIC = "PW1";
 export const SEP = "|";
-export const MIN_ENCODED_CHUNK_CHARS = 64;
-// 200 chars ≈ Version 9 QR @ error-correction L (capacity 468 chars).
-// A Version 9 matrix is 53×53 modules — at 640×480 capture each module
-// is ~8 px wide, well within pyzbar's reliable decode range.
-// The previous value of 720 produced Version 17+ QR codes (85×85 modules,
-// ~6 px/module) which were too dense for the OV5647 kit camera
-// to reliably decode from a screen.
-export const DEFAULT_ENCODED_CHUNK_CHARS = 200;
+// Floor keeps each frame large enough that PW1 framing overhead still
+// leaves a useful payload; below this the frame count balloons for little
+// decode gain.
+export const MIN_ENCODED_CHUNK_CHARS = 48;
+// 48 chars ≈ Version 4–5 QR @ ECC M (~33–37 modules). At 640×480 capture
+// each module is ~12+ px — sparse enough for the OV5647 to lock from a
+// phone screen. Previous steps: 720 → 200 → 100 were still too dense in
+// practice for unsigned_proposal scans.
+export const DEFAULT_ENCODED_CHUNK_CHARS = 48;
 
 const PREFIX_RE = /^PW1\|(?<t>\d+)\|(?<i>\d+)\|(?<rest>.*)$/;
 

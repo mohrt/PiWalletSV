@@ -97,7 +97,7 @@ def vault_init(ctx: click.Context) -> None:
     if path.exists():
         click.echo(f"vault already exists at {path}", err=True)
         sys.exit(1)
-    pin = click.prompt("Set PIN (>=6 digits)", hide_input=True, confirmation_prompt=True)
+    pin = click.prompt("Set PIN (6 digits)", hide_input=True, confirmation_prompt=True)
     v = Vault(path)
     v.create(pin=pin)
     click.echo(f"created {path}")
@@ -233,7 +233,7 @@ def vault_recover(ctx: click.Context, force: bool) -> None:
     shutil.move(str(path), str(backup))
     click.echo(f"Renamed corrupt vault → {backup}")
 
-    pin = click.prompt("New PIN (>=6 digits)", hide_input=True, confirmation_prompt=True)
+    pin = click.prompt("New PIN (6 digits)", hide_input=True, confirmation_prompt=True)
     try:
         new_vault = Vault(path)
         new_vault.create(pin=pin)
@@ -407,10 +407,10 @@ def qr_join(output: Path | None) -> None:
 @click.option(
     "-c",
     "--chunk-chars",
-    type=click.IntRange(min=64),
-    default=720,
+    type=click.IntRange(min=48),
+    default=48,
     show_default=True,
-    help="Max encoded chunk characters per QR frame (>=64).",
+    help="Max encoded chunk characters per QR frame (>=48).",
 )
 @click.option(
     "-o",

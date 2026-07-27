@@ -155,6 +155,10 @@ export function createSendTab(
       onAccept: (validation) => {
         if (validation.result.workflow === "send-address") {
           $addr.value = validation.result.address;
+          if (validation.result.amountSats != null) {
+            rt.sendAmountIsMax = false;
+            applySendAmountSats(validation.result.amountSats);
+          }
         }
       },
       onStopped: () => stopAddrScan(),
@@ -483,6 +487,10 @@ export function createSendTab(
       addrCheck.result.workflow === "send-address"
         ? addrCheck.result.address
         : recipient;
+    const bip21Sats =
+      addrCheck.result.workflow === "send-address"
+        ? addrCheck.result.amountSats
+        : undefined;
     const walletNet = rt.wallet.network ?? "main";
     if (!addressMatchesNetwork(normalizedRecipient, walletNet)) {
       $status.classList.add("error");
@@ -496,15 +504,19 @@ export function createSendTab(
     if (normalizedRecipient !== recipient) {
       $addr.value = normalizedRecipient;
     }
-    if (amountRaw === "" || isNaN(amountNum) || amountNum <= 0) {
+
+    let sats: number;
+    if (bip21Sats != null) {
+      // Payment URI amount wins when present (scan or paste).
+      rt.sendAmountIsMax = false;
+      applySendAmountSats(bip21Sats);
+      sats = bip21Sats;
+    } else if (amountRaw === "" || isNaN(amountNum) || amountNum <= 0) {
       $status.classList.add("error");
       $status.textContent = amountRaw === "" ? "enter an amount" : `invalid amount "${amountRaw}"`;
       $amountInput.focus();
       return;
-    }
-
-    let sats: number;
-    if (unit === "sats") {
+    } else if (unit === "sats") {
       sats = Math.round(amountNum);
     } else if (unit === "bsv") {
       sats = Math.round(amountNum * SATS_PER_BSV);

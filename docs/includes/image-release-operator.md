@@ -1,7 +1,9 @@
 # Operator guide — build, capture, sign, and publish an SD image
 
 This page is for **you** (the project operator), not kit buyers. Customers
-flash from [Download](../download.md) on GitHub Releases.
+download and flash from
+[GitHub Releases](https://github.com/mohrt/PiWalletSV/releases)
+([Download](../download.md) links there).
 
 ## Target
 
@@ -225,11 +227,14 @@ shasum -a 256 images/piwalletsv-0.1.0-r3-pi0-beta.img.xz | tee images/SHA256SUMS
 1. Tag the source commit: `git tag -s v0.1.0-r3 -m "Pi Zero W alpha r3 image"`
 2. Create a [GitHub Release](https://github.com/mohrt/PiWalletSV/releases) `v0.1.0-r3`
 3. Upload: `.img.xz`, `.img.xz.asc`, `SHA256SUMS`, `SHA256SUMS.asc`
-4. Update [`docs/security.md`](../security.md#release-key) with the release-key fingerprint
-5. Update [`releases/releases.json`](../../releases/releases.json) `sha256` field after upload
+4. Update [`releases/releases.json`](../../releases/releases.json) `sha256` field after upload
+5. Only if the **signing key** rotated: update the fingerprint table in
+   [`docs/security.md`](../security.md#release-key). Do **not** put version
+   numbers or hashes on the Download docs page — GitHub Releases is the
+   source of truth.
 
 Both **piwalletsv.com** and **dev.piwalletsv.com** link to the same GitHub
-asset URLs (see mkdocs `firmware_release_base` in `mkdocs.yml`).
+Release pages; they do not republish asset lists.
 
 ## 4. Factory burn (full kits)
 

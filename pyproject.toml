@@ -37,6 +37,8 @@ dev = [
     "pytest>=9.0.0",
     "pytest-cov>=7.0.0",
     "ruff>=0.15.0",
+    "moto[dynamodb]>=5.0.0",
+    "stripe>=11.0.0",
 ]
 display = [
     "adafruit-blinka>=9.0.0",

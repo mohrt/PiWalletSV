@@ -186,6 +186,7 @@ export function mountCameraScanner(
   }
 
   async function validateAndAcceptPw1(bytes: Uint8Array): Promise<boolean> {
+    setStatus("Validating…");
     const validation = await validatePw1Bytes(options.workflow, bytes);
     if (!validation.ok) {
       setStatus(validation.message, true);

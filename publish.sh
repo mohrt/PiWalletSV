@@ -69,10 +69,14 @@ esac
 if [[ "$ENV" == "dev" ]]; then
   export PIWALLETSV_COMPANION_URL=https://app.dev.piwalletsv.com
   export MKDOCS_SITE_URL=https://dev.piwalletsv.com/
+  export PIWALLETSV_STORE_API_URL=https://store.dev.piwalletsv.com
+  export PIWALLETSV_STORE_DEV_BANNER="Test store — no real orders shipped."
   COMPANION_DOCS=https://dev.piwalletsv.com
 else
   export PIWALLETSV_COMPANION_URL=https://app.piwalletsv.com
   export MKDOCS_SITE_URL=https://piwalletsv.com/
+  export PIWALLETSV_STORE_API_URL=https://store.piwalletsv.com
+  unset PIWALLETSV_STORE_DEV_BANNER
   COMPANION_DOCS=https://piwalletsv.com
 fi
 

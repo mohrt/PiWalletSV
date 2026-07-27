@@ -56,8 +56,9 @@ export const PRICE_CACHE_TTL_MS = 60_000;
  * companion animates a proposal or export sequence.
  *
  * Matches ``PairingMultipartQrScreen.auto_advance_ms`` on the Pi bonnet
- * (700 ms). The Pi camera decodes one frame every ~350 ms
- * (``camera_scan.interval_s``), so 700 ms gives the camera two capture
- * attempts per displayed QR before the frame rotates.
+ * for outbound QRs, but companion→Pi proposal playback uses a slightly
+ * longer dwell so the OV5647 gets ~3 capture attempts (~350 ms each)
+ * before the frame rotates. More frames (48-char chunks) need that
+ * extra time per QR or assembly takes many full cycles.
  */
-export const PW1_QR_FRAME_MS = 700;
+export const PW1_QR_FRAME_MS = 1000;

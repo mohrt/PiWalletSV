@@ -8,6 +8,7 @@ Customers should keep it with their seed backup paperwork.
 | File | Use |
 |------|-----|
 | **`kit-insert.html`** | **Primary — branded 2-page insert** (welcome + quick start). Open in a browser → Print → PDF or direct to printer. |
+| **`seed-backup.html`** | **One-page seed phrase sheet** — cuttable BIP39 cards (**12-word** + **24-word**). Ship with kits / offer on the site. |
 | **`kit-insert.md`** | Extended text reference (verify SD, upgrade path, cut-out card). Use when you need the long-form checklist or Pandoc PDF. |
 
 ## Print settings (HTML — recommended)
@@ -35,9 +36,12 @@ pandoc kit-insert.md -o kit-insert-extended.pdf \
   -V fontsize=10pt
 ```
 
-## Online equivalent
+## Online
 
-[User manual § Verify your SD card](../user-manual.md#verify-sd-card-on-arrival)
+- **[Kit insert (print)](printables.md)** — preview and print the 2-page insert in your browser.
+- Direct link (no site chrome): [`kit-insert.html`](kit-insert.html)
+- Extended checklist: [`kit-insert.md`](kit-insert.md)
+- User manual: [Verify your SD card](../user-manual.md#verify-sd-card-on-arrival)
 
 ## Customisation
 

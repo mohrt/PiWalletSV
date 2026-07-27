@@ -12,25 +12,24 @@ hide:
 
 # An air-gapped wallet for Bitcoin SV
 
-Built on a Raspberry Pi, a TFT bonnet, and an **ArduCam OV5647** camera. Your **keys
-never leave the device** — no Wi-Fi, no Bluetooth, no Ethernet. A
-small web app on your phone or laptop talks to the chain; the Pi
-just signs.
+Built on a Raspberry Pi with a screen and camera. Your **keys never leave
+the device** — no Wi-Fi, no Bluetooth, no Ethernet. A small web app on your
+phone or laptop talks to the chain; the Pi just signs.
 
 [Launch wallet ↗]({{ companion_url }}/){ .pwsv-cta }
+[Purchase](purchase/shop.md){ .pwsv-cta-secondary }
+[Tutorials](tutorials.md){ .pwsv-cta-secondary }
 [Read the docs](getting-started.md){ .pwsv-cta-secondary }
 
-!!! tip "On your phone"
-    For full-screen access (camera pairing, sends), [add the companion to your Home Screen](user-manual.md#add-to-home-screen).
-
 </div>
 </div>
 
-!!! warning "Beta software"
-    PiWalletSV is in active development. There is no warranty and no
-    custodial backup. Read the [Disclaimer](disclaimer.md) and
-    [Security briefing](security.md) before storing real funds on a
-    device you built from this code.
+<div class="pwsv-photo-strip" markdown="0">
+  <img src="assets/home/device-home.png" alt="PiWalletSV device showing the home screen" width="360" height="270" loading="lazy">
+  <img src="assets/home/device-maintenance.png" alt="PiWalletSV maintenance menu on the device" width="360" height="270" loading="lazy">
+  <img src="assets/home/device-qr.png" alt="PiWalletSV displaying a QR code for air-gap transfer" width="360" height="270" loading="lazy">
+  <img src="assets/home/companion-wallets.png" alt="PiWalletSV companion app wallet list" width="336" height="680" loading="lazy">
+</div>
 
 ## Why do I need this?
 
@@ -119,8 +118,8 @@ device signs anything.
 
 -   :material-shopping-outline: __Off-the-shelf parts__
 
-    Raspberry Pi, TFT bonnet, ArduCam OV5647 camera. No proprietary hardware,
-    no soldering, no signed firmware to trust.
+    Raspberry Pi, display, camera — no proprietary hardware, no soldering,
+    no signed firmware to trust.
 
 </div>
 
@@ -138,10 +137,14 @@ device signs anything.
     Clone the repo, provision a Pi, and run the companion in a browser.
     Start here if you want to inspect, modify, or contribute to the code.
 
--   :material-shopping-outline: __[Purchase a complete kit](purchase.md)__
+-   :material-shopping-outline: __[Shop](purchase/shop.md)__ ·
+    [Ways to get hardware](purchase/hardware.md)
 
-    Pre-assembled kit with Pi, bonnet, camera, and pre-flashed SD card.
-    Coming soon.
+    Full kit or case-only — pay with card or BSV. Limited batches.
+
+-   :material-play-circle-outline: __[Tutorials](tutorials.md)__
+
+    Video walkthroughs: assembly, setup, wallet, send/receive.
 
 </div>
 

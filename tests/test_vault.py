@@ -60,7 +60,7 @@ def test_create_refuses_existing_file(vault_path: Path) -> None:
         v.create(pin=GOOD_PIN)
 
 
-@pytest.mark.parametrize("bad_pin", ["", "12345", "abcdef", "1234ab", "12 345"])
+@pytest.mark.parametrize("bad_pin", ["", "12345", "1234567", "abcdef", "1234ab", "12 345"])
 def test_create_rejects_bad_pins(vault_path: Path, bad_pin: str) -> None:
     v = vlt.Vault(vault_path)
     with pytest.raises(ValueError):
@@ -466,8 +466,10 @@ def test_change_pin_validates_new_pin(vault_path: Path) -> None:
     v = vlt.Vault(vault_path)
     v.create(pin=GOOD_PIN)
     v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
-    with pytest.raises(ValueError, match="PIN"):
-        v.change_pin(GOOD_PIN, "12345")  # too short
+    with pytest.raises(ValueError, match="PIN must be 6 digits"):
+        v.change_pin(GOOD_PIN, "12345")
+    with pytest.raises(ValueError, match="PIN must be 6 digits"):
+        v.change_pin(GOOD_PIN, "1234567")
 
 
 def test_change_pin_no_op_when_old_equals_new(vault_path: Path) -> None:

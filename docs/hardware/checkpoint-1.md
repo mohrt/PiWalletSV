@@ -1,7 +1,8 @@
 # Hardware test checkpoint #1: bonnet boot path
 
 **Goal.** Verify the disclaimer -> PIN unlock -> wallet list -> wallet detail
-loop on the real Pi Zero 2 WH + 1.3" 240x240 TFT bonnet (Adafruit 4506).
+loop on a real Pi Zero / Zero W / Zero WH + 1.3" 240x240 TFT bonnet
+(Adafruit 4506). **Pi Zero 2 W is not yet part of the OOTB path.**
 
 This is the first end-to-end hardware test of the bonnet UI stack.
 Everything below is exercised by 258 host-side tests, but only the Pi
@@ -118,7 +119,7 @@ empty vault.
 
 The display should:
 
-1. Show the **alpha-software disclaimer** page 1, with a blue
+1. Show the **beta-software disclaimer** page 1, with a blue
    accent border and a single highlighted page-indicator dot.
 2. Advance to pages 2 and 3 when you push the joystick right.
 3. Show a red-bordered "No liability" final page, with a

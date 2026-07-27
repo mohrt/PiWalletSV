@@ -279,7 +279,7 @@ to the new path; the bonnet's defaults already follow the rename.
 
 The signer doesn't run NTP and doesn't accept network traffic. The
 RTC time after first boot is whatever the OS image (and battery-backed
-RTC, if present — the Pi Zero 2 W doesn't have one) said.
+RTC, if present — the Pi Zero / Zero W doesn't have one) said.
 
 The verifier doesn't depend on the wall clock for correctness: BEEF
 proofs anchor against block headers that carry their own timestamps,

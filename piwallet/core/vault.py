@@ -130,8 +130,8 @@ def _validate_pin(pin: str) -> None:
         raise ValueError("PIN must be a string")
     if not pin.isdigit():
         raise ValueError("PIN must contain only digits")
-    if len(pin) < 6:
-        raise ValueError("PIN must be at least 6 digits")
+    if len(pin) != 6:
+        raise ValueError("PIN must be 6 digits")
 
 
 def _derive_kek(pin: str, salt: bytes) -> bytes:

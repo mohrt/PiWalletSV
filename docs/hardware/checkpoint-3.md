@@ -76,7 +76,7 @@ On the phone:
 1. Open that URL.
 2. Accept the self-signed cert warning ("Show details" → "visit
    anyway" / "Advanced" → "Proceed").
-3. Accept the alpha disclaimer modal.
+3. Accept the beta disclaimer modal.
 4. You should land on the Wallets page with an empty list.
 
 ## 3. Create a testnet wallet on the bonnet

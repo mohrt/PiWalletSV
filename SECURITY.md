@@ -2,13 +2,13 @@
 
 ## Supported Versions
 
-PiWalletSV is currently pre-release / alpha software. Only the `main`
+PiWalletSV is currently pre-release / beta software. Only the `main`
 branch and the latest tagged release receive security fixes. There is
 no LTS commitment yet.
 
 | Version           | Supported          |
 | ----------------- | ------------------ |
-| `main` (alpha)    | :white_check_mark: |
+| `main` (beta)     | :white_check_mark: |
 | any pre-`v0.1.0`  | :x:                |
 
 ## Reporting a Vulnerability
@@ -22,8 +22,7 @@ app, or in the documented operational procedures), please report it
 
 GitHub private vulnerability reporting:
 
-1. Open `https://github.com/<owner>/PiWallet/security/advisories/new`
-   (replace `<owner>` with the org / user this repo lives under).
+1. Open `https://github.com/mohrt/PiWalletSV/security/advisories/new`.
 2. Fill in a clear title, a reproduction, the impact, and what
    versions / configurations are affected.
 3. We will respond on the advisory thread.
@@ -58,7 +57,7 @@ If you cannot use GitHub's private reporting:
 ### Out of scope
 
 The following are **not** considered security vulnerabilities for this
-project at the alpha stage:
+project at the beta stage:
 
 - Bugs that require the user to type their seed phrase into something
   that has network access. The user instructions explicitly forbid

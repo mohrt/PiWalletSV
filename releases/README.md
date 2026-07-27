@@ -1,8 +1,9 @@
 # Firmware release artifacts
 
-Signed SD-card images are published on **GitHub Releases**, not in this
-directory. See [`releases.json`](releases.json) for canonical download URLs
-and metadata consumed by docs.
+Signed SD-card images are published on
+**[GitHub Releases](https://github.com/mohrt/PiWalletSV/releases)**, not in this
+directory. [`releases.json`](releases.json) is optional machine-readable history
+(docs link to it; the website does **not** republish version numbers or hashes).
 
 **Filename pattern** (board slug + optional maturity):
 

@@ -20,21 +20,26 @@
 |---|---|
 | **Website** | https://piwalletsv.com |
 | **Companion app** | https://app.piwalletsv.com |
-| **Downloads & verify** | https://piwalletsv.com/download |
+| **Downloads & verify** | https://github.com/mohrt/PiWalletSV/releases |
 | **Full manual (online)** | https://piwalletsv.com/user-manual/ |
-| **Firmware version** | `0.1.0-r3` (pi0 beta) |
-| **Image ID (batch)** | `c05daabb` |
+| **Firmware version** | _(fill before print)_ |
+| **Image ID (batch)** | _(fill before print)_ |
 
 ---
 
 ## ⚠ Beta software — read this first
 
-PiWalletSV is **pre-release (beta) software**. There is **no warranty**
-and **no recovery service** if you lose your seed phrase or PIN.
+PiWalletSV software is **beta**. It is fully functional with **no currently
+known issues**. Bugs that turn up will be fixed and released; all notices are
+posted on [@PiWalletSV](https://x.com/PiWalletSV).
 
-- Use **testnet** and **small amounts** until you are confident.
-- **Your funds are always recoverable** from any BIP39-compatible wallet
-  using your seed phrase. PiWalletSV is not required to access your funds.
+There is **no warranty** and **no recovery service** if you lose your seed
+phrase or PIN.
+
+- **Your funds are always recoverable** from any BIP44-compatible BSV
+  wallet using your seed phrase (path `m/44'/236'/0'`). PiWalletSV is
+  not required — tools such as iancoleman.io/bip39 or satofinder.com
+  work. See https://piwalletsv.com/recover-without-device/
 - **You** are the custodian. Write down your **12- or 24-word seed phrase**
   on paper or steel and store it safely.
 - Read the full disclaimer on first boot (bonnet screen) and at
@@ -59,11 +64,12 @@ Typical PiWalletSV kit contents:
 8. **Case** (may include a tamper-evident seal)
 9. **This insert**
 
-**Not included (bring your own for vault backup):** a **micro-USB OTG adapter**
-and **USB flash drive**. Plug the OTG adapter into the **other** (left)
-micro-USB port — **not** the right-most power port — then use
-**Settings → Maintenance → USB backup**. Never connect the Pi to a computer
-through either port.
+**Optional (not included):** a **micro-USB OTG adapter** and **USB flash
+drive** for the **left** micro-USB port. Use them only to **export or import
+your encrypted vault** when upgrading firmware or replacing the SD card —
+**Settings → Maintenance → USB backup**. You do **not** need them for everyday
+use. Optionally, you can **restore each wallet from your written seed phrase(s)**
+on the bonnet. Never connect the Pi to a computer through either port.
 
 Keep the seed phrase backup **separate** from the device and SD card.
 
@@ -73,25 +79,34 @@ Keep the seed phrase backup **separate** from the device and SD card.
 
 ## Step 0 — Verify the microSD (do this before funding)
 
-Your kit includes a **factory-flashed** microSD for convenience. For a
-**cold wallet**, treat that as a starting point only — **re-flash from the
-signed GitHub download** before you create a wallet or receive BSV.
+Your kit includes a **factory-flashed and tested** microSD. Before
+shipment, the assembled device is booted into diagnostics and its display,
+camera, joystick, buttons, and software checks are exercised. That test
+boot writes to the card, so the shipped card no longer byte-matches the
+pristine release image and cannot be validated against a whole-image
+checksum.
+
+You may accept the tested card as shipped, but that relies on the factory
+and delivery chain. For proper **cold-wallet** assurance, treat it as a
+starting point only — **re-flash from the signed GitHub download** before
+you create a wallet or receive BSV. The checksum verifies the downloaded
+`.img.xz`; re-flashing writes that verified release to your card.
 
 **Why:** The card could have been swapped or modified in transit. Raspberry
 Pi has **no secure boot**. Re-flashing a GPG-verified image you download
 yourself is the only practical way to eliminate that doubt.
 
 **Do not boot the Pi to verify.** The device cannot show a trustworthy
-checksum of the whole card, and the first power-on already changes the
-microSD.
+checksum of the whole card, and factory diagnostics have already changed
+the shipped microSD.
 
-### Option B — Re-flash (recommended — easiest)
+### Option A — Re-flash (recommended — easiest)
 
 **This is what we recommend.** Download the official image, verify it
 yourself, and write it to the card. On a new kit that is simpler and
 stronger than trying to prove the factory flash byte-for-byte.
 
-1. **Download** from https://piwalletsv.com/download (links to GitHub Releases):
+1. **Download** from https://github.com/mohrt/PiWalletSV/releases:
    - `piwalletsv-<version>.img.xz`
    - `piwalletsv-<version>.img.xz.asc` (signature)
 
@@ -105,11 +120,12 @@ stronger than trying to prove the factory flash byte-for-byte.
 
    You must see **Good signature**. If not, **stop** — do not flash.
 
-3. **Verify SHA-256** of the `.img.xz` against the hash on the download
-   page (see Option A below).
+3. **Verify SHA-256** of the `.img.xz` against `SHA256SUMS` on the same
+   GitHub release (see Option B below).
 
 4. **Re-flash the microSD** (Pi still off):
-   - Remove the microSD card.
+   - Power off. Remove the microSD card — on an assembled unit you can
+     pull it with a **thin pair of tweezers** without opening the case.
    - Insert into your computer (USB card reader).
    - Use **Raspberry Pi Imager** (free): **Use custom** → select the
      verified `.img.xz` → write to the SD card.
@@ -119,44 +135,47 @@ stronger than trying to prove the factory flash byte-for-byte.
 5. Power on and continue with **First boot** below.
 
 **Note:** Re-flashing **erases** the card. That is OK on a new kit.
-If you already have a wallet, **back up the vault to a USB flash drive
-first** (your OTG adapter + stick in the **left** port → **Settings → Maintenance → USB backup**).
-After re-flash, restore from that backup or your seed phrase.
+If you already have a wallet, either **export the vault to USB** (optional
+OTG adapter + stick in the **left** port → **Settings → Maintenance → USB backup**)
+**or** be ready to **restore from your seed phrase(s)** after re-flash.
 
 **Tamper seal:** If your case has a security sticker, inspect it before
-first use. A broken seal is a reason to prefer **Option B**.
+first use. A broken seal is a reason to prefer **Option A**.
 
-### Option A — Light checks (optional, weaker)
+### Option B — Light checks (optional, weaker)
 
 Use only if you skip re-flash for now.
 
 **Paperwork (no boot):**
 
 1. Compare **Image ID** and **Firmware version** printed at the top
-   of this card to **https://piwalletsv.com/download**.
+   of this card to the matching release at
+   **https://github.com/mohrt/PiWalletSV/releases**.
 2. **Match** → paperwork matches that batch. **Mismatch** → do not
-   use; re-flash (Option B).
+   use; re-flash (Option A).
 
 This does **not** prove the microSD was flashed correctly.
 
-**Hash the card on your computer (advanced):**
+**Hash the card on your computer (forensic record only):**
 
-1. **Do not boot the Pi.** Remove the microSD and insert it in a USB
-   card reader on your computer.
+1. Power off. Remove the microSD and insert it in a USB card reader on
+   your computer.
 2. Hash the entire card (example; use the correct device name):
 
    ```
    sudo dd if=/dev/sdX bs=4M status=progress | shasum -a 256
    ```
 
-3. Compare to the **published card hash** for your Image ID on
-   piwalletsv.com (when listed). If none is published, use Option B.
-   Re-flashing is usually **easier** than this.
+This records what arrived; it does **not** authenticate the firmware.
+Factory diagnostics have already changed the shipped card, so its hash
+is not expected to match the pristine release image. Use Option A to
+establish firmware trust.
 
-**Verify the download file (required before Option B anyway):**
+**Verify the download file (required before Option A anyway):**
 
-1. At **https://piwalletsv.com/download**, note the **SHA-256** for
-   your `piwalletsv-<version>.img.xz` file.
+1. At **https://github.com/mohrt/PiWalletSV/releases**, open the release
+   for your kit and note the **SHA-256** in `SHA256SUMS` for your
+   `piwalletsv-<version>.img.xz` file.
 2. Download that file and run (Mac/Linux terminal):
 
    ```
@@ -174,20 +193,19 @@ microSD matches it.
 
 ## Assembly & power
 
-1. **Pi off.** Peel and press the **heat sink** onto the Pi Zero SoC
-   (main chip). Let adhesive set if the kit uses a stick-on pad.
-2. Seat the **bonnet** on the 40-pin GPIO header (straight, fully
+1. **Pi off.** Seat the **bonnet** on the 40-pin GPIO header (straight, fully
    seated).
-3. Connect the **camera ribbon** to the Pi CSI port (under/near the SD
+2. Connect the **camera ribbon** to the Pi CSI port (under/near the SD
    slot — latch open, insert, latch closed).
-4. Insert the **microSD** (label side as printed on the Pi).
-5. **Two micro-USB ports** (bonnet display facing you):
+3. Insert the **microSD** (label side as printed on the Pi).
+4. **Two micro-USB ports** (bonnet display facing you):
    - **Right-most port — POWER ONLY.** Plug the included **micro-USB cable**
      (from the 5 V adapter) here. Labeled **PWR IN** on the bonnet.
      **Never** plug a flash drive or OTG adapter into this port.
-   - **Other port (left) — USB backup only.** For vault backup, plug **your
-     own** **OTG adapter** and **USB flash drive** here, then use
+   - **Other port (left) — optional USB vault export/import.** For upgrades,
+     plug **your own** **OTG adapter** and **USB flash drive** here, then use
      **Settings → Maintenance → USB backup**. **Not included in the kit.**
+     Or restore from seed after re-flash — no OTG required.
      **Not** for power and **not** for connecting the Pi to a computer.
 
    ```
@@ -212,20 +230,21 @@ disclaimer appears.
 
 ### 2. Vault PIN
 
-- Choose **New vault** and set a **PIN** (4–12 digits).
-- Use a **long PIN (12+ digits)** for cold storage.
+- Choose **New vault** and set a **PIN** (6 digits).
 - **Wrong PIN six times in a row wipes the vault** on the device.
 - The PIN protects the encrypted file on the SD card — **not** your seed.
 
-### 3. Create or restore a wallet
+### 3. Your first wallet (on the device)
 
+Create the wallet **on the Pi first** — before opening the companion.
 From the **Wallets** list:
 
 - **+ New wallet** — device generates a new seed. **Write every word on
   paper or steel.** This is your **only** recovery path.
 - **+ Restore wallet** — enter an existing 12- or 24-word BIP39 phrase.
 
-**Never** type your seed into a phone, laptop, or website.
+Keys stay on the device. **Never** type your seed into a phone, laptop,
+or website.
 
 ### 4. Air-gap check (important)
 
@@ -238,14 +257,15 @@ Before mainnet funds:
 If anything shows **BREACH** or **!!**, do **not** sign until resolved
 (see online manual).
 
-### 5. Pair the companion app
+### 5. Pair the companion (transfer the xpub)
 
-On a **phone or laptop** (online device):
+After the wallet exists on the Pi, open the companion on a **phone or
+laptop** (online device) and copy the **public** account xpub across:
 
 1. Open **https://app.piwalletsv.com**
-2. Follow prompts to scan the **pairing QR** shown on the Pi.
-3. The companion holds **public** data only (xpub, addresses). It never
-   receives your seed or PIN.
+2. On the Pi, show the **pairing QR**; scan it with the companion.
+3. The companion saves a **watch-only** wallet (xpub / addresses only).
+   It never receives your seed or PIN.
 
 **Verify receive addresses:** before sharing a deposit address for
 large amounts, display the address on the **Pi bonnet** and confirm it
@@ -286,7 +306,7 @@ Start with **testnet** until you trust the full flow.
 |------|--------|
 | **Seed phrase (12/24 words)** | **You** write on paper/steel — **required** |
 | **Encrypted vault** | On SD card; needs **PIN** |
-| **USB backup** | Your OTG adapter + flash drive (left port) → Settings → Maintenance → USB backup |
+| **USB backup** | **Optional** OTG + flash drive (left port) → export/import vault on upgrade; or use seed restore |
 
 **Lost PIN + no seed** → funds not recoverable.  
 **Lost SD + have seed** → restore wallet on a new setup or re-flash.
@@ -299,7 +319,7 @@ Start with **testnet** until you trust the full flow.
 |------|---------|
 | Re-flash SD from signed download before funding (Step 0) | Boot Pi to "verify" or trust pre-flashed card blindly |
 | Write seed offline; store securely | Type seed into any networked device |
-| Use long PIN; test on testnet first | Share PIN or seed with anyone |
+| Protect your 6-digit PIN; test on testnet first | Share PIN or seed with anyone |
 | Check **Airgap status** periodically | Connect Pi to Wi-Fi / Ethernet |
 | Re-flash from signed download when upgrading | Skip signature verify on updates |
 
@@ -310,13 +330,14 @@ Start with **testnet** until you trust the full flow.
 PiWalletSV has **no over-the-air updates** and **no USB update from a
 computer** (by design). To upgrade:
 
-1. **Back up the vault** to a USB flash drive (OTG adapter + stick →
-   **Settings → Maintenance → USB backup**), or confirm you have your seed phrase.
-2. Download and **verify** the new image on your **computer** at
-   piwalletsv.com/download.
-3. **Remove the microSD**, re-flash it on your computer, then put it
-   back in the Pi.
-4. **Restore** the vault from USB backup (or restore wallet from seed).
+1. **Export the vault to USB** (optional OTG + stick → **Settings → Maintenance → USB backup**),
+   **or** confirm you have your seed phrase(s).
+2. Download and **verify** the new image on your **computer** from
+   GitHub Releases (`github.com/mohrt/PiWalletSV/releases`).
+3. **Remove the microSD** (power off; a **thin pair of tweezers** through
+   the case slot — no disassembly), re-flash on your computer, then
+   reinsert the same way.
+4. **Restore** from USB backup **or** **Restore wallet** from seed on the bonnet.
 5. Re-check **Airgap status**.
 
 Full steps: https://piwalletsv.com/user-manual/#upgrade-your-device
@@ -346,13 +367,13 @@ This insert is a summary. The authoritative manual lives at
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  PiWalletSV                    app.piwalletsv.com           │
-│  Verify SD:  piwalletsv.com/download                      │
+│  Verify SD:  github.com/mohrt/PiWalletSV/releases           │
 │  Manual:     piwalletsv.com/user-manual                     │
 │                                                             │
 │  BEFORE FUNDING:  re-flash verified image (recommended)     │
 │  RECOVERY = 12/24 words ONLY  (not PIN, not support)        │
 │  AIRGAP: Settings → Maintenance → Airgap status → all OK    │
-│  USB (display facing you): RIGHT-MOST=power  LEFT=backup (BYO OTG) │
+│  USB (display facing you): RIGHT-MOST=power  LEFT=optional backup (BYO OTG) │
 └─────────────────────────────────────────────────────────────┘
 ```
 

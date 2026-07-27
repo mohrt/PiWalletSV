@@ -93,8 +93,8 @@ source .venv/bin/activate
 
 | Board | OS | Notes |
 |-------|-----|-------|
-| **Pi Zero 2 WH** (recommended) | Pi OS Lite **64-bit** | Production target; normal pip on aarch64 |
-| **Pi Zero WH** (budget / legacy) | Pi OS Lite **32-bit** | Works; slow pip; coincurve pin required |
+| **Pi Zero / Zero W / Zero WH** (supported) | Pi OS Lite **32-bit** | Round-one OOTB path; coincurve pin required on armv6 |
+| **Pi Zero 2 W** | — | **Not yet supported OOTB** (future `pi02w` / 64-bit) |
 | **Laptop** | macOS / Linux | `pip install -e ".[dev]"` only — no bootstrap |
 
 ## Troubleshooting

@@ -53,9 +53,10 @@ export async function ensureTermsAccepted(): Promise<void> {
         </p>
         <ul class="terms-bullets">
           <li>
-            <strong>Alpha software.</strong> Pre-release, unaudited,
-            personal project. Bugs and regressions can lose funds.
-            Don't store amounts you can't afford to lose.
+            <strong>Beta software.</strong> Fully functional with no
+            currently known issues; not independently audited. Bugs
+            and regressions can lose funds. Don't store amounts you
+            can't afford to lose.
           </li>
           <li>
             <strong>Non-custodial.</strong> You — and only you — are
