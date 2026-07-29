@@ -1,12 +1,15 @@
 # Canonical Pi payload excludes — used by:
 #   scripts/rsync-pi-payload.sh   (junk filters within allowlisted paths)
-#   scripts/prune-pi-payload.sh   (after git clone fallback)
+#   scripts/prune-pi-payload.sh   (after sync / git clone fallback)
 #   scripts/verify-pi-payload.sh  (post-sync / post-provision gate)
 #
 # Dev sync and provision --src both use the allowlist in
 # scripts/rsync-pi-includes.txt via scripts/rsync-pi-payload.sh.
 #
 # Runtime paths that MUST remain: piwallet/, scripts/, deploy/, pyproject.toml
+#
+# KEEP_ON_PI: .venv / venv / env are listed below so rsync does not copy a
+# Mac venv to the Pi, but prune + verify leave the Pi-local .venv alone.
 
 # VCS & IDE
 .git
@@ -36,6 +39,7 @@ htmlcov
 node_modules
 
 # Local vault / secrets — never push dev machine state to the Pi
+# (vault normally lives in ~/.piwallet, outside the repo tree)
 .piwallet
 .piwallet-dev
 vault.bin
