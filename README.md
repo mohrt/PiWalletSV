@@ -22,7 +22,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-- **CLI:** `piwallet --help` — vault, sign, decode, multipart QR (`piwallet qr join`, `piwallet qr scan-camera` on Pi), USB backup (`piwallet backup export|import`).
+- **CLI:** `piwallet --help` — vault, sign, decode, multipart QR (`piwallet qr join`, `piwallet qr scan-camera` on Pi), USB backup (`piwallet backup export|import|import-state`).
 - **Pi bring-up:** `./scripts/sync-to-pi.sh user@host --bootstrap` or `bash scripts/bootstrap-pi-dev.sh` on the Pi. Smoke tests: `./scripts/run_display_demo.sh`, `./scripts/run_bonnet.sh`. See [docs/build.md](docs/build.md).
 
 ## Companion web app
@@ -39,9 +39,9 @@ npm run build        # tsc --noEmit + vite build to companion/dist
 
 Routes:
 
-- **`/#/wallets`** — paired-wallet list (IndexedDB). Rename, copy xpub, remove. Default landing surface; the Pi side is unaffected by removals.
-- **`/#/wallets/<id>`** — wallet detail with **Balance**, **Send**, **Receive**, and **Recent addresses** sections. Balance does a gap-limit-20 UTXO scan via [WhatsOnChain](https://api.whatsonchain.com/v1/bsv/main) across `m/0/i` and `m/1/i`. Send runs greedy coin selection, fetches per-input TSC Merkle proofs + block headers, builds a BSV BEEF via `@bsv/sdk`, and emits an `unsigned_proposal` animated as PW1 frames. Receive derives `m/0/<index>` children, addresses computed via `@scure/bip32` + `@noble/hashes` and cross-checked against `piwallet.core.derivation` byte-for-byte.
-- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream. Recognises real envelopes (`xpub_export`, `unsigned_proposal`, `signed_tx`) and renders the right action card. `signed_tx` POSTs raw hex to WhatsOnChain `/tx/raw`, surfaces the returned txid + a `whatsonchain.com/tx/<txid>` link, and warns if the broadcaster echoes a different txid than the Pi signed.
+- **`/#/wallets`** — paired-wallet list (IndexedDB). Cards read and reload the local Pi-authored state mirror without address discovery. Rename, copy xpub, and remove remain under each wallet; the Pi side is unaffected by companion removals.
+- **`/#/wallets/<id>`** — wallet detail with **Balance**, **Send**, **Receive**, **History**, and **Advanced** sections. Normal Balance/History/Send operate from the Pi-authored coin and Atomic-BEEF mirror, with no address scan or per-spend proof fetch. Receive derives `m/0/<index>` children; confirmed incoming Atomic BEEF is secured on the Pi by receipt. The history-aware gap walker exists only under Advanced disaster recovery for one-time migration/reconstruction.
+- **`/#/scan`** — `getUserMedia` + `jsqr` + `MultipartAssembler` reassembles a PW1 stream. Recognises pairing, proposal, signed-transaction, state-sync, and state-receipt envelopes and renders the right action. `signed_tx` POSTs raw hex to WhatsOnChain `/tx/raw`, surfaces the returned txid + a `whatsonchain.com/tx/<txid>` link, and warns if the broadcaster echoes a different txid than the Pi signed.
 - **`/#/loop`** *(dev only)* — round-trips every envelope kind (build → CBOR + gzip → PW1 split → reassemble → gunzip + CBOR decode) on page load. Tree-shaken out of production builds.
 
 Cross-domain links (footer, "Why is this safe?", terms-modal pointers) are driven by `VITE_DOCS_BASE_URL` at build time so dev mirrors stay self-contained. See [`companion/.env`](companion/.env) and [`companion/src/lib/config.ts`](companion/src/lib/config.ts).
@@ -81,9 +81,10 @@ Set `PIWALLET_HTTP=1 npm run dev` to disable HTTPS for plain localhost work.
 PiWalletSV is designed so that anyone can build a compatible companion or signer against it. The full wire-format spec is in [`docs/protocol/`](docs/protocol/README.md):
 
 - [`derivation.md`](docs/protocol/derivation.md) — BIP39/32/44 layout, P2PKH address encoding, wallet fingerprint.
-- [`envelopes.md`](docs/protocol/envelopes.md) — CBOR + gzip shapes for `xpub_export`, `unsigned_proposal`, `signed_tx`.
+- [`envelopes.md`](docs/protocol/envelopes.md) — CBOR + gzip shapes for pairing, proposal, signed, state-sync, and state-receipt envelopes.
+- [`wallet-state.md`](docs/protocol/wallet-state.md) — encrypted authoritative state, migration, recovery, backup, and crash consistency.
 - [`qr-transport.md`](docs/protocol/qr-transport.md) — the `PW1` multipart QR framing.
-- [`spv.md`](docs/protocol/spv.md) — what a v1 signer verifies before producing signatures (BEEF + Merkle path + header anchors + change re-derivation + value conservation).
+- [`spv.md`](docs/protocol/spv.md) — what a v2 signer verifies before producing signatures (BEEF + Merkle path + header anchors + change re-derivation + value conservation).
 - [`conformance.md`](docs/protocol/conformance.md) — canonical test vectors in [`tests/fixtures/`](tests/fixtures/) you can diff your implementation against.
 
 The reference Python signer in `piwallet/` and the reference TypeScript companion in `companion/` both validate themselves against these fixtures on every test run, so they cannot silently drift from the spec.

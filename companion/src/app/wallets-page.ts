@@ -24,13 +24,12 @@ import {
   type WalletListSort,
   type WalletRecord,
   listWallets,
-  setLastScan,
   sortWalletRecords,
   withDefaults,
 } from "../lib/wallets.js";
 import { renderHeader } from "./nav.js";
 import { WocClient, effectiveWocBase } from "../lib/woc.js";
-import { scanWalletUtxos } from "../lib/utxo.js";
+import { stateBalanceSats, stateUtxos } from "../lib/wallet-state.js";
 import {
   canPromptInstall,
   detectInstallPlatform,
@@ -250,9 +249,11 @@ export function mountWalletsPage(root: HTMLElement): () => void {
         ? `<span class="testnet-badge" title="BSV testnet">TESTNET</span>`
         : `<span class="mainnet-badge" title="BSV mainnet">MAINNET</span>`;
 
-      const balanceHtml = w.lastScan
+      const secured = w.walletState;
+      const legacyScan = secured ? undefined : w.lastScan;
+      const balanceHtml = secured
         ? (() => {
-            const split = splitConfirmedPending(w.lastScan.utxos);
+            const split = splitConfirmedPending(stateUtxos(secured));
             let pendingHtml = "";
             if (split.hasPending) {
               if (split.allPending) {
@@ -262,13 +263,17 @@ export function mountWalletsPage(root: HTMLElement): () => void {
                   `<span class="wallet-pending-hint">+${escapeHtml(formatBalance(split.pendingSats))} pending</span>`;
               }
             }
-            return `<span class="wallet-balance">Balance: ${escapeHtml(formatBalance(w.lastScan.totalSats))}</span>${pendingHtml}`;
+            return `<span class="wallet-balance">Balance: ${escapeHtml(formatBalance(stateBalanceSats(secured)))}</span>${pendingHtml}`;
           })()
+        : legacyScan
+          ? `<span class="wallet-balance">Balance: ${escapeHtml(formatBalance(legacyScan.totalSats))}</span><span class="wallet-pending-hint">legacy snapshot</span>`
         : `<span class="wallet-balance muted-line">Balance: —</span>`;
-      const scanMeta = w.lastScan
-        ? `scanned ${relativeTimeFrom(w.lastScan.at)} · `
-        : "";
-      const refreshBtn = `<button class="wallet-refresh-btn" data-refresh="${w.id}" title="Refresh balance" aria-label="Refresh balance">↻</button>`;
+      const stateMeta = secured
+        ? `secured ${relativeTimeFrom(secured.updatedAt)} · revision ${secured.revision} · `
+        : legacyScan
+          ? `legacy snapshot ${relativeTimeFrom(legacyScan.at)} · `
+          : "not secured · ";
+      const refreshBtn = `<button class="wallet-refresh-btn" data-refresh="${w.id}" title="Reload secured state" aria-label="Reload secured state">↻</button>`;
 
       li.innerHTML = `
         <div class="wallet-card-top">
@@ -283,7 +288,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
             </div>
           </div>
           <div class="wallet-card-meta muted-line">
-            ${scanMeta}<code title="fingerprint">${w.fingerprint}</code> ·
+            ${stateMeta}<code title="fingerprint">${w.fingerprint}</code> ·
             ${escapeHtml(w.path)} ·
             paired ${new Date(w.addedAt).toLocaleDateString()}
           </div>
@@ -317,43 +322,31 @@ export function mountWalletsPage(root: HTMLElement): () => void {
     renderList(displayWallets());
   }
 
-  // ── per-wallet balance refresh ─────────────────────────────────────────────
+  // ── local secured-state reload ─────────────────────────────────────────────
   $list.addEventListener("click", (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>("[data-refresh]");
     if (!btn) return;
     const id = btn.dataset.refresh!;
-    const wallet = cachedWallets.find(w => w.id === id);
-    if (!wallet) return;
-    void refreshWalletBalance(withDefaults(wallet), btn);
+    if (!cachedWallets.some(w => w.id === id)) return;
+    void reloadSecuredState(btn);
   });
 
-  async function refreshWalletBalance(wallet: ReturnType<typeof withDefaults>, btn: HTMLButtonElement): Promise<void> {
+  async function reloadSecuredState(btn: HTMLButtonElement): Promise<void> {
     btn.disabled = true;
     btn.textContent = "…";
     try {
-      const woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
-      const result = await scanWalletUtxos(wallet.xpub, woc, { network: wallet.network });
-      const snapshot = {
-        at: new Date().toISOString(),
-        totalSats: result.totalSats,
-        utxos: result.utxos,
-        lastReceiveUsed: result.lastReceiveUsed,
-        lastChangeUsed: result.lastChangeUsed,
-        addressesScanned: result.addressesScanned,
-        stoppedAt: result.stoppedAt,
-      };
-      await setLastScan(wallet.id, snapshot);
+      cachedWallets = await listWallets();
       if (cancelled) return;
       if (listUnit === "fiat" && bsvUsdPrice === null) await fetchPrice();
-      const idx = cachedWallets.findIndex(w => w.id === wallet.id);
-      if (idx >= 0) cachedWallets[idx] = { ...cachedWallets[idx], lastScan: snapshot };
+      $status.classList.remove("error");
+      $status.textContent = "Loaded local Pi-secured state.";
       renderList(displayWallets());
     } catch (e) {
       btn.disabled = false;
       btn.textContent = "↻";
       if (!cancelled) {
         $status.classList.add("error");
-        $status.textContent = `balance refresh failed: ${(e as Error).message}`;
+        $status.textContent = `state reload failed: ${(e as Error).message}`;
       }
     }
   }

@@ -2,7 +2,9 @@
 
 This page describes how to access or sweep your BSV when the PiWalletSV
 device is unavailable — lost, broken, or not yet replaced. The only thing
-you need is your **seed phrase** (12 or 24 words).
+you need to recover control of the funds is your **seed phrase** (12 or 24
+words). A backed-up `state.bin` avoids chain discovery when resuming
+PiWalletSV, but it is not required to sweep with another wallet.
 
 PiWalletSV uses standard **BIP39** mnemonics and the **BIP44** path
 `m/44'/236'/0'` (BSV). You do **not** need a PiWalletSV device to recover
@@ -36,12 +38,19 @@ path chooser during wallet creation, your values may differ.
 | **BIP39 passphrase** | *(none — leave blank)* | v1 uses no passphrase |
 | **Coin / network** | BSV mainnet | Companion or `piwallet vault list` |
 | **Derivation path** | `m/44'/236'/0'` (BIP44 / SLIP-44) | Companion wallet detail or `piwallet vault list` |
+| **State snapshot** | `state.bin` *(optional)* | PiWalletSV USB bundle |
 
 If you still have access to the companion web app
 (`app.piwalletsv.com` or your paired device's companion URL),
 open it → your wallet → tap the info icon to see the exact path and
 fingerprint recorded for that wallet. If the companion is gone and you
 used the default at creation time, the path is `m/44'/236'/0'`.
+
+If the goal is to resume on a replacement PiWalletSV rather than sweep the
+funds, recreate the wallet from the mnemonic and then restore the USB bundle's
+encrypted `state.bin`. The state key is derived from the same mnemonic/account
+and does not depend on the old PIN or wallet UUID. Without it, use the
+companion's explicit **Advanced → Disaster recovery discovery** flow once.
 
 ---
 

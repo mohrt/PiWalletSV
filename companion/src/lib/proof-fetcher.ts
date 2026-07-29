@@ -31,6 +31,8 @@ import type { WocClient, WocTxProof } from "./woc.js";
 export interface InputProof {
   /** BSV BEEF blob for the input's funding tx (with Merkle path attached). */
   beef: Uint8Array;
+  /** Atomic BEEF form persisted once for wallet-state sync/reuse. */
+  atomicBeef?: Uint8Array;
   /** Standalone binary Merkle path (matches Python `MerklePath.to_binary()`). */
   merklePath: Uint8Array;
   /** Confirmation block height. */
@@ -144,6 +146,7 @@ export async function fetchInputProof(
 
   return {
     beef: tx.toBEEFUint8Array(),
+    atomicBeef: new Uint8Array(tx.toAtomicBEEF()),
     merklePath: mp.toBinaryUint8Array(),
     height: header.height,
     merkleRoot: header.merkleroot,

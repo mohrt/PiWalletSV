@@ -3,6 +3,7 @@ import {
   encodeEnvelope,
   hexToBytes,
 } from "../../lib/envelope.js";
+import { P2PKH } from "@bsv/sdk/script/templates";
 import { encodeMultipartLines } from "../../pw1.js";
 import {
   clearPw1QrCanvas,
@@ -10,6 +11,15 @@ import {
   wirePw1QrControls,
 } from "../../lib/pw1-qr-playback.js";
 import { removeWallet, updateLabel } from "../../lib/wallets.js";
+import { setNextReceiveIndex } from "../../lib/wallets.js";
+import { scanWalletUtxos } from "../../lib/utxo.js";
+import { fetchInputProof } from "../../lib/proof-fetcher.js";
+import {
+  stageStateSyncCoins,
+  stageAtomicBeefPayment,
+  syncCoinFromProof,
+} from "../../lib/wallet-state.js";
+import { WocClient, effectiveWocBase } from "../../lib/woc.js";
 import { escapeHtml } from "./shared.js";
 import type { WalletDetailRuntime, WalletDetailTab } from "./types.js";
 
@@ -158,6 +168,81 @@ export function createAdvancedTab(rt: WalletDetailRuntime): AdvancedTab {
     }
   }
 
+  async function onRecoveryScan(): Promise<void> {
+    if (!rt.wallet || rt.scanRunning) return;
+    if (!window.confirm(
+      "Run infrastructure-dependent disaster recovery discovery? Normal operation should restore state.bin instead.",
+    )) return;
+    const button = rt.root.querySelector<HTMLButtonElement>("#recoveryScanBtn");
+    const status = rt.root.querySelector<HTMLElement>("#recoveryScanStatus");
+    rt.scanRunning = true;
+    if (button) button.disabled = true;
+    if (status) {
+      status.classList.remove("error");
+      status.textContent = "Discovering used addresses with history-aware gap checks…";
+    }
+    try {
+      if (!rt.woc) {
+        rt.woc = new WocClient({ baseUrl: effectiveWocBase(rt.wallet.network) });
+      }
+      const result = await scanWalletUtxos(rt.wallet.xpub, rt.woc, {
+        network: rt.wallet.network,
+        onProgress: ({ branch, index }) => {
+          if (status) status.textContent = `Recovery discovery m/${branch}/${index}…`;
+        },
+      });
+      const known = new Set([
+        ...(rt.wallet.walletState?.coins ?? []).map((coin) => `${coin.txid}:${coin.vout}`),
+        ...(rt.wallet.pendingStateSync?.coins ?? []).map((coin) => `${coin.txid}:${coin.vout}`),
+      ]);
+      const staged = [];
+      for (const utxo of result.utxos) {
+        if (utxo.height <= 0 || known.has(`${utxo.txid}:${utxo.vout}`)) continue;
+        if (status) status.textContent = `Saving proof for ${utxo.txid.slice(0, 8)}…`;
+        const proof = await fetchInputProof(rt.woc, utxo.txid);
+        const script = new P2PKH().lock(utxo.address).toHex();
+        staged.push(syncCoinFromProof(utxo, script, proof));
+      }
+      if (staged.length > 0) await stageStateSyncCoins(rt.wallet, staged);
+      const nextReceive = Math.max(rt.wallet.nextReceiveIndex, result.lastReceiveUsed + 1);
+      if (nextReceive !== rt.wallet.nextReceiveIndex) {
+        await setNextReceiveIndex(rt.wallet.id, nextReceive);
+        rt.wallet.nextReceiveIndex = nextReceive;
+      }
+      if (status) {
+        status.textContent = staged.length > 0
+          ? `${staged.length} recovered coin(s) ready. Return to Balance to secure them on the Pi.`
+          : "Recovery discovery completed; no new confirmed coins found.";
+      }
+    } catch (e) {
+      if (status) {
+        status.classList.add("error");
+        status.textContent = `recovery discovery failed: ${(e as Error).message}`;
+      }
+    } finally {
+      rt.scanRunning = false;
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function onIncomingBeefImport(): Promise<void> {
+    if (!rt.wallet) return;
+    const input = rt.root.querySelector<HTMLTextAreaElement>("#incomingBeefHex");
+    const status = rt.root.querySelector<HTMLElement>("#incomingBeefStatus");
+    if (!input || !status) return;
+    status.classList.remove("error");
+    try {
+      const bytes = hexToBytes(input.value);
+      const pending = await stageAtomicBeefPayment(rt.wallet, bytes);
+      input.value = "";
+      status.textContent =
+        `${pending.coins.length} payment output(s) ready. Return to Balance to secure on the Pi.`;
+    } catch (e) {
+      status.classList.add("error");
+      status.textContent = `import failed: ${(e as Error).message}`;
+    }
+  }
+
   function bind(): void {
     rt.root
       .querySelector<HTMLButtonElement>("#exportShow")
@@ -183,6 +268,10 @@ export function createAdvancedTab(rt: WalletDetailRuntime): AdvancedTab {
     rt.root
       .querySelector<HTMLButtonElement>("#removeWalletConfirmYes")
       ?.addEventListener("click", () => void onRemoveWalletConfirm());
+    rt.root.querySelector<HTMLButtonElement>("#recoveryScanBtn")
+      ?.addEventListener("click", () => void onRecoveryScan());
+    rt.root.querySelector<HTMLButtonElement>("#incomingBeefImport")
+      ?.addEventListener("click", () => void onIncomingBeefImport());
   }
 
   function dispose(): void {

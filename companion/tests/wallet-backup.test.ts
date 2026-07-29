@@ -251,6 +251,27 @@ describe("wallet backup", () => {
     expect(all[0].label).toBe("from backup");
   });
 
+  it("replace mode preserves local wallets until the whole backup validates", async () => {
+    await addWallet({ ...DEMO, fingerprint: "22222222", label: "keep me" });
+
+    await expect(importWalletBackup("{", { mode: "replace" })).rejects.toBeInstanceOf(
+      WalletStoreError,
+    );
+    expect((await listWallets()).map((wallet) => wallet.label)).toEqual(["keep me"]);
+
+    const addedAt = new Date().toISOString();
+    const invalidFingerprint = JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: addedAt,
+      wallets: [{ ...DEMO, fingerprint: "00000000", addedAt }],
+    });
+    await expect(
+      importWalletBackup(invalidFingerprint, { mode: "replace" }),
+    ).rejects.toThrow(/fingerprint mismatch/);
+    expect((await listWallets()).map((wallet) => wallet.label)).toEqual(["keep me"]);
+  });
+
   it("restores lastScan snapshot on import", async () => {
     const rec = await addWallet(DEMO);
     await setLastScan(rec.id, {

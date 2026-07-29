@@ -3,10 +3,12 @@
  * `piwallet/core/envelope.py`. Same versioned schema, same top-level
  * field names, same kind discriminators.
  *
- * Three envelope kinds round-trip across the QR boundary:
+ * Five envelope kinds round-trip across the QR boundary:
  *   - `xpub`   (Pi → phone, on pairing)
  *   - `tx`     (phone → Pi, unsigned proposal)
  *   - `signed` (Pi → phone, after signing)
+ *   - `stateSync` (phone → Pi, confirmed payment delivery)
+ *   - `stateReceipt` (Pi → phone, state transition acknowledgement)
  *
  * Wire format: `gzip(cbor(map))`. Map keys are written in the same
  * order Python emits, so CBOR bytes are byte-equivalent on every
@@ -34,19 +36,26 @@ import { Decoder, Encoder } from "cbor-x";
  *        out-of-sync producer surfaces clearly.
  */
 export const ENVELOPE_VERSION = 2;
+const MAX_DERIVATION_INDEX = 0x80000000;
 export const KIND_XPUB = "xpub" as const;
 export const KIND_PROPOSAL = "tx" as const;
 export const KIND_SIGNED = "signed" as const;
+export const KIND_STATE_SYNC = "stateSync" as const;
+export const KIND_STATE_RECEIPT = "stateReceipt" as const;
 
 export type EnvelopeKind =
   | typeof KIND_XPUB
   | typeof KIND_PROPOSAL
-  | typeof KIND_SIGNED;
+  | typeof KIND_SIGNED
+  | typeof KIND_STATE_SYNC
+  | typeof KIND_STATE_RECEIPT;
 
 const VALID_KINDS: ReadonlySet<string> = new Set<string>([
   KIND_XPUB,
   KIND_PROPOSAL,
   KIND_SIGNED,
+  KIND_STATE_SYNC,
+  KIND_STATE_RECEIPT,
 ]);
 
 export class EnvelopeError extends Error {
@@ -57,7 +66,7 @@ export class EnvelopeError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Type definitions for the three decoded envelope shapes.
+// Type definitions for the five decoded envelope shapes.
 // ---------------------------------------------------------------------------
 
 /**
@@ -131,6 +140,49 @@ export interface UnsignedProposalT {
    * `docs/protocol/spv.md` for the full discussion.
    */
   headerAnchors: Map<number, Uint8Array>;
+  /** Additive state binding; omitted only for one-time legacy migration. */
+  stateRevision?: number;
+  stateHash?: Uint8Array;
+  proposalId?: string;
+}
+
+export interface StateCoinT {
+  txid: string;
+  vout: number;
+  sats: number;
+  lockingScript: string;
+  derivation: [number, number];
+  status: "confirmed" | "pending";
+  transactionReference: string;
+  blockHeight: number;
+}
+
+export interface StateSyncCoinT extends StateCoinT {
+  atomicBeef: Uint8Array;
+}
+
+export interface StateReceiptT {
+  kind: typeof KIND_STATE_RECEIPT;
+  walletFp: Uint8Array;
+  requestId: string;
+  oldRevision: number;
+  newRevision: number;
+  oldStateHash: Uint8Array;
+  newStateHash: Uint8Array;
+  addedCoins: StateCoinT[];
+  removedOutpoints: string[];
+}
+
+export interface StateSyncT {
+  kind: typeof KIND_STATE_SYNC;
+  walletFp: Uint8Array;
+  requestId: string;
+  expectedRevision: number;
+  expectedStateHash: Uint8Array;
+  nextReceiveIndex: number;
+  nextChangeIndex: number;
+  coins: StateSyncCoinT[];
+  headerAnchors: Map<number, Uint8Array>;
 }
 
 export interface SignedTxT {
@@ -147,9 +199,15 @@ export interface SignedTxT {
    * in the BRC-95 header.
    */
   atomicBeef: Uint8Array;
+  stateReceipt?: StateReceiptT;
 }
 
-export type Envelope = XpubExportT | UnsignedProposalT | SignedTxT;
+export type Envelope =
+  | XpubExportT
+  | UnsignedProposalT
+  | SignedTxT
+  | StateSyncT
+  | StateReceiptT;
 
 // ---------------------------------------------------------------------------
 // CBOR + gzip helpers.
@@ -203,6 +261,41 @@ async function gunzipBytes(data: Uint8Array): Promise<Uint8Array> {
 // Encoding.
 // ---------------------------------------------------------------------------
 
+function stateCoinToCbor(coin: StateCoinT): Map<string, unknown> {
+  return new Map<string, unknown>([
+    ["txid", coin.txid],
+    ["vout", coin.vout],
+    ["sats", coin.sats],
+    ["script", coin.lockingScript],
+    ["derivation", [...coin.derivation]],
+    ["status", coin.status],
+    ["txRef", coin.transactionReference],
+    ["height", coin.blockHeight],
+  ]);
+}
+
+function anchorsToCbor(anchors: Map<number, Uint8Array>): Map<string, Uint8Array> {
+  const out = new Map<string, Uint8Array>();
+  for (const height of [...anchors.keys()].sort((a, b) => a - b)) {
+    const root = anchors.get(height);
+    if (root) out.set(String(height), root);
+  }
+  return out;
+}
+
+function receiptToCbor(receipt: StateReceiptT): Map<string, unknown> {
+  return new Map<string, unknown>([
+    ["walletFp", receipt.walletFp],
+    ["requestId", receipt.requestId],
+    ["oldRevision", receipt.oldRevision],
+    ["newRevision", receipt.newRevision],
+    ["oldStateHash", receipt.oldStateHash],
+    ["newStateHash", receipt.newStateHash],
+    ["addedCoins", receipt.addedCoins.map(stateCoinToCbor)],
+    ["removedOutpoints", [...receipt.removedOutpoints]],
+  ]);
+}
+
 function envelopeToCborBody(env: Envelope): Map<string, unknown> {
   const m = new Map<string, unknown>();
   m.set("v", ENVELOPE_VERSION);
@@ -246,18 +339,38 @@ function envelopeToCborBody(env: Envelope): Map<string, unknown> {
     // root values, in ascending-height order. This mirrors the
     // Python encoder so cross-runtime byte equivalence holds for
     // typical input orderings.
-    const anchors = new Map<string, Uint8Array>();
-    const heights = [...env.headerAnchors.keys()].sort((a, b) => a - b);
-    for (const h of heights) {
-      const root = env.headerAnchors.get(h);
-      if (root) anchors.set(String(h), root);
-    }
-    m.set("headerAnchors", anchors);
+    m.set("headerAnchors", anchorsToCbor(env.headerAnchors));
+    if (env.stateRevision !== undefined) m.set("stateRevision", env.stateRevision);
+    if (env.stateHash !== undefined) m.set("stateHash", env.stateHash);
+    if (env.proposalId) m.set("proposalId", env.proposalId);
     return m;
   }
-  // KIND_SIGNED
-  m.set("walletFp", env.walletFp);
-  m.set("atomicBeef", env.atomicBeef);
+  if (env.kind === KIND_SIGNED) {
+    m.set("walletFp", env.walletFp);
+    m.set("atomicBeef", env.atomicBeef);
+    if (env.stateReceipt) m.set("stateReceipt", receiptToCbor(env.stateReceipt));
+    return m;
+  }
+  if (env.kind === KIND_STATE_SYNC) {
+    m.set("walletFp", env.walletFp);
+    m.set("requestId", env.requestId);
+    m.set("expectedRevision", env.expectedRevision);
+    m.set("expectedStateHash", env.expectedStateHash);
+    m.set("nextReceiveIndex", env.nextReceiveIndex);
+    m.set("nextChangeIndex", env.nextChangeIndex);
+    m.set(
+      "coins",
+      env.coins.map((coin) => {
+        const encoded = stateCoinToCbor(coin);
+        encoded.set("atomicBeef", coin.atomicBeef);
+        return encoded;
+      }),
+    );
+    m.set("headerAnchors", anchorsToCbor(env.headerAnchors));
+    return m;
+  }
+  // KIND_STATE_RECEIPT
+  for (const [key, value] of receiptToCbor(env)) m.set(key, value);
   return m;
 }
 
@@ -336,7 +449,13 @@ function parseDerivation(v: unknown, ctx: string): [number, number] {
   if (!Array.isArray(v) || v.length !== 2) {
     throw new EnvelopeError(`${ctx}: derivation must be [branch, index]`);
   }
-  return [asNumber(v[0], ctx, "derivation[0]"), asNumber(v[1], ctx, "derivation[1]")];
+  const branch = asNumber(v[0], ctx, "derivation[0]");
+  const index = asNumber(v[1], ctx, "derivation[1]");
+  if ((branch !== 0 && branch !== 1) || !Number.isInteger(index) ||
+      index < 0 || index >= MAX_DERIVATION_INDEX) {
+    throw new EnvelopeError(`${ctx}: derivation must be a valid [0|1, non-hardened index]`);
+  }
+  return [branch, index];
 }
 
 function parseInput(raw: unknown, idx: number): ProposalInputT {
@@ -363,6 +482,102 @@ function parseOutput(raw: unknown, idx: number): ProposalOutputT {
   return {
     scriptHex: requireString(raw, "script", ctx),
     sats: requireNumber(raw, "sats", ctx),
+  };
+}
+
+function parseStateCoin(raw: unknown, ctx: string): StateCoinT {
+  if (!isCborMap(raw)) throw new EnvelopeError(`${ctx} must be a map`);
+  requireKeys(
+    raw,
+    ["txid", "vout", "sats", "script", "derivation", "status", "txRef", "height"],
+    ctx,
+  );
+  const status = requireString(raw, "status", ctx);
+  if (status !== "confirmed" && status !== "pending") {
+    throw new EnvelopeError(`${ctx}: status must be confirmed or pending`);
+  }
+  const coin: StateCoinT = {
+    txid: requireString(raw, "txid", ctx),
+    vout: requireNumber(raw, "vout", ctx),
+    sats: requireNumber(raw, "sats", ctx),
+    lockingScript: requireString(raw, "script", ctx),
+    derivation: parseDerivation(raw.get("derivation"), ctx),
+    status,
+    transactionReference: requireString(raw, "txRef", ctx),
+    blockHeight: requireNumber(raw, "height", ctx),
+  };
+  if (
+    !/^[0-9a-fA-F]{64}$/.test(coin.txid) ||
+    !/^[0-9a-fA-F]{64}$/.test(coin.transactionReference) ||
+    !/^(?:[0-9a-fA-F]{2})+$/.test(coin.lockingScript) ||
+    !Number.isInteger(coin.vout) || coin.vout < 0 ||
+    !Number.isInteger(coin.sats) || coin.sats <= 0 ||
+    !Number.isInteger(coin.blockHeight) || coin.blockHeight < 0
+  ) {
+    throw new EnvelopeError(`${ctx}: invalid coin values`);
+  }
+  if ((coin.status === "confirmed") !== (coin.blockHeight > 0)) {
+    throw new EnvelopeError(`${ctx}: status does not match block height`);
+  }
+  return coin;
+}
+
+function parseHeaderAnchors(raw: unknown, ctx: string): Map<number, Uint8Array> {
+  if (!isCborMap(raw)) {
+    throw new EnvelopeError(`${ctx}: headerAnchors must be a map`);
+  }
+  const anchors = new Map<number, Uint8Array>();
+  for (const [rawHeight, rawRoot] of raw.entries()) {
+    const height = typeof rawHeight === "number" ? rawHeight : Number(rawHeight);
+    if (!Number.isInteger(height) || height < 0) {
+      throw new EnvelopeError(`${ctx}: invalid header height`);
+    }
+    if (!(rawRoot instanceof Uint8Array) || rawRoot.length !== 32) {
+      throw new EnvelopeError(`${ctx}: header root at ${height} must be 32 bytes`);
+    }
+    anchors.set(height, new Uint8Array(rawRoot));
+  }
+  if (anchors.size === 0) throw new EnvelopeError(`${ctx}: headerAnchors is empty`);
+  return anchors;
+}
+
+function parseStateReceipt(body: CborMap): StateReceiptT {
+  requireKeys(
+    body,
+    [
+      "walletFp", "requestId", "oldRevision", "newRevision",
+      "oldStateHash", "newStateHash", "addedCoins", "removedOutpoints",
+    ],
+    "state_receipt",
+  );
+  const rawAdded = body.get("addedCoins");
+  const rawRemoved = body.get("removedOutpoints");
+  if (!Array.isArray(rawAdded) || !Array.isArray(rawRemoved)) {
+    throw new EnvelopeError("state_receipt: delta fields must be arrays");
+  }
+  const oldRevision = requireNumber(body, "oldRevision", "state_receipt");
+  const newRevision = requireNumber(body, "newRevision", "state_receipt");
+  if (oldRevision < 0 || newRevision !== oldRevision + 1) {
+    throw new EnvelopeError("state_receipt: invalid revision transition");
+  }
+  const requestId = requireString(body, "requestId", "state_receipt").trim();
+  if (requestId.length === 0 || requestId.length > 128) {
+    throw new EnvelopeError("state_receipt: requestId must be 1..128 characters");
+  }
+  const removedOutpoints = rawRemoved.map((v) => String(v));
+  if (removedOutpoints.some((v) => !/^[0-9a-fA-F]{64}:\d+$/.test(v))) {
+    throw new EnvelopeError("state_receipt: invalid removed outpoint");
+  }
+  return {
+    kind: KIND_STATE_RECEIPT,
+    walletFp: requireBytes(body, "walletFp", "state_receipt", 4),
+    requestId,
+    oldRevision,
+    newRevision,
+    oldStateHash: requireBytes(body, "oldStateHash", "state_receipt", 32),
+    newStateHash: requireBytes(body, "newStateHash", "state_receipt", 32),
+    addedCoins: rawAdded.map((v, i) => parseStateCoin(v, `addedCoins[${i}]`)),
+    removedOutpoints,
   };
 }
 
@@ -484,6 +699,30 @@ function parseProposal(body: CborMap): UnsignedProposalT {
     );
   }
 
+  let stateRevision: number | undefined;
+  let stateHash: Uint8Array | undefined;
+  if (body.has("stateRevision") || body.has("stateHash")) {
+    if (!body.has("stateRevision") || !body.has("stateHash")) {
+      throw new EnvelopeError(
+        "unsigned_proposal: stateRevision and stateHash must be supplied together",
+      );
+    }
+    stateRevision = requireNumber(body, "stateRevision", "unsigned_proposal");
+    if (!Number.isInteger(stateRevision) || stateRevision < 0) {
+      throw new EnvelopeError("unsigned_proposal: stateRevision must be non-negative");
+    }
+    stateHash = requireBytes(body, "stateHash", "unsigned_proposal", 32);
+  }
+  const proposalId = body.has("proposalId")
+    ? requireString(body, "proposalId", "unsigned_proposal")
+    : undefined;
+  if (stateRevision !== undefined && !proposalId) {
+    throw new EnvelopeError("unsigned_proposal: state-bound proposal requires proposalId");
+  }
+  if (proposalId && proposalId.length > 128) {
+    throw new EnvelopeError("unsigned_proposal: proposalId must be at most 128 characters");
+  }
+
   return {
     kind: KIND_PROPOSAL,
     walletFp,
@@ -494,15 +733,79 @@ function parseProposal(body: CborMap): UnsignedProposalT {
     feeRate,
     locktime,
     headerAnchors,
+    ...(stateRevision !== undefined ? { stateRevision } : {}),
+    ...(stateHash !== undefined ? { stateHash } : {}),
+    ...(proposalId ? { proposalId } : {}),
   };
 }
 
 function parseSignedTx(body: CborMap): SignedTxT {
   requireKeys(body, ["walletFp", "atomicBeef"], "signed_tx");
-  return {
+  const signed: SignedTxT = {
     kind: KIND_SIGNED,
     walletFp: requireBytes(body, "walletFp", "signed_tx", 4),
     atomicBeef: requireBytes(body, "atomicBeef", "signed_tx"),
+  };
+  if (body.has("stateReceipt")) {
+    const nested = body.get("stateReceipt");
+    if (!isCborMap(nested)) {
+      throw new EnvelopeError("signed_tx: stateReceipt must be a map");
+    }
+    signed.stateReceipt = parseStateReceipt(nested);
+  }
+  return signed;
+}
+
+function parseStateSync(body: CborMap): StateSyncT {
+  requireKeys(
+    body,
+    [
+      "walletFp", "requestId", "expectedRevision", "expectedStateHash",
+      "nextReceiveIndex", "nextChangeIndex", "coins", "headerAnchors",
+    ],
+    "state_sync",
+  );
+  const rawCoins = body.get("coins");
+  if (!Array.isArray(rawCoins) || rawCoins.length === 0) {
+    throw new EnvelopeError("state_sync: coins must be a non-empty array");
+  }
+  const coins = rawCoins.map((raw, i): StateSyncCoinT => {
+    const coin = parseStateCoin(raw, `state_sync.coins[${i}]`);
+    if (!isCborMap(raw)) throw new EnvelopeError("state_sync coin must be a map");
+    if (coin.status !== "confirmed" || coin.blockHeight <= 0) {
+      throw new EnvelopeError("state_sync: coins must be confirmed");
+    }
+    return {
+      ...coin,
+      atomicBeef: requireBytes(raw, "atomicBeef", `state_sync.coins[${i}]`),
+    };
+  });
+  const expectedRevision = requireNumber(body, "expectedRevision", "state_sync");
+  const nextReceiveIndex = requireNumber(body, "nextReceiveIndex", "state_sync");
+  const nextChangeIndex = requireNumber(body, "nextChangeIndex", "state_sync");
+  if (
+    expectedRevision < 0 || nextReceiveIndex < 0 || nextChangeIndex < 0 ||
+    nextReceiveIndex >= MAX_DERIVATION_INDEX ||
+    nextChangeIndex >= MAX_DERIVATION_INDEX ||
+    !Number.isInteger(expectedRevision) || !Number.isInteger(nextReceiveIndex) ||
+    !Number.isInteger(nextChangeIndex)
+  ) {
+    throw new EnvelopeError("state_sync: counters must be non-negative integers");
+  }
+  const requestId = requireString(body, "requestId", "state_sync").trim();
+  if (requestId.length === 0 || requestId.length > 128) {
+    throw new EnvelopeError("state_sync: requestId must be 1..128 characters");
+  }
+  return {
+    kind: KIND_STATE_SYNC,
+    walletFp: requireBytes(body, "walletFp", "state_sync", 4),
+    requestId,
+    expectedRevision,
+    expectedStateHash: requireBytes(body, "expectedStateHash", "state_sync", 32),
+    nextReceiveIndex,
+    nextChangeIndex,
+    coins,
+    headerAnchors: parseHeaderAnchors(body.get("headerAnchors"), "state_sync"),
   };
 }
 
@@ -536,7 +839,9 @@ export async function decodeEnvelope(blob: Uint8Array): Promise<Envelope> {
 
   if (kind === KIND_XPUB) return parseXpub(body);
   if (kind === KIND_PROPOSAL) return parseProposal(body);
-  return parseSignedTx(body);
+  if (kind === KIND_SIGNED) return parseSignedTx(body);
+  if (kind === KIND_STATE_SYNC) return parseStateSync(body);
+  return parseStateReceipt(body);
 }
 
 // ---------------------------------------------------------------------------

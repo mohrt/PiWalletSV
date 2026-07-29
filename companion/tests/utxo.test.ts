@@ -168,6 +168,29 @@ describe("scanWalletUtxos", () => {
     expect(probed.find((p) => p.branch === 1)?.index).toBe(3);
   });
 
+  it("does not stop recovery at a fully-spent address", async () => {
+    const spent = deriveAddress(XPUB, 0, 0).address;
+    const funded = deriveAddress(XPUB, 0, 2).address;
+    const recovered = utxo("dd".repeat(32), 0, 7777);
+    const result = await scanWalletUtxos(XPUB, dummyClient(), {
+      gapLimit: 2,
+      batch: 2,
+      fetchUnspentBatch: async (addresses) => addresses.map((address) => ({
+        address,
+        utxos: address === funded ? [recovered] : [],
+      })),
+      fetchHistoryBatch: async (addresses) => addresses.map((address) => ({
+        address,
+        entries: address === spent
+          ? [{ txid: "cc".repeat(32), blockHeight: 800000 }]
+          : [],
+      })),
+    });
+
+    expect(result.utxos).toMatchObject([{ txid: recovered.txid, sats: 7777 }]);
+    expect(result.lastReceiveUsed).toBe(2);
+  });
+
   it("uses one bulk call per branch when wallet is empty (default batch)", async () => {
     const callSizes: number[] = [];
     await scanWalletUtxos(XPUB, dummyClient(), {

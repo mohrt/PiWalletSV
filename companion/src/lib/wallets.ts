@@ -13,12 +13,16 @@
 import type { NetworkT } from "./envelope.js";
 import type { WalletUtxo } from "./utxo.js";
 import type { HistorySnapshot } from "./history.js";
+import type {
+  PendingStateSync,
+  WalletStateMirror,
+} from "./wallet-state.js";
 
 const DB_NAME = "piwallet-companion";
 const DB_VERSION = 1;
 const STORE = "wallets";
 
-export const WALLET_SCHEMA_VERSION = 2;
+export const WALLET_SCHEMA_VERSION = 3;
 
 export interface WalletRecord {
   /** UUIDv4 generated on save. */
@@ -63,6 +67,10 @@ export interface WalletRecord {
    * Persisted so the toggle survives page reloads.
    */
   displayUnit?: "sats" | "bsv" | "fiat";
+  /** Pi-authoritative public coin/BEEF mirror (schema v3+). */
+  walletState?: WalletStateMirror;
+  /** Confirmed transaction packages waiting to be secured on the Pi. */
+  pendingStateSync?: PendingStateSync;
 }
 
 /** Cached output of the gap-limit UTXO scan, persisted per wallet. */
@@ -244,13 +252,17 @@ export function sortWalletRecords(
       case "label-desc":
         return b.label.localeCompare(a.label, undefined, { sensitivity: "base" });
       case "balance": {
-        const ba = a.lastScan?.totalSats ?? -1;
-        const bb = b.lastScan?.totalSats ?? -1;
+        const ba = a.walletState?.coins.reduce((n, c) => n + c.sats, 0)
+          ?? a.lastScan?.totalSats ?? -1;
+        const bb = b.walletState?.coins.reduce((n, c) => n + c.sats, 0)
+          ?? b.lastScan?.totalSats ?? -1;
         return bb - ba || a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
       }
       case "balance-asc": {
-        const ba = a.lastScan?.totalSats ?? Number.MAX_SAFE_INTEGER;
-        const bb = b.lastScan?.totalSats ?? Number.MAX_SAFE_INTEGER;
+        const ba = a.walletState?.coins.reduce((n, c) => n + c.sats, 0)
+          ?? a.lastScan?.totalSats ?? Number.MAX_SAFE_INTEGER;
+        const bb = b.walletState?.coins.reduce((n, c) => n + c.sats, 0)
+          ?? b.lastScan?.totalSats ?? Number.MAX_SAFE_INTEGER;
         return ba - bb || a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
       }
       default:
@@ -388,6 +400,39 @@ export async function setDisplayUnit(
     );
     if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
     cur.displayUnit = unit;
+    await txPromise(store.put(cur), "put");
+  });
+}
+
+export async function setWalletState(
+  id: string,
+  state: WalletStateMirror,
+): Promise<void> {
+  await withStore("readwrite", async (store) => {
+    const cur = await txPromise<WalletRecord | undefined>(
+      store.get(id) as IDBRequest<WalletRecord | undefined>,
+      "get",
+    );
+    if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
+    cur.walletState = state;
+    cur.schemaVersion = WALLET_SCHEMA_VERSION;
+    await txPromise(store.put(cur), "put");
+  });
+}
+
+export async function setPendingStateSync(
+  id: string,
+  pending: PendingStateSync | undefined,
+): Promise<void> {
+  await withStore("readwrite", async (store) => {
+    const cur = await txPromise<WalletRecord | undefined>(
+      store.get(id) as IDBRequest<WalletRecord | undefined>,
+      "get",
+    );
+    if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
+    if (pending === undefined) delete cur.pendingStateSync;
+    else cur.pendingStateSync = pending;
+    cur.schemaVersion = WALLET_SCHEMA_VERSION;
     await txPromise(store.put(cur), "put");
   });
 }

@@ -11,6 +11,7 @@ BACKUPS_SUBDIR = "backups"
 #: Filenames inside each export directory.
 MANIFEST_FILENAME = "manifest.json"
 VAULT_FILENAME = "vault.bin"
+STATE_FILENAME = "state.bin"
 SETTINGS_FILENAME = "settings.json"
 TERMS_FILENAME = "terms.json"
 

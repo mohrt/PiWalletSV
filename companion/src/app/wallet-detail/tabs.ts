@@ -41,7 +41,7 @@ export function createTabNav(
 
     if (
       tab === "history" &&
-      rt.wallet?.lastScan &&
+      rt.wallet?.walletState &&
       rt.wallet.lastHistory == null &&
       !rt.historyRunning
     ) {

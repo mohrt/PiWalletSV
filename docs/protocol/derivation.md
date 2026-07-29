@@ -146,18 +146,19 @@ A signer MUST:
 2. Refuse to emit a `signed_tx` whose `walletFp` value differs from
    the proposal it just signed.
 
-## 5. Gap-limit conventions
+## 5. Recovery gap-limit and counters
 
-Address discovery on the companion side follows BIP44's gap-limit
-rule. PiWalletSV defaults to **20 unused addresses in a row before
-abandoning a branch**. Implementations MAY use a larger gap, but
-SHOULD NOT go lower; older wallets paired against the same xpub may
-have created sparse usage patterns.
+Normal operation does not discover coins by walking addresses. Explicit
+disaster recovery follows BIP44's gap-limit rule and defaults to **20 unused
+addresses in a row before abandoning a branch**. Implementations MAY use a
+larger gap, but SHOULD NOT go lower; older wallets paired against the same xpub
+may have created sparse usage patterns. A recovery walker MUST query address
+history as well as current UTXOs so a fully-spent address counts as used.
 
-The "next receive index" pointer the companion stores per wallet
-(`nextReceiveIndex` in the reference implementation) is purely a
-companion-side convenience: the signer does not read or care about
-it. A companion is free to invent its own bookkeeping.
+The Pi's encrypted wallet state is authoritative for receive and change
+counters. The companion mirrors those counters after a state receipt and MAY
+temporarily advance its public receive pointer as addresses are issued; that
+new high-water mark is committed in the next `stateSync` transition.
 
 ## 6. Sample / canonical wallet
 

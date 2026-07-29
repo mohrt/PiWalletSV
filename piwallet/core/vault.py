@@ -57,7 +57,9 @@ from pathlib import Path
 from typing import Any
 
 import cbor2
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 from piwallet.core import derivation as deriv
@@ -82,6 +84,9 @@ KEK_LEN: int = 32  # AES-256
 DEK_LEN: int = 32  # AES-256
 SALT_LEN: int = 16
 NONCE_LEN: int = 12  # 96-bit IV per AES-GCM standard
+STATE_KEY_CHILD_INDEX: int = 0x505753
+"""Hardened account-child index reserved for the state encryption key."""
+STATE_KEY_DOMAIN: bytes = b"PiWalletSV/state.bin/AES-256-GCM/v1"
 
 DEFAULT_PIN_THRESHOLD: int = 10
 """Per the locked plan: 10 wrong PINs triggers permanent vault wipe."""
@@ -104,9 +109,7 @@ class WrongPinError(VaultError):
     def __init__(self, attempts_remaining: int, lockout_until: float | None) -> None:
         self.attempts_remaining = attempts_remaining
         self.lockout_until = lockout_until
-        super().__init__(
-            f"wrong PIN; {attempts_remaining} attempt(s) remaining before wipe"
-        )
+        super().__init__(f"wrong PIN; {attempts_remaining} attempt(s) remaining before wipe")
 
 
 class VaultWipedError(VaultError):
@@ -158,6 +161,23 @@ def _aesgcm_decrypt(key: bytes, blob: bytes, associated_data: bytes = b"") -> by
         raise VaultError("ciphertext blob too short")
     nonce, ct = blob[:NONCE_LEN], blob[NONCE_LEN:]
     return AESGCM(key).decrypt(nonce, ct, associated_data)
+
+
+def _derive_state_key_from_xprv(account_xprv: Any, fingerprint: bytes) -> bytes:
+    """Hardened-child + HKDF derivation shared by create and unlock paths."""
+    child = account_xprv.ckd(deriv.BIP32_HARDENED + STATE_KEY_CHILD_INDEX)
+    # The serialized hardened child is secret input key material. HKDF gives
+    # us a fixed 32-byte AEAD key and pins its use to this file format/domain.
+    material = bytearray(str(child).encode("ascii"))
+    try:
+        return HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=fingerprint,
+            info=STATE_KEY_DOMAIN,
+        ).derive(bytes(material))
+    finally:
+        _zero_bytearray(material)
 
 
 def _zero_bytearray(buf: bytearray) -> None:
@@ -231,8 +251,16 @@ class Vault:
         v.close()
     """
 
-    def __init__(self, path: str | os.PathLike[str]) -> None:
+    def __init__(
+        self,
+        path: str | os.PathLike[str],
+        *,
+        state_path: str | os.PathLike[str] | None = None,
+    ) -> None:
         self.path = Path(path)
+        self.state_path = (
+            Path(state_path) if state_path is not None else self.path.with_name("state.bin")
+        )
         self._state: _VaultState | None = None
         if self.path.exists():
             self._load()
@@ -338,10 +366,7 @@ class Vault:
                 f"coin_type={coin_type}, account_index={account_index}"
             )
         if network not in deriv.NETWORK_VALUES:
-            raise VaultError(
-                f"network must be one of {deriv.NETWORK_VALUES!r}, "
-                f"got {network!r}"
-            )
+            raise VaultError(f"network must be one of {deriv.NETWORK_VALUES!r}, got {network!r}")
 
         # Compute keys; treat the mnemonic and seed as sensitive.
         seed_bytes = bytearray(mnem.seed_from_mnemonic(mnemonic_phrase))
@@ -375,7 +400,7 @@ class Vault:
                 }
                 self._state.wallets.append(rec)
                 self._save()
-                return WalletRecord(
+                record = WalletRecord(
                     id=rec["id"],
                     label=label,
                     fingerprint=account.fingerprint,
@@ -384,6 +409,14 @@ class Vault:
                     created_at=rec["createdAt"],
                     network=network,
                 )
+                # State is intentionally separate from vault.bin, but a new
+                # wallet should start with an authenticated empty state entry
+                # immediately. A later mnemonic restore derives the same key.
+                from piwallet.core.state import WalletStateStore
+
+                state_key = _derive_state_key_from_xprv(account.xprv, account.fingerprint)
+                WalletStateStore(self.state_path).ensure_wallet(record, state_key)
+                return record
             finally:
                 _zero_bytearray(xprv_payload)
         finally:
@@ -400,10 +433,15 @@ class Vault:
         if self._state.wallets:
             self._unwrap_dek(pin, self._state.wallets[0])
         before = len(self._state.wallets)
+        removed = next((w for w in self.list_wallets() if w.id == wallet_id), None)
         self._state.wallets = [w for w in self._state.wallets if w["id"] != wallet_id]
         if len(self._state.wallets) == before:
             raise WalletNotFoundError(wallet_id)
         self._save()
+        if removed is not None:
+            from piwallet.core.state import WalletStateStore
+
+            WalletStateStore(self.state_path).delete_wallet(removed)
 
     def rename_wallet(self, pin: str, wallet_id: str, new_label: str) -> None:
         if self._state is None:
@@ -519,6 +557,26 @@ class Vault:
         finally:
             _zero_bytearray(xprv_payload)
 
+    def derive_state_key(self, pin: str, wallet_id: str) -> bytes:
+        """Derive the deterministic wallet-state encryption key.
+
+        The source is a reserved hardened child below the encrypted account
+        xprv, followed by HKDF-SHA256 with an explicit PiWalletSV domain. The
+        result therefore survives PIN changes, vault UUID changes, and a
+        mnemonic restore while remaining unavailable from the paired xpub.
+        """
+        if self._state is None:
+            raise VaultError("vault not initialized")
+        _validate_pin(pin)
+        wallet = self._find_wallet(wallet_id)
+        dek = self._unwrap_dek(pin, wallet)
+        xprv_payload = bytearray(_aesgcm_decrypt(dek, wallet["xprvCiphertext"]))
+        try:
+            xprv = deriv.parse_xprv(self._reconstruct_xprv_str(xprv_payload, wallet))
+            return _derive_state_key_from_xprv(xprv, bytes(wallet["fingerprint"]))
+        finally:
+            _zero_bytearray(xprv_payload)
+
     # ---- file ops -----------------------------------------------------
 
     def wipe(self) -> None:
@@ -530,6 +588,9 @@ class Vault:
                 f.flush()
                 os.fsync(f.fileno())
             self.path.unlink()
+        from piwallet.core.state import WalletStateStore
+
+        WalletStateStore(self.state_path).clear()
         self._state = None
 
     def close(self) -> None:

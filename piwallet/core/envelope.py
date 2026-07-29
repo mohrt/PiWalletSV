@@ -1,6 +1,6 @@
 """CBOR-coded versioned envelopes that travel between Pi and PWA over QR.
 
-Three message kinds are defined; all share a small header so a receiver
+Five message kinds are defined; all share a small header so a receiver
 can route them to the right handler before decoding the rest:
 
 - `xpub_export`        Pi -> phone, on pairing. Contains the account xpub.
@@ -11,7 +11,11 @@ can route them to the right handler before decoding the rest:
                        the change derivation index.
 - `signed_tx`          Pi -> phone, after successful sign. Contains the
                        signed transaction as Atomic BEEF (BRC-95) and its
-                       txid for convenience.
+                       state transition receipt when state tracking is active.
+- `state_sync`         phone -> Pi. Delivers confirmed Atomic BEEF payments
+                       and the public derivation metadata needed to secure them.
+- `state_receipt`      Pi -> phone. Commits a state revision/hash transition so
+                       the companion can update its public mirror without a scan.
 
 On-the-wire encoding is **CBOR + gzip**. Larger blobs are split into
 ``PW1|`` multipart barcode lines in :mod:`piwallet.qr`; that layer is
@@ -38,6 +42,7 @@ from typing import Any, ClassVar
 import cbor2
 
 ENVELOPE_VERSION: int = 2
+MAX_DERIVATION_INDEX: int = 0x80000000
 """Current envelope schema version. Bump for breaking changes.
 
 History:
@@ -55,8 +60,18 @@ History:
 KIND_XPUB_EXPORT: str = "xpub"
 KIND_UNSIGNED_PROPOSAL: str = "tx"
 KIND_SIGNED_TX: str = "signed"
+KIND_STATE_SYNC: str = "stateSync"
+KIND_STATE_RECEIPT: str = "stateReceipt"
 
-VALID_KINDS: frozenset[str] = frozenset({KIND_XPUB_EXPORT, KIND_UNSIGNED_PROPOSAL, KIND_SIGNED_TX})
+VALID_KINDS: frozenset[str] = frozenset(
+    {
+        KIND_XPUB_EXPORT,
+        KIND_UNSIGNED_PROPOSAL,
+        KIND_SIGNED_TX,
+        KIND_STATE_SYNC,
+        KIND_STATE_RECEIPT,
+    }
+)
 
 
 class EnvelopeError(ValueError):
@@ -115,8 +130,7 @@ class XpubExport:
         net = str(body.get("net", "main"))
         if net not in VALID_NETWORKS:
             raise EnvelopeError(
-                f"network 'net' must be one of {sorted(VALID_NETWORKS)!r}; "
-                f"got {net!r}"
+                f"network 'net' must be one of {sorted(VALID_NETWORKS)!r}; got {net!r}"
             )
         return cls(
             xpub=str(body["xpub"]),
@@ -161,6 +175,43 @@ class ProposalOutput:
 
 
 @dataclass(frozen=True)
+class StateCoin:
+    """Public description of one coin in the signer/companion state mirror."""
+
+    txid: str
+    vout: int
+    sats: int
+    locking_script: str
+    derivation: tuple[int, int]
+    status: str
+    transaction_reference: str
+    block_height: int
+
+    def to_cbor(self) -> dict[str, Any]:
+        return {
+            "txid": self.txid,
+            "vout": self.vout,
+            "sats": self.sats,
+            "script": self.locking_script,
+            "derivation": list(self.derivation),
+            "status": self.status,
+            "txRef": self.transaction_reference,
+            "height": self.block_height,
+        }
+
+
+@dataclass(frozen=True)
+class StateSyncCoin:
+    """A coin plus the confirmed Atomic BEEF that proves its transaction."""
+
+    coin: StateCoin
+    atomic_beef: bytes
+
+    def to_cbor(self) -> dict[str, Any]:
+        return {**self.coin.to_cbor(), "atomicBeef": self.atomic_beef}
+
+
+@dataclass(frozen=True)
 class UnsignedProposal:
     """Phone -> Pi spend request. The Pi MUST verify before signing.
 
@@ -198,6 +249,11 @@ class UnsignedProposal:
     fee_rate_satskb: int
     header_anchors: dict[int, bytes]  # height -> merkle_root (32 bytes, raw byte order)
     locktime: int = 0
+    # Additive v2 fields. They are optional so pre-state companions remain
+    # decodable and can perform the one-time empty-state migration.
+    state_revision: int | None = None
+    state_hash: bytes | None = None
+    proposal_id: str = ""
 
     def to_cbor(self) -> dict[str, Any]:
         # CBOR allows int keys, but to keep multipart-QR text dumps
@@ -205,7 +261,7 @@ class UnsignedProposal:
         # encoder, we serialize anchors as a map of decimal-string
         # keys to bytes values.
         anchors = {str(h): root for h, root in sorted(self.header_anchors.items())}
-        return {
+        body = {
             "v": ENVELOPE_VERSION,
             "kind": self.KIND,
             "walletFp": self.wallet_fp,
@@ -226,6 +282,13 @@ class UnsignedProposal:
             "locktime": self.locktime,
             "headerAnchors": anchors,
         }
+        if self.state_revision is not None:
+            body["stateRevision"] = self.state_revision
+        if self.state_hash is not None:
+            body["stateHash"] = self.state_hash
+        if self.proposal_id:
+            body["proposalId"] = self.proposal_id
+        return body
 
     @classmethod
     def from_cbor(cls, body: dict[str, Any]) -> UnsignedProposal:
@@ -279,9 +342,7 @@ class UnsignedProposal:
                     f"headerAnchors key {raw_height!r} is not an integer height"
                 ) from exc
             if height < 0:
-                raise EnvelopeError(
-                    f"headerAnchors height {height} must be non-negative"
-                )
+                raise EnvelopeError(f"headerAnchors height {height} must be non-negative")
             if not isinstance(raw_root, (bytes, bytearray)) or len(raw_root) != 32:
                 raise EnvelopeError(
                     f"headerAnchors[{height}] must be 32 bytes, got "
@@ -292,6 +353,25 @@ class UnsignedProposal:
         if not anchors:
             raise EnvelopeError("headerAnchors must contain at least one entry")
 
+        state_revision: int | None = None
+        state_hash: bytes | None = None
+        if "stateRevision" in body or "stateHash" in body:
+            if "stateRevision" not in body or "stateHash" not in body:
+                raise EnvelopeError("stateRevision and stateHash must be supplied together")
+            state_revision = int(body["stateRevision"])
+            if state_revision < 0:
+                raise EnvelopeError("stateRevision must be non-negative")
+            raw_state_hash = body["stateHash"]
+            if not isinstance(raw_state_hash, (bytes, bytearray)) or len(raw_state_hash) != 32:
+                raise EnvelopeError("stateHash must be 32 bytes")
+            state_hash = bytes(raw_state_hash)
+
+        proposal_id = str(body.get("proposalId", ""))
+        if state_revision is not None and not proposal_id:
+            raise EnvelopeError("state-bound proposals require proposalId")
+        if len(proposal_id) > 128:
+            raise EnvelopeError("proposalId must be at most 128 characters")
+
         return cls(
             wallet_fp=bytes(wallet_fp),
             inputs=inputs,
@@ -301,6 +381,9 @@ class UnsignedProposal:
             fee_rate_satskb=int(body["feeRate"]),
             locktime=int(body.get("locktime", 0)),
             header_anchors=anchors,
+            state_revision=state_revision,
+            state_hash=state_hash,
+            proposal_id=proposal_id,
         )
 
 
@@ -346,6 +429,7 @@ class SignedTx:
 
     wallet_fp: bytes
     atomic_beef: bytes
+    state_receipt: StateReceipt | None = None
 
     @property
     def txid(self) -> str:
@@ -361,12 +445,15 @@ class SignedTx:
         return subject_txid_hex
 
     def to_cbor(self) -> dict[str, Any]:
-        return {
+        body = {
             "v": ENVELOPE_VERSION,
             "kind": self.KIND,
             "walletFp": self.wallet_fp,
             "atomicBeef": self.atomic_beef,
         }
+        if self.state_receipt is not None:
+            body["stateReceipt"] = self.state_receipt.to_cbor(include_header=False)
+        return body
 
     @classmethod
     def from_cbor(cls, body: dict[str, Any]) -> SignedTx:
@@ -377,17 +464,263 @@ class SignedTx:
         atomic = body["atomicBeef"]
         if not isinstance(atomic, (bytes, bytearray)):
             raise EnvelopeError("atomicBeef must be bytes")
+        receipt = None
+        if "stateReceipt" in body:
+            receipt = StateReceipt.from_cbor(body["stateReceipt"], nested=True)
         return cls(
             wallet_fp=bytes(fp),
             atomic_beef=bytes(atomic),
+            state_receipt=receipt,
         )
+
+
+@dataclass(frozen=True)
+class StateSync:
+    """Companion -> Pi delivery of confirmed wallet transactions."""
+
+    KIND: ClassVar[str] = KIND_STATE_SYNC
+
+    wallet_fp: bytes
+    request_id: str
+    expected_revision: int
+    expected_state_hash: bytes
+    next_receive_index: int
+    next_change_index: int
+    coins: tuple[StateSyncCoin, ...]
+    header_anchors: dict[int, bytes]
+
+    def to_cbor(self) -> dict[str, Any]:
+        return {
+            "v": ENVELOPE_VERSION,
+            "kind": self.KIND,
+            "walletFp": self.wallet_fp,
+            "requestId": self.request_id,
+            "expectedRevision": self.expected_revision,
+            "expectedStateHash": self.expected_state_hash,
+            "nextReceiveIndex": self.next_receive_index,
+            "nextChangeIndex": self.next_change_index,
+            "coins": [c.to_cbor() for c in self.coins],
+            "headerAnchors": {str(h): root for h, root in sorted(self.header_anchors.items())},
+        }
+
+    @classmethod
+    def from_cbor(cls, body: dict[str, Any]) -> StateSync:
+        _require_keys(
+            body,
+            {
+                "walletFp",
+                "requestId",
+                "expectedRevision",
+                "expectedStateHash",
+                "nextReceiveIndex",
+                "nextChangeIndex",
+                "coins",
+                "headerAnchors",
+            },
+            cls.KIND,
+        )
+        fp = _decode_fingerprint(body["walletFp"])
+        request_id = str(body["requestId"]).strip()
+        if not request_id or len(request_id) > 128:
+            raise EnvelopeError("stateSync.requestId must be 1..128 characters")
+        expected_revision = int(body["expectedRevision"])
+        expected_hash = body["expectedStateHash"]
+        if expected_revision < 0:
+            raise EnvelopeError("stateSync.expectedRevision must be non-negative")
+        if not isinstance(expected_hash, (bytes, bytearray)) or len(expected_hash) != 32:
+            raise EnvelopeError("stateSync.expectedStateHash must be 32 bytes")
+        next_receive = int(body["nextReceiveIndex"])
+        next_change = int(body["nextChangeIndex"])
+        if not (
+            0 <= next_receive < MAX_DERIVATION_INDEX and 0 <= next_change < MAX_DERIVATION_INDEX
+        ):
+            raise EnvelopeError("stateSync counters must be valid non-hardened indices")
+        raw_coins = body["coins"]
+        if not isinstance(raw_coins, list) or not raw_coins:
+            raise EnvelopeError("stateSync.coins must be a non-empty list")
+        coins = tuple(_decode_state_sync_coin(c) for c in raw_coins)
+        anchors = _decode_header_anchors(body["headerAnchors"], "stateSync")
+        return cls(
+            wallet_fp=fp,
+            request_id=request_id,
+            expected_revision=expected_revision,
+            expected_state_hash=bytes(expected_hash),
+            next_receive_index=next_receive,
+            next_change_index=next_change,
+            coins=coins,
+            header_anchors=anchors,
+        )
+
+
+@dataclass(frozen=True)
+class StateReceipt:
+    """Pi-authored receipt for an atomic wallet-state transition."""
+
+    KIND: ClassVar[str] = KIND_STATE_RECEIPT
+
+    wallet_fp: bytes
+    request_id: str
+    old_revision: int
+    new_revision: int
+    old_state_hash: bytes
+    new_state_hash: bytes
+    added_coins: tuple[StateCoin, ...] = ()
+    removed_outpoints: tuple[str, ...] = ()
+
+    def to_cbor(self, *, include_header: bool = True) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "walletFp": self.wallet_fp,
+            "requestId": self.request_id,
+            "oldRevision": self.old_revision,
+            "newRevision": self.new_revision,
+            "oldStateHash": self.old_state_hash,
+            "newStateHash": self.new_state_hash,
+            "addedCoins": [c.to_cbor() for c in self.added_coins],
+            "removedOutpoints": list(self.removed_outpoints),
+        }
+        if include_header:
+            body = {"v": ENVELOPE_VERSION, "kind": self.KIND, **body}
+        return body
+
+    @classmethod
+    def from_cbor(cls, body: Any, *, nested: bool = False) -> StateReceipt:
+        if not isinstance(body, dict):
+            raise EnvelopeError("stateReceipt must be a map")
+        _require_keys(
+            body,
+            {
+                "walletFp",
+                "requestId",
+                "oldRevision",
+                "newRevision",
+                "oldStateHash",
+                "newStateHash",
+                "addedCoins",
+                "removedOutpoints",
+            },
+            "stateReceipt",
+        )
+        old_hash = body["oldStateHash"]
+        new_hash = body["newStateHash"]
+        if not isinstance(old_hash, (bytes, bytearray)) or len(old_hash) != 32:
+            raise EnvelopeError("stateReceipt.oldStateHash must be 32 bytes")
+        if not isinstance(new_hash, (bytes, bytearray)) or len(new_hash) != 32:
+            raise EnvelopeError("stateReceipt.newStateHash must be 32 bytes")
+        old_revision = int(body["oldRevision"])
+        new_revision = int(body["newRevision"])
+        if old_revision < 0 or new_revision != old_revision + 1:
+            raise EnvelopeError("stateReceipt revision transition is invalid")
+        raw_added = body["addedCoins"]
+        raw_removed = body["removedOutpoints"]
+        if not isinstance(raw_added, list) or not isinstance(raw_removed, list):
+            raise EnvelopeError("stateReceipt coin delta must be arrays")
+        request_id = str(body["requestId"]).strip()
+        if not request_id or len(request_id) > 128:
+            raise EnvelopeError("stateReceipt.requestId must be 1..128 characters")
+        removed = tuple(str(v) for v in raw_removed)
+        if any(not _valid_outpoint(value) for value in removed):
+            raise EnvelopeError("stateReceipt removedOutpoints entry is invalid")
+        return cls(
+            wallet_fp=_decode_fingerprint(body["walletFp"]),
+            request_id=request_id,
+            old_revision=old_revision,
+            new_revision=new_revision,
+            old_state_hash=bytes(old_hash),
+            new_state_hash=bytes(new_hash),
+            added_coins=tuple(_decode_state_coin(c) for c in raw_added),
+            removed_outpoints=removed,
+        )
+
+
+def _decode_fingerprint(raw: Any) -> bytes:
+    if not isinstance(raw, (bytes, bytearray)) or len(raw) != 4:
+        raise EnvelopeError("walletFp must be 4 bytes")
+    return bytes(raw)
+
+
+def _decode_state_coin(raw: Any) -> StateCoin:
+    if not isinstance(raw, dict):
+        raise EnvelopeError("state coin must be a map")
+    _require_keys(
+        raw,
+        {"txid", "vout", "sats", "script", "derivation", "status", "txRef", "height"},
+        "state coin",
+    )
+    derivation = raw["derivation"]
+    if not isinstance(derivation, (list, tuple)) or len(derivation) != 2:
+        raise EnvelopeError("state coin derivation must be [branch, index]")
+    txid = str(raw["txid"])
+    if not _valid_txid(txid):
+        raise EnvelopeError("state coin txid must be 64 hex characters")
+    coin = StateCoin(
+        txid=txid,
+        vout=int(raw["vout"]),
+        sats=int(raw["sats"]),
+        locking_script=str(raw["script"]),
+        derivation=(int(derivation[0]), int(derivation[1])),
+        status=str(raw["status"]),
+        transaction_reference=str(raw["txRef"]),
+        block_height=int(raw["height"]),
+    )
+    if (
+        coin.vout < 0
+        or coin.sats <= 0
+        or coin.block_height < 0
+        or coin.derivation[0] not in {0, 1}
+        or not 0 <= coin.derivation[1] < MAX_DERIVATION_INDEX
+        or not _valid_hex(coin.locking_script)
+        or not _valid_txid(coin.transaction_reference)
+    ):
+        raise EnvelopeError("state coin numeric fields are invalid")
+    if coin.status not in {"confirmed", "pending"}:
+        raise EnvelopeError("state coin status must be confirmed or pending")
+    if (coin.status == "confirmed") != (coin.block_height > 0):
+        raise EnvelopeError("state coin status does not match its block height")
+    return coin
+
+
+def _decode_state_sync_coin(raw: Any) -> StateSyncCoin:
+    coin = _decode_state_coin(raw)
+    atomic = raw.get("atomicBeef")
+    if not isinstance(atomic, (bytes, bytearray)):
+        raise EnvelopeError("stateSync coin atomicBeef must be bytes")
+    if coin.status != "confirmed" or coin.block_height <= 0:
+        raise EnvelopeError("stateSync coins must be confirmed")
+    return StateSyncCoin(coin=coin, atomic_beef=bytes(atomic))
+
+
+def _decode_header_anchors(raw: Any, context: str) -> dict[int, bytes]:
+    if not isinstance(raw, dict):
+        raise EnvelopeError(f"{context}.headerAnchors must be a map")
+    anchors: dict[int, bytes] = {}
+    for raw_height, raw_root in raw.items():
+        height = int(raw_height)
+        if height < 0 or not isinstance(raw_root, (bytes, bytearray)) or len(raw_root) != 32:
+            raise EnvelopeError(f"{context}.headerAnchors[{height}] is invalid")
+        anchors[height] = bytes(raw_root)
+    if not anchors:
+        raise EnvelopeError(f"{context}.headerAnchors must not be empty")
+    return anchors
+
+
+def _valid_txid(value: str) -> bool:
+    return len(value) == 64 and _valid_hex(value)
+
+
+def _valid_hex(value: str) -> bool:
+    return len(value) % 2 == 0 and bool(value) and all(c in "0123456789abcdefABCDEF" for c in value)
+
+
+def _valid_outpoint(value: str) -> bool:
+    txid, separator, raw_vout = value.partition(":")
+    return _valid_txid(txid) and separator == ":" and raw_vout.isdigit()
 
 
 # ---------------------------------------------------------------------------
 # Codec entrypoints.
 # ---------------------------------------------------------------------------
 
-Envelope = XpubExport | UnsignedProposal | SignedTx
+Envelope = XpubExport | UnsignedProposal | SignedTx | StateSync | StateReceipt
 
 
 def encode(envelope: Envelope) -> bytes:
@@ -431,6 +764,10 @@ def decode(blob: bytes) -> Envelope:
         return UnsignedProposal.from_cbor(body)
     if kind == KIND_SIGNED_TX:
         return SignedTx.from_cbor(body)
+    if kind == KIND_STATE_SYNC:
+        return StateSync.from_cbor(body)
+    if kind == KIND_STATE_RECEIPT:
+        return StateReceipt.from_cbor(body)
     raise EnvelopeError(f"no decoder for kind {kind!r}")  # unreachable
 
 

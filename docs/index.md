@@ -71,11 +71,13 @@ flowchart LR
   end
 
   subgraph online["Online companion (web app)"]
-    woc["WhatsOnChain<br/>or other backend"]
-    select["UTXO + coin selection"]
+    incoming["Atomic BEEF<br/>sender or explicit recovery"]
+    woc["broadcast backend"]
+    state["Pi-authored coin/BEEF mirror"]
+    select["local coin selection"]
     proposal["unsigned_proposal<br/>builder"]
     broadcast["broadcast"]
-    woc --> select --> proposal
+    incoming --> state --> select --> proposal
     broadcast --> woc
   end
 
@@ -109,9 +111,10 @@ device signs anything.
     [protocol spec](protocol/README.md). Anyone can build a
     compatible signer or companion.
 
--   :material-usb: __USB vault backup__
+-   :material-usb: __USB wallet backup__
 
-    Export and restore the encrypted vault to a FAT32/exFAT stick from
+    Export and restore the encrypted vault plus authenticated transaction
+    state to a FAT32/exFAT stick from
     **Settings → Maintenance → USB backup** — included on images built with
     `deploy/provision-pi.sh`. See
     [User manual § USB backup](user-manual.md#usb-backup).

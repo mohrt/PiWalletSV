@@ -28,6 +28,7 @@ from piwallet.core import mnemonic as mnem
 from piwallet.core import sign as sgn
 from piwallet.core import verify as vfy
 from piwallet.core.paths import default_vault_path
+from piwallet.core.state import WalletStateError, WalletStateStore
 from piwallet.core.vault import (
     PIN_MAX_LEN,
     PIN_MIN_LEN,
@@ -193,10 +194,7 @@ def vault_recover(ctx: click.Context, force: bool) -> None:
     v = Vault(path)
 
     if not v.exists:
-        click.echo(
-            f"No vault found at {path}. "
-            "Run `piwallet vault init` to create one."
-        )
+        click.echo(f"No vault found at {path}. Run `piwallet vault init` to create one.")
         return
 
     if v.is_initialized:
@@ -211,21 +209,19 @@ def vault_recover(ctx: click.Context, force: bool) -> None:
             for w in wallets:
                 net_label = "TESTNET" if w.network == "test" else "mainnet"
                 click.echo(
-                    f"  {w.id}  {w.fingerprint.hex()}  {w.label}  "
-                    f"{w.derivation_path}  {net_label}"
+                    f"  {w.id}  {w.fingerprint.hex()}  {w.label}  {w.derivation_path}  {net_label}"
                 )
         return
 
     # Vault file exists but failed CBOR parsing — it is corrupt.
     click.echo(
-        f"Vault at {path} exists but could not be parsed "
-        "(corrupt CBOR or truncated write).",
+        f"Vault at {path} exists but could not be parsed (corrupt CBOR or truncated write).",
         err=True,
     )
     click.echo(
         "Recovery options:\n"
         "  1. If you have your seed phrase(s), rename the file manually and\n"
-        f"     run `piwallet vault init` to start fresh.\n"
+        "     run `piwallet vault init` to start fresh.\n"
         "  2. Run this command with --force (or confirm below) to rename the\n"
         "     corrupt file automatically and create a new empty vault.",
         err=True,
@@ -673,6 +669,28 @@ def sign_cmd(
     # change addresses with the correct base58check prefix.
     wallet_rec = next((w for w in v.list_wallets() if w.id == wallet_id), None)
     network = wallet_rec.network if wallet_rec is not None else "main"
+    if wallet_rec is None:
+        click.echo(f"wallet not found: {wallet_id}", err=True)
+        sys.exit(1)
+
+    try:
+        state_key = v.derive_state_key(pin, wallet_id)
+        state_store = WalletStateStore(v.state_path)
+        pending = state_store.pending_for_proposal(wallet_rec, state_key, proposal)
+        if pending is not None:
+            pending_beef, pending_receipt = pending
+            replayed = env.SignedTx(
+                wallet_fp=fp,
+                atomic_beef=pending_beef,
+                state_receipt=pending_receipt,
+            )
+            click.echo("replayed persisted signed response; no new signature made", err=True)
+            _emit_signed_blob(env.encode(replayed), output)
+            return
+        state_store.validate_proposal_binding(wallet_rec, state_key, proposal)
+    except WalletStateError as exc:
+        click.echo(f"STATE FAILED: {exc}", err=True)
+        sys.exit(4)
 
     try:
         result = sgn.verify_then_sign(
@@ -689,6 +707,18 @@ def sign_cmd(
         click.echo(f"SIGN FAILED: {exc}", err=True)
         sys.exit(5)
 
+    try:
+        _, receipt = state_store.commit_signed(
+            wallet_rec,
+            state_key,
+            proposal,
+            result.verified,
+            result.atomic_beef,
+        )
+    except WalletStateError as exc:
+        click.echo(f"STATE COMMIT FAILED: {exc}", err=True)
+        sys.exit(5)
+
     click.echo(
         f"verified: in={result.verified.total_in} "
         f"out={result.verified.total_out} fee={result.fee_sats}",
@@ -696,8 +726,12 @@ def sign_cmd(
     )
     click.echo(f"txid: {result.txid}", err=True)
 
-    signed_envelope = sgn.to_signed_envelope(result, wallet_fp=fp)
-    signed_blob = env.encode(signed_envelope)
+    signed_envelope = sgn.to_signed_envelope(result, wallet_fp=fp, state_receipt=receipt)
+    _emit_signed_blob(env.encode(signed_envelope), output)
+
+
+def _emit_signed_blob(signed_blob: bytes, output: Path | None) -> None:
+    """Write a new or replayed signed response through the existing CLI contract."""
     if output is None:
         # Hex on stdout (terminal-safe, copy-paste friendly).
         # Stderr already carries the human-readable summary (`verified:`
@@ -775,8 +809,7 @@ def _summarize_proposal(p: env.UnsignedProposal) -> str:
             anchor_summary = f"1 (height {anchor_heights[0]})"
         else:
             anchor_summary = (
-                f"{len(anchor_heights)} "
-                f"(heights {anchor_heights[0]}–{anchor_heights[-1]})"
+                f"{len(anchor_heights)} (heights {anchor_heights[0]}-{anchor_heights[-1]})"
             )
     else:
         anchor_summary = "0"
@@ -950,9 +983,7 @@ def backup_list_backups(stick_root: Path) -> None:
 
     for manifest in list_backup_summaries(stick_root):
         wallets = ", ".join(w.label for w in manifest.wallet_summary) or "(empty)"
-        click.echo(
-            f"{manifest.backup_dir_name}  {manifest.exported_at}  wallets={wallets}"
-        )
+        click.echo(f"{manifest.backup_dir_name}  {manifest.exported_at}  wallets={wallets}")
 
 
 @backup.command("export", help="Write vault (+ settings) to USB stick directory.")
@@ -973,8 +1004,8 @@ def backup_list_backups(stick_root: Path) -> None:
     help="Omit settings.json from the export.",
 )
 def backup_export(stick_root: Path, vault_path: Path | None, no_settings: bool) -> None:
-    from piwallet.core.paths import default_vault_path
     from piwallet.backup.bundle import BackupBundleError, export_backup
+    from piwallet.core.paths import default_vault_path
 
     try:
         result = export_backup(
@@ -1016,8 +1047,8 @@ def backup_import(
     import_settings: bool,
     pin: str | None,
 ) -> None:
-    from piwallet.core.paths import default_vault_path
     from piwallet.backup.bundle import BackupBundleError, import_backup
+    from piwallet.core.paths import default_vault_path
 
     if pin is None:
         pin = click.prompt("Backup vault PIN", hide_input=True)
@@ -1034,6 +1065,34 @@ def backup_import(
     click.echo(f"imported vault to {result.vault_path}")
     if result.settings_imported:
         click.echo("settings imported")
+    if result.state_imported:
+        click.echo("wallet state imported")
+
+
+@backup.command(
+    "import-state",
+    help="Restore only encrypted state.bin after recreating keys from the seed phrase.",
+)
+@click.option(
+    "--backup-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    required=True,
+)
+@click.option(
+    "--state-path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+)
+def backup_import_state(backup_dir: Path, state_path: Path | None) -> None:
+    from piwallet.backup.bundle import BackupBundleError, import_state_backup
+    from piwallet.core.paths import default_state_path
+
+    try:
+        restored = import_state_backup(backup_dir, state_path=state_path or default_state_path())
+    except BackupBundleError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+    click.echo(f"imported encrypted wallet state to {restored}")
 
 
 # ---- diagnostics -------------------------------------------------------

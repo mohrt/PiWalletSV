@@ -19,10 +19,14 @@ import {
   startPw1QrPlayback,
   wirePw1QrControls,
 } from "../../lib/pw1-qr-playback.js";
-import { ProofFetchError, fetchInputProof } from "../../lib/proof-fetcher.js";
 import { ProposalBuilderError, buildUnsignedProposal } from "../../lib/proposal.js";
 import { noSpendableUtxosMessage, splitConfirmedPending } from "../../lib/balance-split.js";
 import { confirmedUtxos } from "../../lib/utxo.js";
+import {
+  applyStateReceipt,
+  proofFromState,
+  stateUtxos,
+} from "../../lib/wallet-state.js";
 import { WocClient, WocError, effectiveWocBase, wocExplorerTxUrl } from "../../lib/woc.js";
 import {
   DEFAULT_FEE_RATE_SATSKB,
@@ -208,11 +212,11 @@ export function createSendTab(
   function renderSendPendingBanner(): void {
     const $banner = rt.root.querySelector<HTMLElement>("#sendPendingBanner");
     if (!$banner) return;
-    if (!rt.wallet?.lastScan) {
+    if (!rt.wallet?.walletState) {
       $banner.hidden = true;
       return;
     }
-    const split = splitConfirmedPending(rt.wallet.lastScan.utxos);
+    const split = splitConfirmedPending(stateUtxos(rt.wallet.walletState));
     if (split.allPending) {
       $banner.hidden = false;
       $banner.innerHTML =
@@ -420,8 +424,8 @@ export function createSendTab(
 
   /** Confirmed UTXOs only — mempool coins can't carry SPV proofs yet. */
   function spendableUtxos() {
-    if (!rt.wallet?.lastScan) return [];
-    return confirmedUtxos(rt.wallet.lastScan.utxos);
+    if (!rt.wallet?.walletState) return [];
+    return confirmedUtxos(stateUtxos(rt.wallet.walletState));
   }
 
   function applySendAmountSats(sats: number): void {
@@ -452,7 +456,7 @@ export function createSendTab(
   }
 
   function onSendMax(): void {
-    if (!rt.wallet?.lastScan) return;
+    if (!rt.wallet?.walletState) return;
     const utxos = spendableUtxos();
     if (utxos.length === 0) return;
     const rate = getSelectedFeeRate();
@@ -539,16 +543,17 @@ export function createSendTab(
       $amountInput.focus();
       return;
     }
-    if (!rt.wallet.lastScan || rt.wallet.lastScan.utxos.length === 0) {
+    if (!rt.wallet.walletState || rt.wallet.walletState.coins.length === 0) {
       $status.classList.add("error");
-      $status.textContent = "no UTXOs known — switch to the Balance tab and click Refresh first";
+      $status.textContent =
+        "no secured coins — receive and secure a payment on the Pi first";
       return;
     }
     const utxos = spendableUtxos();
     if (utxos.length === 0) {
       $status.classList.add("error");
       $status.textContent = noSpendableUtxosMessage(
-        rt.wallet.lastScan.utxos,
+        stateUtxos(rt.wallet.walletState),
         formatSats,
       );
       return;
@@ -612,7 +617,7 @@ export function createSendTab(
     const priority = rt.feeRec?.priority ?? DEFAULT_FEE_RATE_SATSKB * 5;
 
     const targetSats = amountSatsForFeeEstimate();
-    const estSats = targetSats !== null && rt.wallet.lastScan
+    const estSats = targetSats !== null && rt.wallet.walletState
       ? (rate: number) => {
           const utxos = spendableUtxos();
           if (utxos.length === 0) return null;
@@ -715,7 +720,7 @@ export function createSendTab(
       const utxos = spendableUtxos();
       if (utxos.length === 0) {
         throw new CoinSelectError(
-          noSpendableUtxosMessage(rt.wallet.lastScan!.utxos, formatSats),
+          noSpendableUtxosMessage(stateUtxos(rt.wallet.walletState), formatSats),
         );
       }
       const selection = selectUtxosGreedy(
@@ -726,11 +731,10 @@ export function createSendTab(
       spvPhase = "proofs";
       setSpvBuildStep(
         "proofs",
-        `Fetching and verifying SPV proofs for ${selection.inputs.length} input` +
-          `${selection.inputs.length === 1 ? "" : "s"}…`,
+        `Loading ${selection.inputs.length} stored SPV input` +
+          `${selection.inputs.length === 1 ? "" : "s"} from wallet state…`,
       );
 
-      if (!rt.woc) rt.woc = new WocClient({ baseUrl: effectiveWocBase(rt.wallet.network) });
       const proofs = [];
       const proofHeights: number[] = [];
       for (let i = 0; i < selection.inputs.length; i++) {
@@ -738,9 +742,15 @@ export function createSendTab(
         setSpvBuildStep(
           "proofs",
           `SPV ${i + 1}/${selection.inputs.length}: ${u.txid.slice(0, 8)}… — ` +
-            "fetching Merkle proof and block header…",
+            "loading persisted BEEF and header anchor…",
         );
-        const proof = await fetchInputProof(rt.woc, u.txid);
+        const stateCoin = rt.wallet.walletState!.coins.find(
+          (coin) => coin.txid === u.txid && coin.vout === u.vout,
+        );
+        if (!stateCoin) {
+          throw new ProposalBuilderError(`state coin ${u.txid}:${u.vout} is missing`);
+        }
+        const proof = proofFromState(rt.wallet.walletState!, stateCoin);
         proofHeights.push(proof.height);
         proofs.push({ utxo: u, proof });
         setSpvBuildStep(
@@ -753,7 +763,7 @@ export function createSendTab(
       spvPhase = "build";
       setSpvBuildStep("build", "Assembling unsigned proposal with BEEF proofs…");
 
-      const nextChangeIdx = (rt.wallet.lastScan!.lastChangeUsed ?? -1) + 1;
+      const nextChangeIdx = rt.wallet.walletState!.nextChangeIndex;
       const changeDerived = deriveAddress(rt.wallet.xpub, CHANGE_BRANCH, nextChangeIdx, rt.wallet.network);
       const envelope = buildUnsignedProposal({
         walletFingerprintHex: rt.wallet.fingerprint,
@@ -771,6 +781,9 @@ export function createSendTab(
         changeDerivation: [CHANGE_BRANCH, nextChangeIdx],
         feeRateSatskb: rt.sendStep.feeRate,
         locktime: 0,
+        stateRevision: rt.wallet.walletState!.revision,
+        stateHash: rt.wallet.walletState!.stateHash,
+        proposalId: crypto.randomUUID(),
       });
 
       const blob = await encodeEnvelope(envelope);
@@ -802,7 +815,6 @@ export function createSendTab(
       $status.classList.add("error");
       const msg =
         e instanceof CoinSelectError ||
-        e instanceof ProofFetchError ||
         e instanceof ProposalBuilderError ||
         e instanceof WocError
           ? e.message
@@ -957,7 +969,8 @@ export function createSendTab(
     const $broadcast = rt.root.querySelector<HTMLElement>("#broadcastWidget");
     const $info = rt.root.querySelector<HTMLElement>("#broadcastInfo");
     const $broadcastStatus = rt.root.querySelector<HTMLElement>("#broadcastStatus");
-    if (!$broadcast || !$info) return;
+    const wallet = rt.wallet;
+    if (!$broadcast || !$info || !wallet) return;
 
     let env: Awaited<ReturnType<typeof decodeEnvelope>>;
     try {
@@ -994,6 +1007,30 @@ export function createSendTab(
       showBroadcastWidget();
       switchSendQrTab("scan");
       return;
+    }
+
+    if (wallet.walletState && !signed.stateReceipt) {
+      if ($info) {
+        $info.textContent =
+          "signed response has no state receipt — update the Pi before broadcasting";
+      }
+      showBroadcastWidget();
+      switchSendQrTab("scan");
+      return;
+    }
+    if (signed.stateReceipt) {
+      try {
+        await applyStateReceipt(wallet, signed.stateReceipt, signed.atomicBeef);
+        actions.renderBalance();
+        renderSendPendingBanner();
+      } catch (e) {
+        if ($info) {
+          $info.textContent = `state receipt rejected: ${(e as Error).message}`;
+        }
+        showBroadcastWidget();
+        switchSendQrTab("scan");
+        return;
+      }
     }
 
     if ($info) {

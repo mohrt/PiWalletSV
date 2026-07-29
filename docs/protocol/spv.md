@@ -38,13 +38,12 @@ and full BRC-67 strong SPV. The Pi:
   (one entry per unique block referenced by the inputs); the Pi
   takes those entries on faith.
 
-The companion sources each entry by fetching the block's header
-from [WhatsOnChain](https://whatsonchain.com/) (`GET /block/{hash}/header`
-and `GET /tx/{txid}/proof/tsc`). WhatsOnChain is also used for
-UTXO scanning, fee rate recommendations, and broadcasting.
-Transaction history is fetched separately from
-[Bitails](https://bitails.io) (`POST /address/history/multi`),
-which is not involved in SPV verification.
+The companion initially sources each entry from a confirmed Atomic-BEEF sender
+package or, during explicit migration/recovery, by fetching the block header
+and proof from [WhatsOnChain](https://whatsonchain.com/). After the Pi verifies
+and commits that package, BEEF and anchors are retained and reused; normal
+balance, history, and spend paths do not scan addresses or refetch proofs.
+WhatsOnChain remains the default fee/broadcast service and recovery backend.
 
 A malicious companion or a compromised explorer can therefore at most
 cause the Pi to sign a transaction whose inputs do not exist on

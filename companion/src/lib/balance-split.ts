@@ -57,14 +57,14 @@ export function noSpendableUtxosMessage(
   formatSats: (n: number) => string,
 ): string {
   if (utxos.length === 0) {
-    return "no UTXOs known — switch to the Balance tab and click Refresh first";
+    return "no coins in Pi-secured state — import and secure a confirmed payment first";
   }
   const split = splitConfirmedPending(utxos);
   if (split.confirmedSats > 0) {
-    return `${formatSats(split.confirmedSats)} confirmed but not spendable — refresh Balance and try again`;
+    return `${formatSats(split.confirmedSats)} confirmed but not spendable — reload secured state and try again`;
   }
   if (split.hasPending) {
-    return `only confirmed coins can be sent; ${formatSats(split.pendingSats)} is still pending — wait for confirmation, then refresh Balance`;
+    return `only confirmed coins can be sent; ${formatSats(split.pendingSats)} is still pending — import confirmed Atomic BEEF, then secure the update`;
   }
-  return "no confirmed UTXOs in the last scan — refresh Balance on the Balance tab";
+  return "no confirmed coins are available in Pi-secured state";
 }

@@ -26,9 +26,18 @@ import {
   setLastHistory,
   setLastScan,
   setNextReceiveIndex,
+  setPendingStateSync,
+  setWalletState,
   type WalletRecord,
   type WalletScanSnapshot,
 } from "./wallets.js";
+import {
+  pendingStateSyncFromBackup,
+  walletStateFromBackup,
+  walletStateToBackup,
+  type PendingStateSync,
+  type WalletStateMirror,
+} from "./wallet-state.js";
 import { encodeMultipartLines } from "../pw1.js";
 import {
   APP_VERSION,
@@ -53,6 +62,8 @@ export interface WalletBackupEntry {
   displayUnit?: "sats" | "bsv" | "fiat";
   lastScan?: WalletScanSnapshot;
   lastHistory?: HistorySnapshot;
+  walletState?: unknown;
+  pendingStateSync?: unknown;
 }
 
 export interface WalletBackupFile {
@@ -106,6 +117,12 @@ function toBackupEntry(
     if (rec.displayUnit !== undefined) entry.displayUnit = rec.displayUnit;
     if (rec.lastScan !== undefined) entry.lastScan = rec.lastScan;
     if (rec.lastHistory !== undefined) entry.lastHistory = rec.lastHistory;
+    if (rec.walletState !== undefined) {
+      entry.walletState = walletStateToBackup(rec.walletState);
+    }
+    if (rec.pendingStateSync !== undefined) {
+      entry.pendingStateSync = walletStateToBackup(rec.pendingStateSync);
+    }
   }
   return entry;
 }
@@ -394,6 +411,14 @@ function validateEntry(entry: unknown, index: number): WalletBackupEntry {
   if (entry.lastHistory !== undefined) {
     lastHistory = validateHistorySnapshot(entry.lastHistory, index);
   }
+  let walletState: WalletStateMirror | undefined;
+  if (entry.walletState !== undefined) {
+    walletState = walletStateFromBackup(entry.walletState);
+  }
+  let pendingStateSync: PendingStateSync | undefined;
+  if (entry.pendingStateSync !== undefined) {
+    pendingStateSync = pendingStateSyncFromBackup(entry.pendingStateSync);
+  }
   const trimmedXpub = xpub.trim();
   if (!trimmedXpub.startsWith("xpub") && !trimmedXpub.startsWith("tpub")) {
     throw new WalletStoreError(
@@ -411,27 +436,17 @@ function validateEntry(entry: unknown, index: number): WalletBackupEntry {
     ...(displayUnit !== undefined ? { displayUnit } : {}),
     ...(lastScan !== undefined ? { lastScan } : {}),
     ...(lastHistory !== undefined ? { lastHistory } : {}),
+    ...(walletState !== undefined ? { walletState: walletStateToBackup(walletState) } : {}),
+    ...(pendingStateSync !== undefined
+      ? { pendingStateSync: walletStateToBackup(pendingStateSync) }
+      : {}),
   };
 }
 
 async function importOneEntry(entry: WalletBackupEntry): Promise<
   "imported" | "skipped"
 > {
-  let fp: Uint8Array;
-  try {
-    fp = xpubFingerprint(entry.xpub);
-  } catch (e) {
-    const msg = e instanceof DerivationError ? e.message : (e as Error).message;
-    throw new WalletStoreError(`invalid xpub: ${msg}`);
-  }
-  const fpHex = bytesToHex(fp);
-  if (fpHex !== entry.fingerprint.toLowerCase()) {
-    throw new WalletStoreError(
-      `fingerprint mismatch (xpub computes ${fpHex}, file has ${entry.fingerprint})`,
-    );
-  }
-
-  const network: NetworkT = entry.network ?? "main";
+  const { fpHex, network } = validatePairingIdentity(entry);
   const existing = await findByFingerprintAndPath(fpHex, entry.path);
   if (existing && (existing.network ?? "main") === network) {
     return "skipped";
@@ -456,7 +471,38 @@ async function importOneEntry(entry: WalletBackupEntry): Promise<
   if (entry.lastHistory !== undefined) {
     await setLastHistory(rec.id, entry.lastHistory);
   }
+  if (entry.walletState !== undefined) {
+    await setWalletState(rec.id, walletStateFromBackup(entry.walletState));
+  }
+  if (entry.pendingStateSync !== undefined) {
+    await setPendingStateSync(
+      rec.id,
+      pendingStateSyncFromBackup(entry.pendingStateSync),
+    );
+  }
   return "imported";
+}
+
+function validatePairingIdentity(entry: WalletBackupEntry): {
+  fpHex: string;
+  network: NetworkT;
+} {
+  let fp: Uint8Array;
+  try {
+    fp = xpubFingerprint(entry.xpub);
+  } catch (e) {
+    const msg = e instanceof DerivationError ? e.message : (e as Error).message;
+    throw new WalletStoreError(`invalid xpub: ${msg}`);
+  }
+  const fpHex = bytesToHex(fp);
+  if (fpHex !== entry.fingerprint.toLowerCase()) {
+    throw new WalletStoreError(
+      `fingerprint mismatch (xpub computes ${fpHex}, file has ${entry.fingerprint})`,
+    );
+  }
+
+  const network: NetworkT = entry.network ?? "main";
+  return { fpHex, network };
 }
 
 export async function importWalletBackup(
@@ -464,10 +510,18 @@ export async function importWalletBackup(
   opts: ImportWalletOptions = {},
 ): Promise<ImportWalletResult> {
   const mode = opts.mode ?? "merge";
+  const file = parseBackupFile(raw);
+  let replaceEntries: WalletBackupEntry[] | undefined;
   if (mode === "replace") {
+    // Destructive replacement begins only after every wallet, state mirror,
+    // pending package, and xpub fingerprint has passed validation.
+    replaceEntries = file.wallets.map((entry, index) => {
+      const validated = validateEntry(entry, index);
+      validatePairingIdentity(validated);
+      return validated;
+    });
     await _clearAllWallets();
   }
-  const file = parseBackupFile(raw);
   const result: ImportWalletResult = {
     imported: 0,
     skippedDuplicates: 0,
@@ -478,7 +532,7 @@ export async function importWalletBackup(
   for (let i = 0; i < file.wallets.length; i++) {
     let entry: WalletBackupEntry;
     try {
-      entry = validateEntry(file.wallets[i], i);
+      entry = replaceEntries?.[i] ?? validateEntry(file.wallets[i], i);
     } catch (e) {
       const msg = e instanceof WalletStoreError ? e.message : (e as Error).message;
       result.failed.push({ label: `(entry ${i + 1})`, reason: msg });

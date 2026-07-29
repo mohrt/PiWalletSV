@@ -22,7 +22,7 @@ and a **USB flash drive**. Keep **PWR IN** (right port) connected for power.
 ### Stick requirements
 
 - **FAT32 or exFAT** only (typical factory formatting is fine).
-- Any capacity; backups are small (encrypted vault + manifest).
+- Any capacity; backups are small (encrypted vault/state + manifest).
 
 ### On-stick layout
 
@@ -30,6 +30,7 @@ and a **USB flash drive**. Keep **PWR IN** (right port) connected for power.
 PiWalletSV/backups/<YYYYMMDD-HHMMSSZ>/
 ├── manifest.json    wallet labels + fingerprints (public metadata)
 ├── vault.bin        encrypted vault (same format as on the SD card)
+├── state.bin        encrypted coins, BEEF, counters, and transaction journal
 └── settings.json    optional (brightness, sleep timer, QR background)
 ```
 
@@ -49,7 +50,9 @@ press **A** to rescan immediately.
 
 ### Security
 
-The stick holds an encrypted vault. Anyone with **both** the stick
+The stick holds the encrypted vault and authenticated wallet-state snapshot.
+Anyone with **both** the stick
 **and** your vault PIN can sign. Store the stick like a second copy
-of the vault file — offline, under your control. The mnemonic remains
-the canonical recovery path if you lose the stick or forget the PIN.
+of the wallet files — offline, under your control. The mnemonic remains
+the canonical key-recovery path, but without `state.bin` a recovery wallet must
+explicitly rediscover its transaction state before spending.

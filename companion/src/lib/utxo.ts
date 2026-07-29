@@ -6,10 +6,9 @@
  * outputs. Stops a branch after `GAP_LIMIT` consecutive *unused* addresses
  * (no UTXOs AND no recorded history). BIP44 standard gap is 20.
  *
- * For v1 we treat "no UTXOs returned" as a proxy for "unused" — strictly
- * speaking a fully-spent address still counts as used, so a future
- * iteration can swap in the WoC `/address/{a}/history` endpoint when that
- * matters. For brand-new HD wallets the cheaper check is correct.
+ * This is a disaster-recovery/migration operation, not a routine refresh.
+ * Address history is queried alongside UTXOs so fully-spent addresses count
+ * as used and cannot terminate the gap walk early.
  *
  * Output: a flat list of `WalletUtxo` entries each tagged with the BIP32
  * derivation `[change, index]` so the Pi can re-derive the signing key.
@@ -33,6 +32,7 @@ import type { NetworkT } from "./envelope.js";
 import {
   WOC_BULK_BATCH_MAX,
   type WocBulkUnspentResult,
+  type WocBulkHistoryResult,
   type WocClient,
 } from "./woc.js";
 
@@ -119,6 +119,10 @@ export interface ScanOptions {
   fetchUnspentBatch?: (
     addresses: string[],
   ) => Promise<WocBulkUnspentResult[]>;
+  /** Address history distinguishes never-used from fully-spent addresses. */
+  fetchHistoryBatch?: (
+    addresses: string[],
+  ) => Promise<WocBulkHistoryResult[]>;
 }
 
 export async function scanWalletUtxos(
@@ -132,6 +136,11 @@ export async function scanWalletUtxos(
   const network: NetworkT = opts.network ?? "main";
   const fetchBatch =
     opts.fetchUnspentBatch ?? ((addrs: string[]) => woc.getUnspentBatch(addrs));
+  const fetchHistory = opts.fetchHistoryBatch ?? (
+    opts.fetchUnspentBatch === undefined
+      ? ((addrs: string[]) => woc.getAddressHistoryBatch(addrs))
+      : undefined
+  );
 
   const utxos: WalletUtxo[] = [];
   let total = 0;
@@ -158,12 +167,21 @@ export async function scanWalletUtxos(
         const d = deriveAddress(accountXpub, branch, idx, network);
         probes.push({ index: idx, address: d.address });
       }
-      const results = await fetchBatch(probes.map((p) => p.address));
+      const addresses = probes.map((p) => p.address);
+      const [results, historyResults] = await Promise.all([
+        fetchBatch(addresses),
+        fetchHistory ? fetchHistory(addresses) : Promise.resolve([]),
+      ]);
       // Map results back by address. WoC returns them in input order
       // but we don't rely on that; an address-keyed map is robust to
       // future server changes.
       const byAddress = new Map<string, WocBulkUnspentResult>();
       for (const r of results) byAddress.set(r.address, r);
+      const usedAddresses = new Set(
+        historyResults
+          .filter((result) => result.entries.length > 0)
+          .map((result) => result.address),
+      );
       for (const p of probes) {
         const found = byAddress.get(p.address)?.utxos ?? [];
         addressesScanned += 1;
@@ -173,7 +191,7 @@ export async function scanWalletUtxos(
           address: p.address,
           found: found.length,
         });
-        if (found.length === 0) {
+        if (found.length === 0 && !usedAddresses.has(p.address)) {
           consecutiveEmpty += 1;
           if (consecutiveEmpty >= gap) break;
         } else {

@@ -1,7 +1,7 @@
 # Envelope encoding — v2
 
 This document specifies the on-the-wire payloads that travel between
-the signer and a companion. There are three message kinds in v2;
+the signer and a companion. There are five message kinds in v2;
 each is a CBOR map, gzip-compressed, and then carried across the
 air gap via the multipart QR transport described in
 [`qr-transport.md`](qr-transport.md).
@@ -21,6 +21,9 @@ air gap via the multipart QR transport described in
 >   signer trusts) is **retained** in v2. PiWalletSV deliberately
 >   does not require strong on-device SPV; see
 >   [`spv.md`](spv.md) §1 for the trust-model discussion.
+> - Persistent-state fields and the `stateSync` / `stateReceipt` kinds are
+>   additive v2 extensions. Pre-state v2 xpub, proposal, and signed envelopes
+>   remain valid for the one-time migration path.
 
 ## 1. Outer framing
 
@@ -91,28 +94,30 @@ byte-identical output to be conformant.
 
 ## 2. Message kinds
 
-The `kind` field is one of three short strings:
+The `kind` field is one of five short strings:
 
 | `kind`     | Direction                  | Purpose                                           |
 | ---------- | -------------------------- | ------------------------------------------------- |
 | `"xpub"`   | signer ⟶ companion         | Pairing: hand the account xpub to the companion.  |
 | `"tx"`     | companion ⟶ signer         | Spend request the signer must verify before sign. |
-| `"signed"` | signer ⟶ companion         | Resulting raw signed transaction + txid.          |
+| `"signed"` | signer ⟶ companion         | Signed Atomic BEEF plus optional state receipt.   |
+| `"stateSync"` | companion ⟶ signer      | Deliver verified coin/Atomic-BEEF packages.       |
+| `"stateReceipt"` | signer ⟶ companion  | Commit a revision/hash and public coin delta.      |
 
 Every envelope's outer map has two universally-required keys:
 
 | Key    | CBOR type   | Value                       |
 | ------ | ----------- | --------------------------- |
 | `v`    | uint        | `2` (current version).      |
-| `kind` | text string | one of `"xpub"`, `"tx"`, `"signed"`. |
+| `kind` | text string | one of the five values above. |
 
 The remaining keys are kind-specific.
 
 ## 3. `xpub_export` (`kind = "xpub"`)
 
 Direction: **signer → companion**. The signer emits this once during
-pairing so the companion can stand up a watch-only view of the
-wallet's addresses and start querying balances.
+pairing so the companion can stand up a public mirror, derive receive
+addresses, and route state/proposal envelopes.
 
 ```
 {
@@ -175,9 +180,18 @@ then sign it.
     "changeDerivation": [ <uint>, <uint> ],   // [branch, index] for change re-derivation
     "feeRate":          <uint>,               // sats per 1000 bytes (advisory)
     "locktime":         <uint>,               // optional; default 0
-    "headerAnchors":    { <uint-as-string>: <bytes, length 32>, ... }  // height → merkle root (raw byte order)
+    "headerAnchors":    { <uint-as-string>: <bytes, length 32>, ... }, // height → merkle root (raw byte order)
+    "stateRevision":    <uint>,               // OPTIONAL with stateHash
+    "stateHash":        <bytes, length 32>,   // OPTIONAL with stateRevision
+    "proposalId":       <text, 1..128 chars>  // REQUIRED when state-bound
 }
 ```
+
+`stateRevision` and `stateHash` MUST appear together. Once the signer has an
+active state revision it MUST reject a proposal that omits them, does not match
+its current state, or omits `proposalId`. An empty-state signer MAY accept one
+legacy v2 proposal without these fields as described in
+[`wallet-state.md`](wallet-state.md#compatibility-and-migration).
 
 ### 4.1 `ProposalInput`
 
@@ -263,7 +277,8 @@ Direction: **signer → companion**. Returned after a successful sign.
     "v":          2,
     "kind":       "signed",
     "walletFp":   <bytes, length 4>,    // MUST equal the proposal's walletFp
-    "atomicBeef": <bytes>               // BRC-95 Atomic BEEF for the new tx
+    "atomicBeef": <bytes>,              // BRC-95 Atomic BEEF for the new tx
+    "stateReceipt": <StateReceipt>      // OPTIONAL only for empty legacy state
 }
 ```
 
@@ -288,8 +303,76 @@ calling its broadcast endpoint:
    back a different txid than the Atomic BEEF declares, treat that
    as a malleability red flag and warn the user — the reference
    companion does this.
+3. An active-state response contains a receipt that continues the companion's
+   current revision/hash. The companion applies this receipt before broadcast.
 
-## 6. Worked example
+## 6. `state_sync` (`kind = "stateSync"`)
+
+Direction: **companion → signer**. Delivers one or more confirmed wallet coins
+as self-contained Atomic-BEEF packages.
+
+```text
+{
+    "v": 2,
+    "kind": "stateSync",
+    "walletFp": <bytes, length 4>,
+    "requestId": <text, 1..128 chars>,
+    "expectedRevision": <uint>,
+    "expectedStateHash": <bytes, length 32>,
+    "nextReceiveIndex": <uint>,
+    "nextChangeIndex": <uint>,
+    "coins": [
+        {
+            "txid": <64-char hex>,
+            "vout": <uint>,
+            "sats": <uint>,
+            "script": <locking-script hex>,
+            "derivation": [<branch>, <index>],
+            "status": "confirmed",
+            "txRef": <64-char subject txid>,
+            "height": <uint>,
+            "atomicBeef": <bytes>
+        }, ...
+    ],
+    "headerAnchors": { <height-as-string>: <bytes, length 32>, ... }
+}
+```
+
+The signer MUST verify every amount, script, derivation, subject TXID, BUMP
+path, height, and anchor before committing. Reusing a completed `requestId` is
+idempotent and returns the original receipt. A different request with a stale
+revision/hash MUST be rejected.
+
+For the first sync only, an empty signer accepts `expectedRevision = 0` and an
+all-zero `expectedStateHash`; the real empty-state hash is not known to a newly
+paired companion until its first receipt.
+
+## 7. `state_receipt` (`kind = "stateReceipt"`)
+
+Direction: **signer → companion**. Also appears nested in `signed.stateReceipt`
+without its own `v` and `kind` header.
+
+```text
+{
+    "v": 2,
+    "kind": "stateReceipt",
+    "walletFp": <bytes, length 4>,
+    "requestId": <text>,
+    "oldRevision": <uint>,
+    "newRevision": <uint>,
+    "oldStateHash": <bytes, length 32>,
+    "newStateHash": <bytes, length 32>,
+    "addedCoins": [ <StateCoin>, ... ],
+    "removedOutpoints": [ "<txid>:<vout>", ... ]
+}
+```
+
+`newRevision` is greater than `oldRevision` (the reference implementation
+advances by exactly one). A companion MUST validate the wallet fingerprint,
+old revision, and old hash before applying the delta. Receipt application is
+the only normal path that changes the companion's spendable mirror.
+
+## 8. Worked example
 
 `tests/fixtures/proposal_01.cbor` is a canonical v2
 `unsigned_proposal` envelope for the BIP39 mnemonic in

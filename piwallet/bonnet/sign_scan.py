@@ -35,13 +35,17 @@ from typing import Literal
 
 from PIL import Image
 
-from piwallet.bonnet.companion_pairing import pairing_pw1_lines  # noqa: F401  # re-exported for tests
+from piwallet.bonnet.companion_pairing import (
+    pairing_pw1_lines,  # noqa: F401  # re-exported for tests
+)
+from piwallet.bonnet.qr_settings import qr_brightness_screen_kwargs
 from piwallet.camera_lcd import paste_cover
 from piwallet.core import derivation as deriv
-from piwallet.core.settings import BonnetSettings
 from piwallet.core import envelope as env
 from piwallet.core import sign as sgn
 from piwallet.core import verify as vfy
+from piwallet.core.settings import BonnetSettings
+from piwallet.core.state import WalletStateError, WalletStateStore
 from piwallet.core.vault import Vault, VaultError, VaultWipedError, WalletRecord
 from piwallet.qr.camera_scan import ScanCancelled, scan_multipart_from_camera
 from piwallet.qr.multipart import MultipartQrError, split_envelope_to_lines
@@ -59,7 +63,6 @@ from piwallet.ui.display import (
     FrameBuffer,
 )
 from piwallet.ui.input import Button, Event, EventKind, InputManager
-from piwallet.bonnet.qr_settings import qr_brightness_screen_kwargs
 from piwallet.ui.pairing_multipart_qr_screen import PairingMultipartQrScreen
 from piwallet.ui.widgets import Modal, ProgressBar, draw_text
 
@@ -67,6 +70,32 @@ log = logging.getLogger(__name__)
 
 #: Outcomes from :func:`run_sign_flow` — mirrors :data:`WalletManageResult`.
 SignFlowResult = Literal["stay"]
+
+
+def _show_signed_qr(
+    display: Display,
+    input_mgr: InputManager,
+    signed_env: env.SignedTx,
+    *,
+    target_fps: int,
+    idle_wake: IdleWakeTracker | None,
+    settings: BonnetSettings | None,
+    settings_path: Path | None,
+    on_settings_changed: Callable[[BonnetSettings], None] | None,
+) -> None:
+    """Render a signed response, including a replayed post-crash response."""
+    signed_blob = env.encode(signed_env)
+    pw1_lines = split_envelope_to_lines(signed_blob, max_encoded_chunk_chars=100)
+    qr = PairingMultipartQrScreen(
+        pw1_lines,
+        title="Signed tx",
+        **qr_brightness_screen_kwargs(
+            settings,
+            settings_path=settings_path,
+            on_settings_changed=on_settings_changed,
+        ),
+    )
+    run_screen(display, input_mgr, qr, target_fps=target_fps, idle_wake=idle_wake)
 
 
 # ---------------------------------------------------------------------------
@@ -173,9 +202,7 @@ class ScanProposalScreen:
             return
         b = event.button
         k = event.kind
-        if (b == Button.B and k == EventKind.PRESS) or (
-            b == Button.A and k == EventKind.PRESS
-        ):
+        if (b == Button.B and k == EventKind.PRESS) or (b == Button.A and k == EventKind.PRESS):
             with self.state.lock:
                 self.state.cancel_requested = True
             self.done = True
@@ -341,9 +368,7 @@ class VerifyProposalScreen:
             return
         b = event.button
         k = event.kind
-        if (b == Button.B and k == EventKind.PRESS) or (
-            b == Button.A and k == EventKind.PRESS
-        ):
+        if (b == Button.B and k == EventKind.PRESS) or (b == Button.A and k == EventKind.PRESS):
             with self.state.lock:
                 self.state.cancel_requested = True
             self.done = True
@@ -561,11 +586,7 @@ class ConfirmProposalScreen:
 
     def _send_sats(self, v: vfy.VerifiedProposal) -> int:
         """Sum of all non-change outputs — the amount actually leaving the wallet."""
-        return sum(
-            sats
-            for idx, (_script, sats) in enumerate(v.outputs)
-            if idx != v.change_index
-        )
+        return sum(sats for idx, (_script, sats) in enumerate(v.outputs) if idx != v.change_index)
 
     def _destination_addrs(self, v: vfy.VerifiedProposal) -> list[str]:
         """P2PKH addresses for non-change outputs (or ``non-P2PKH`` fallback)."""
@@ -609,9 +630,7 @@ class ConfirmProposalScreen:
             lines = wrap_text_lines(self.verify_error, max_chars=30)[:6]
             y = title_h + 36
             for ln in lines:
-                draw_text(
-                    fb, DISPLAY_WIDTH // 2, y, ln, size=10, color=COLOR_FG, anchor="mm"
-                )
+                draw_text(fb, DISPLAY_WIDTH // 2, y, ln, size=10, color=COLOR_FG, anchor="mm")
                 y += 14
             draw_text(
                 fb,
@@ -642,7 +661,7 @@ class ConfirmProposalScreen:
         y += 14
         if v.input_heights:
             lo, hi = min(v.input_heights), max(v.input_heights)
-            blocks = f"block {lo}" if lo == hi else f"blocks {lo}–{hi}"
+            blocks = f"block {lo}" if lo == hi else f"blocks {lo}-{hi}"
             draw_text(
                 fb,
                 DISPLAY_WIDTH // 2,
@@ -879,10 +898,42 @@ def run_sign_flow(
         _show_modal(
             display,
             title="Wrong wallet",
-            body=(
-                f"proposal fp={decoded.wallet_fp.hex()[:8]}\n"
-                f"this wallet fp={fp.hex()[:8]}"
-            ),
+            body=(f"proposal fp={decoded.wallet_fp.hex()[:8]}\nthis wallet fp={fp.hex()[:8]}"),
+            accent=COLOR_DANGER,
+            hold_seconds=toast_seconds,
+        )
+        return "stay"
+
+    # Bind the request to the Pi's authoritative state before verification
+    # or signing. A repeated request whose signed response was persisted but
+    # never scanned can be re-exported without producing another signature.
+    try:
+        state_key = vault.derive_state_key(pin, wallet.id)
+        state_store = WalletStateStore(vault.state_path)
+        pending = state_store.pending_for_proposal(wallet, state_key, decoded)
+        if pending is not None:
+            pending_beef, pending_receipt = pending
+            _show_signed_qr(
+                display,
+                input_mgr,
+                env.SignedTx(
+                    wallet_fp=fp,
+                    atomic_beef=pending_beef,
+                    state_receipt=pending_receipt,
+                ),
+                target_fps=target_fps,
+                idle_wake=idle_wake,
+                settings=settings,
+                settings_path=settings_path,
+                on_settings_changed=on_settings_changed,
+            )
+            return "stay"
+        state_store.validate_proposal_binding(wallet, state_key, decoded)
+    except (VaultError, VaultWipedError, WalletStateError) as exc:
+        _show_modal(
+            display,
+            title="State mismatch",
+            body=str(exc)[:96],
             accent=COLOR_DANGER,
             hold_seconds=toast_seconds,
         )
@@ -917,9 +968,7 @@ def run_sign_flow(
         network=wallet.network,
         max_fee_rate_satskb=max_fee_rate_satskb,
     )
-    run_screen(
-        display, input_mgr, confirm, target_fps=target_fps, idle_wake=idle_wake
-    )
+    run_screen(display, input_mgr, confirm, target_fps=target_fps, idle_wake=idle_wake)
     if confirm.result != "sign":
         return "stay"
 
@@ -938,30 +987,39 @@ def run_sign_flow(
         )
         return "stay"
 
-    # ---- 7. Animate signed_tx envelope back to companion ---------------
-    signed_env = sgn.to_signed_envelope(signed, wallet_fp=fp)
-    signed_blob = env.encode(signed_env)
-    # 120-char chunks match the pairing flow: a typical signed BSV tx
-    # is ~600–1500 bytes encoded which gives 6–12 frames at version-6
-    # QR density (4 px/module on the 240 panel). Larger chunks would
-    # shrink each module below the threshold a phone autofocus can
-    # lock from arm's length.
-    # 100-char chunks + ~10-char header = ~110 bytes/frame → QR version 7
-    # (45×45 modules).  At the 200 px QR target that gives 4 px/module,
-    # which is the minimum a phone autofocus through TFT glow can reliably
-    # lock on.  (120-char chunks pushed frames to version 10 at 3 px/module
-    # which was the root cause of companion scanning failures.)
-    pw1_lines = split_envelope_to_lines(signed_blob, max_encoded_chunk_chars=100)
-    qr = PairingMultipartQrScreen(
-        pw1_lines,
-        title="Signed tx",
-        **qr_brightness_screen_kwargs(
-            settings,
-            settings_path=settings_path,
-            on_settings_changed=on_settings_changed,
-        ),
+    # Persist coin consumption, change, BEEF, journal, and replay payload
+    # before a QR is shown. Power loss from this point cannot lead to a
+    # second conflicting signature.
+    try:
+        _, receipt = state_store.commit_signed(
+            wallet,
+            state_key,
+            decoded,
+            verified,
+            signed.atomic_beef,
+        )
+    except WalletStateError as exc:
+        _show_modal(
+            display,
+            title="State update failed",
+            body=str(exc)[:96],
+            accent=COLOR_DANGER,
+            hold_seconds=toast_seconds,
+        )
+        return "stay"
+
+    # ---- 7. Animate signed_tx + state receipt back to companion --------
+    signed_env = sgn.to_signed_envelope(signed, wallet_fp=fp, state_receipt=receipt)
+    _show_signed_qr(
+        display,
+        input_mgr,
+        signed_env,
+        target_fps=target_fps,
+        idle_wake=idle_wake,
+        settings=settings,
+        settings_path=settings_path,
+        on_settings_changed=on_settings_changed,
     )
-    run_screen(display, input_mgr, qr, target_fps=target_fps, idle_wake=idle_wake)
     return "stay"
 
 
