@@ -265,6 +265,8 @@ before signing.
 
 The card now shows:
 
+- The destination **To** address (full string), plus amount and fee —
+  match **To** with the Pi confirm screen before you accept the sign.
 - The proposal frame counter (`Frame X / Y · Z bytes total`).
 - A **Pause** / **Resume** button.
 - A **New send** button to discard the proposal and start over.

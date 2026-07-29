@@ -672,6 +672,26 @@ export function createSendTab(
     if ($rate) $rate.textContent = formatFeeRate(rt.sendStep.feeRate);
   }
 
+  function renderProposalQrSummary(): void {
+    const $wrap = rt.root.querySelector<HTMLElement>("#proposalQrSummary");
+    const $to = rt.root.querySelector<HTMLElement>("#proposalQrTo");
+    const $amount = rt.root.querySelector<HTMLElement>("#proposalQrAmount");
+    const $fee = rt.root.querySelector<HTMLElement>("#proposalQrFee");
+    if (!$wrap || !$to) return;
+    if (!lastSendSummary) {
+      $wrap.hidden = true;
+      $to.textContent = "";
+      if ($amount) $amount.textContent = "";
+      if ($fee) $fee.textContent = "";
+      return;
+    }
+    // Full address so it can be matched against the Pi confirm screen.
+    $to.textContent = lastSendSummary.recipient;
+    if ($amount) $amount.textContent = formatSats(lastSendSummary.sats);
+    if ($fee) $fee.textContent = formatSats(lastSendSummary.feeSats);
+    $wrap.hidden = false;
+  }
+
   async function onBuildProposal(): Promise<void> {
     if (!rt.wallet || rt.sendBusy || rt.sendStep.step !== "review") return;
     const $status = rt.root.querySelector<HTMLElement>("#reviewStatus")!;
@@ -769,6 +789,7 @@ export function createSendTab(
         sats: rt.sendStep.sats,
         feeSats: rt.sendStep.feeSats,
       };
+      renderProposalQrSummary();
       showSendStep("qr");
       rt.sendStep = { step: "qr" };
       resetBroadcastWidget();
@@ -1176,6 +1197,8 @@ export function createSendTab(
     updateSendFlowProgress("form");
     resetBroadcastWidget();
     resetSpvUi();
+    lastSendSummary = null;
+    renderProposalQrSummary();
     const $status = rt.root.querySelector<HTMLElement>("#sendFormStatus");
     if ($status) {
       $status.classList.remove("error");

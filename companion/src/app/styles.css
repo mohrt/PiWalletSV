@@ -926,6 +926,24 @@ body.pair-locked {
   height: auto;
 }
 
+.proposal-qr-summary {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+}
+
+.proposal-qr-to {
+  word-break: break-all;
+  text-align: left !important;
+  font-size: 0.85rem;
+}
+
+.proposal-qr-compare-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+}
+
 body.terms-locked {
   overflow: hidden;
 }
