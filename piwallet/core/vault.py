@@ -129,11 +129,11 @@ PIN_MAX_LEN = 16
 
 
 def _validate_pin(pin: str) -> None:
-    """Accept classic 6-digit PINs and new 6–16 alphanumeric PINs."""
+    """Accept classic 6-digit PINs and new 6-16 alphanumeric PINs."""
     if not isinstance(pin, str):
         raise ValueError("PIN must be a string")
     if len(pin) < PIN_MIN_LEN or len(pin) > PIN_MAX_LEN:
-        raise ValueError(f"PIN must be {PIN_MIN_LEN}–{PIN_MAX_LEN} characters")
+        raise ValueError(f"PIN must be {PIN_MIN_LEN}-{PIN_MAX_LEN} characters")
     if not pin.isalnum():
         raise ValueError("PIN must contain only letters and digits")
 
