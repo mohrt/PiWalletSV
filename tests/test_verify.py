@@ -293,6 +293,43 @@ def test_script_address_or_none_renders_for_network() -> None:
     assert v.script_address_or_none(script_hex, network="test") == test_addr
 
 
+@pytest.mark.parametrize(
+    "opcode_index,replacement",
+    [
+        (0, 0x75),  # OP_DROP instead of OP_DUP
+        (1, 0xA8),  # OP_SHA256 instead of OP_HASH160
+        (2, 0x4C),  # OP_PUSHDATA1 instead of PUSH20
+        (3, 0x87),  # OP_EQUAL instead of OP_EQUALVERIFY
+        (4, 0xAD),  # OP_CHECKSIGVERIFY instead of OP_CHECKSIG
+    ],
+)
+def test_script_address_or_none_rejects_altered_opcodes(
+    opcode_index: int, replacement: int
+) -> None:
+    """Trusted display must not treat near-P2PKH scripts as P2PKH."""
+    from bsv import P2PKH as _P2PKH
+    from bsv import to_base58_check
+    from bsv.constants import ADDRESS_MAINNET_PREFIX
+
+    main_addr = to_base58_check(list(b"\x11" * 20), prefix=list(ADDRESS_MAINNET_PREFIX))
+    raw = bytearray.fromhex(_P2PKH().lock(main_addr).hex())
+    # Layout: OP_DUP OP_HASH160 PUSH20 h160(20) OP_EQUALVERIFY OP_CHECKSIG
+    index_to_offset = {0: 0, 1: 1, 2: 2, 3: 23, 4: 24}
+    raw[index_to_offset[opcode_index]] = replacement
+    assert v.script_address_or_none(raw.hex()) is None
+
+
+def test_script_address_or_none_rejects_wrong_push_length() -> None:
+    from bsv import P2PKH as _P2PKH
+    from bsv import to_base58_check
+    from bsv.constants import ADDRESS_MAINNET_PREFIX
+
+    main_addr = to_base58_check(list(b"\x22" * 20), prefix=list(ADDRESS_MAINNET_PREFIX))
+    raw = bytearray.fromhex(_P2PKH().lock(main_addr).hex())
+    raw[2] = 0x15  # claim PUSH21 but still 20 bytes of data — parse may fail or reject
+    assert v.script_address_or_none(raw.hex()) is None
+
+
 # ---- offline chain tracker -----------------------------------------------
 
 

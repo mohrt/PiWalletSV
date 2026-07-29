@@ -48,6 +48,7 @@ Vault file format (CBOR-encoded, on disk):
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import uuid
 from dataclasses import dataclass, field
@@ -127,15 +128,18 @@ class WalletNotFoundError(VaultError):
 PIN_MIN_LEN = 6
 PIN_MAX_LEN = 16
 
+# Bonnet PIN entry only offers ASCII 0-9 / A-Z / a-z — keep CLI in sync.
+_PIN_ASCII_RE = re.compile(r"^[0-9A-Za-z]+$")
+
 
 def _validate_pin(pin: str) -> None:
-    """Accept classic 6-digit PINs and new 6-16 alphanumeric PINs."""
+    """Accept classic 6-digit PINs and new 6-16 ASCII alphanumeric PINs."""
     if not isinstance(pin, str):
         raise ValueError("PIN must be a string")
     if len(pin) < PIN_MIN_LEN or len(pin) > PIN_MAX_LEN:
         raise ValueError(f"PIN must be {PIN_MIN_LEN}-{PIN_MAX_LEN} characters")
-    if not pin.isalnum():
-        raise ValueError("PIN must contain only letters and digits")
+    if not _PIN_ASCII_RE.fullmatch(pin):
+        raise ValueError("PIN must contain only ASCII letters and digits")
 
 
 def _derive_kek(pin: str, salt: bytes) -> bytes:

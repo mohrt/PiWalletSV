@@ -364,47 +364,54 @@ def script_address_or_none(
 
     Returns the base58check-encoded address on a successful P2PKH
     template match, or ``None`` for non-P2PKH scripts and parse errors.
+    Every opcode is checked (``OP_DUP OP_HASH160 <20> OP_EQUALVERIFY
+    OP_CHECKSIG``); a matching HASH160 push alone is not enough — the
+    trusted Pi display must not label an arbitrary script as P2PKH.
     The address is rendered for ``network`` (mainnet ``0x00`` or
     testnet ``0x6F``); callers showing addresses to the operator must
     supply the wallet's network so the rendered string is one the
     operator's tools and the network's nodes will accept.
     """
     try:
-        s = Script(script_hex)
-        # P2PKH is OP_DUP OP_HASH160 <20-byte> OP_EQUALVERIFY OP_CHECKSIG
-        chunks = s.chunks
-        if (
-            len(chunks) == 5
-            and chunks[2].data is not None
-            and len(chunks[2].data) == 20
-        ):
-            from bsv import to_base58_check
-            from bsv.constants import (
-                ADDRESS_MAINNET_PREFIX,
-                ADDRESS_TESTNET_PREFIX,
-            )
+        from bsv.constants import OpCode
 
-            prefix_bytes = (
-                ADDRESS_MAINNET_PREFIX
-                if network == deriv.NETWORK_MAIN
-                else ADDRESS_TESTNET_PREFIX
-            )
-            # bsv-sdk's to_base58_check is typed `List[int]` for both
-            # args (it concatenates them with `+`), so we have to
-            # convert the bytes-typed prefix and the bytes-typed h160
-            # payload to lists. The original implementation tried
-            # `prefix.to_bytes(1, "big")` and would have raised
-            # AttributeError on this version of the SDK — the helper
-            # has no internal callers, which is why the bug never
-            # surfaced. Tests in test_verify.py now exercise both
-            # network paths to guard against future regressions.
-            return to_base58_check(
-                list(chunks[2].data),
-                prefix=list(prefix_bytes),
-            )
+        s = Script(script_hex)
+        # P2PKH is OP_DUP OP_HASH160 PUSH20 <20-byte> OP_EQUALVERIFY OP_CHECKSIG
+        chunks = s.chunks
+        if len(chunks) != 5:
+            return None
+        if (
+            chunks[0].op != OpCode.OP_DUP
+            or chunks[1].op != OpCode.OP_HASH160
+            or chunks[2].op != b"\x14"
+            or chunks[2].data is None
+            or len(chunks[2].data) != 20
+            or chunks[3].op != OpCode.OP_EQUALVERIFY
+            or chunks[4].op != OpCode.OP_CHECKSIG
+        ):
+            return None
+
+        from bsv import to_base58_check
+        from bsv.constants import (
+            ADDRESS_MAINNET_PREFIX,
+            ADDRESS_TESTNET_PREFIX,
+        )
+
+        prefix_bytes = (
+            ADDRESS_MAINNET_PREFIX
+            if network == deriv.NETWORK_MAIN
+            else ADDRESS_TESTNET_PREFIX
+        )
+        # bsv-sdk's to_base58_check is typed `List[int]` for both
+        # args (it concatenates them with `+`), so we have to
+        # convert the bytes-typed prefix and the bytes-typed h160
+        # payload to lists.
+        return to_base58_check(
+            list(chunks[2].data),
+            prefix=list(prefix_bytes),
+        )
     except Exception:
         return None
-    return None
 
 
 __all__ = [
