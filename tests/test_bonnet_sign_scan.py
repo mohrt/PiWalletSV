@@ -10,13 +10,12 @@ on the next ``draw()`` call.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import pytest
 
 from piwallet.bonnet import sign_scan as ss
-from piwallet.bonnet import wallet_manage as wm
 from piwallet.bonnet.sign_scan import (
     ConfirmProposalScreen,
     ScanProposalScreen,
@@ -25,7 +24,6 @@ from piwallet.bonnet.sign_scan import (
     _VerifyState,
     run_sign_flow,
 )
-from piwallet.core import verify as vfy
 from piwallet.bonnet.wallet_manage import (
     WalletManageAction,
     WalletManageMenuScreen,
@@ -33,6 +31,7 @@ from piwallet.bonnet.wallet_manage import (
 from piwallet.core import derivation as deriv
 from piwallet.core import envelope as env
 from piwallet.core import mnemonic as mnem
+from piwallet.core import verify as vfy
 from piwallet.core.vault import Vault, WalletRecord
 from piwallet.ui.display import FrameBuffer, HeadlessDisplay
 from piwallet.ui.input import Button, Event, EventKind, FakeInputBackend, InputManager
@@ -229,6 +228,30 @@ def test_confirm_screen_a_signs(real_proposal) -> None:
     screen.on_event(_press(Button.A))
     assert screen.done is True
     assert screen.result == "sign"
+
+
+def test_confirm_screen_shows_destination_address(
+    real_proposal, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _blob, proposal, xpub = real_proposal
+    _blob2, meta = build_proposal_01()
+    screen = ConfirmProposalScreen(proposal=proposal, account_xpub_str=xpub)
+    assert screen.verified is not None
+    assert screen._destination_addrs(screen.verified) == [meta["pay_address"]]
+
+    painted: list[str] = []
+    real_draw = ss.draw_text
+
+    def _cap(fb, x, y, text, *args, **kwargs):
+        painted.append(str(text))
+        return real_draw(fb, x, y, text, *args, **kwargs)
+
+    monkeypatch.setattr(ss, "draw_text", _cap)
+    screen.draw(FrameBuffer())
+    assert "To" in painted
+    pay = meta["pay_address"]
+    # Address is wrapped across lines; joined painted text must contain it.
+    assert pay in "".join(painted), painted
 
 
 def test_confirm_screen_b_cancels(real_proposal) -> None:

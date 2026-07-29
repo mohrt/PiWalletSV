@@ -95,6 +95,28 @@ export function encodeP2pkhAddress(
   return b58.encode(versioned);
 }
 
+/**
+ * Decode a standard P2PKH locking script hex to a base58check address.
+ * Returns null for non-P2PKH or malformed scripts.
+ */
+export function addressFromP2pkhLockHex(
+  scriptHex: string,
+  network: NetworkT = "main",
+): string | null {
+  const hex = scriptHex.replace(/^0x/i, "").toLowerCase();
+  // OP_DUP OP_HASH160 PUSH20 <20 bytes> OP_EQUALVERIFY OP_CHECKSIG
+  if (hex.length !== 50 || !hex.startsWith("76a914") || !hex.endsWith("88ac")) {
+    return null;
+  }
+  const h160 = new Uint8Array(20);
+  for (let i = 0; i < 20; i++) {
+    const byte = Number.parseInt(hex.slice(6 + i * 2, 8 + i * 2), 16);
+    if (Number.isNaN(byte)) return null;
+    h160[i] = byte;
+  }
+  return encodeP2pkhAddress(h160, prefixForNetwork(network));
+}
+
 function assertNonHardened(branch: number, index: number): void {
   if (branch !== RECEIVE_BRANCH && branch !== CHANGE_BRANCH) {
     throw new DerivationError(

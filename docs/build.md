@@ -155,7 +155,7 @@ mkdir -p ~/.piwallet
 piwallet vault --vault-path ~/.piwallet/vault.bin init
 ```
 
-`vault init` is interactive: it prompts for a PIN (6 digits),
+`vault init` is interactive: it prompts for a PIN (6–16 letters/digits),
 confirms it, scrypt-derives a KEK, writes a fresh empty vault, and
 exits. Re-running it is refused if the vault already exists — that's
 intentional, see [Operate](operate.md#wiping-the-vault) for the wipe

@@ -11,15 +11,11 @@ def _evt(button: Button, kind: EventKind = EventKind.PRESS, at_ms: int = 0) -> E
     return Event(button=button, kind=kind, at_ms=at_ms)
 
 
-def _type_pin(screen: PinSetupScreen, digits: str) -> None:
-    """Drive the inner PinEntryScreen by directly seeding its digit slots.
-
-    Bypasses the cycling UI so the test stays focused on the
-    *composite* state machine instead of re-testing PinEntryScreen's
-    digit-cycling logic.
-    """
+def _type_pin(screen: PinSetupScreen, chars: str) -> None:
+    """Drive the inner PinEntryScreen by seeding its character slots."""
     inner = screen.pin_entry
-    inner.digits = [int(d) for d in digits]
+    inner.digits = list(chars)
+    inner.length = len(chars)
     inner.cursor = inner.length - 1
     screen.on_event(_evt(Button.A))
 
@@ -91,8 +87,8 @@ def test_cancellable_long_b_aborts_with_none() -> None:
 def test_cancellable_short_b_still_falls_through_to_backspace() -> None:
     """Short-B is not the cancel gesture — it still backspaces."""
     s = PinSetupScreen(cancellable=True)
-    s.on_event(_evt(Button.UP))  # inner cell becomes 0
-    assert s.pin_entry.digits[0] == 0
+    s.on_event(_evt(Button.UP))  # inner cell becomes "0"
+    assert s.pin_entry.digits[0] == "0"
     s.on_event(_evt(Button.B, EventKind.PRESS))
     assert s.pin_entry.digits[0] is None
     assert s.done is False

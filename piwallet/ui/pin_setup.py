@@ -54,6 +54,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from piwallet.core.vault import PIN_MIN_LEN
 from piwallet.ui.display import FrameBuffer
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.pin_entry import PinEntryScreen
@@ -65,7 +66,7 @@ PinSetupPhase = Literal["first", "confirm"]
 class PinSetupScreen:
     """Drive a "type new PIN twice" flow over a :class:`PinEntryScreen`."""
 
-    length: int = 6
+    length: int = PIN_MIN_LEN
     prompt: str = "Choose a PIN"
     confirm_prompt: str = "Confirm PIN"
     #: When ``True``, a long-press on B aborts the flow and sets

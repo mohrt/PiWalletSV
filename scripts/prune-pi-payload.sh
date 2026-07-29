@@ -2,6 +2,9 @@
 # Remove paths that must not ship on a Pi (dev sync or production image).
 # Reads patterns from scripts/rsync-pi-excludes.txt.
 #
+# Paths listed in KEEP_ON_PI are rsync-excluded (do not copy from the Mac)
+# but are created on the Pi and must survive prune.
+#
 # Usage:
 #   bash scripts/prune-pi-payload.sh [ROOT]
 #   bash scripts/prune-pi-payload.sh /opt/piwallet
@@ -11,13 +14,34 @@ ROOT="${1:-.}"
 ROOT="$(cd "$ROOT" && pwd)"
 EXCLUDE_FILE="$ROOT/scripts/rsync-pi-excludes.txt"
 
+# Rsync-exclude only — leave these alone on the Pi.
+KEEP_ON_PI=(
+    .venv
+    venv
+    env
+)
+
 if [[ ! -f "$EXCLUDE_FILE" ]]; then
     echo "prune-pi-payload: missing $EXCLUDE_FILE" >&2
     exit 1
 fi
 
+should_keep() {
+    local rel=$1
+    local k
+    for k in "${KEEP_ON_PI[@]}"; do
+        if [[ "$rel" == "$k" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 prune_literal() {
     local rel=$1
+    if should_keep "$rel"; then
+        return 0
+    fi
     local target="$ROOT/$rel"
     if [[ -e "$target" ]]; then
         if rm -rf "$target" 2>/dev/null; then

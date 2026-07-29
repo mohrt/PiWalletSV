@@ -45,10 +45,32 @@ if [[ ! -f "$EXCLUDE_FILE" ]]; then
     exit 1
 fi
 
+# Rsync-exclude only — these are created on the Pi and must remain.
+KEEP_ON_PI=(
+    .venv
+    venv
+    env
+)
+
+should_keep() {
+    local rel=$1
+    local k
+    for k in "${KEEP_ON_PI[@]}"; do
+        if [[ "$rel" == "$k" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line%%#*}"
     line="${line%"${line##*[![:space:]]}"}"
     [[ -z "$line" ]] && continue
+
+    if should_keep "$line"; then
+        continue
+    fi
 
     if [[ "$line" == *"*"* ]]; then
         # Scope glob checks to synced source dirs only — .venv/ and other runtime

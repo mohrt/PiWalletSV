@@ -54,7 +54,8 @@ The complete disclosure / reporting policy lives in the project's
   [scrypt](https://en.wikipedia.org/wiki/Scrypt), which is
   intentionally slow and memory-hard. That makes offline guessing
   expensive — but it is **not impossible**.
-- **The vault PIN is 6 digits.** Treat it as a barrier against casual
+- **The vault PIN is 6–16 letters and digits** (case-sensitive). Classic
+  6-digit PINs still work. Treat it as a barrier against casual
   access to the encrypted file on the device, not as a substitute for
   your seed phrase backup.
 - **Six wrong PIN attempts in a row wipe the vault** from the Pi. This

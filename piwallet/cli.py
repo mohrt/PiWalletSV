@@ -29,6 +29,8 @@ from piwallet.core import sign as sgn
 from piwallet.core import verify as vfy
 from piwallet.core.paths import default_vault_path
 from piwallet.core.vault import (
+    PIN_MAX_LEN,
+    PIN_MIN_LEN,
     Vault,
     VaultError,
     VaultWipedError,
@@ -97,7 +99,11 @@ def vault_init(ctx: click.Context) -> None:
     if path.exists():
         click.echo(f"vault already exists at {path}", err=True)
         sys.exit(1)
-    pin = click.prompt("Set PIN (6 digits)", hide_input=True, confirmation_prompt=True)
+    pin = click.prompt(
+        f"Set PIN ({PIN_MIN_LEN}–{PIN_MAX_LEN} letters/digits)",
+        hide_input=True,
+        confirmation_prompt=True,
+    )
     v = Vault(path)
     v.create(pin=pin)
     click.echo(f"created {path}")
@@ -233,7 +239,11 @@ def vault_recover(ctx: click.Context, force: bool) -> None:
     shutil.move(str(path), str(backup))
     click.echo(f"Renamed corrupt vault → {backup}")
 
-    pin = click.prompt("New PIN (6 digits)", hide_input=True, confirmation_prompt=True)
+    pin = click.prompt(
+        f"New PIN ({PIN_MIN_LEN}–{PIN_MAX_LEN} letters/digits)",
+        hide_input=True,
+        confirmation_prompt=True,
+    )
     try:
         new_vault = Vault(path)
         new_vault.create(pin=pin)
