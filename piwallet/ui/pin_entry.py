@@ -1,57 +1,56 @@
 """Bonnet PIN entry screen.
 
-Reusable, domain-agnostic numeric-PIN entry widget. The screen exposes
-fixed-length digit slots (default 6); the user adjusts each slot with
-the joystick and confirms with A. On confirm the entered PIN is
-returned as a string in ``result``. There is intentionally no bail-out:
-the enclosing flow must retain the device gate.
+Reusable PIN entry widget used by unlock, first-boot setup, and change-PIN.
+Cells start at :data:`PIN_MIN_LEN` (6) empty slots — the same footprint as
+classic 6-digit vaults — and may grow to :data:`PIN_MAX_LEN` (16) when the
+operator presses RIGHT on the last cell. UP/DOWN cycles the focused cell
+through digits first, then letters; joystick center toggles letter case.
 
-The screen is intentionally pure: it does NOT call the vault. Compose
-it inside a higher-level "unlock" flow that owns the verify-and-retry
-loop.
+Backward compatibility
+----------------------
+Existing vaults encrypted with a 6-digit numeric PIN continue to unlock:
+enter six digits and press A, same as before. Letters and extra cells are
+opt-in for new / changed PINs.
 
 Controls
 --------
 ====== ======================================================
 Input  Effect
 ====== ======================================================
-UP     Cycle current slot's digit forward (... 8 -> 9 -> 0).
-DOWN   Cycle current slot's digit backward (... 1 -> 0 -> 9).
-LEFT   Move active slot left (clamped at slot 0).
-RIGHT  Move active slot right (clamped at last slot).
-A      Confirm. If any slot is empty, advance to the next
-       empty slot instead.
-B PRESS  Backspace: clear the current slot and move left.
-         (Long presses on ``B`` are ignored so accidental holds do not quit.)
+UP     Cycle current cell forward (0-9, then a-z / A-Z).
+DOWN   Cycle current cell backward.
+LEFT   Move active cell left (clamped at 0).
+RIGHT  Move right; on the last cell, append an empty slot
+       (up to ``PIN_MAX_LEN``).
+SELECT Toggle upper / lower case for letter glyphs (and
+       convert the current cell if it is a letter).
+A      Confirm when every cell is filled and length ≥ 6;
+       otherwise advance to the next empty cell.
+B PRESS  Length == 6: clear the current cell (and step left
+         if already empty). Length > 6: remove the current
+         cell (shrink), floor at 6.
 ====== ======================================================
 
-Empty slots render as ``_``. Filled slots render their digit while
-the screen is live; if ``masked=True`` is set, non-active filled
-slots render as ``*`` so a shoulder-surfer only sees the cell the
-user is currently editing.
+Empty slots render as ``_``. Filled slots show their character; if
+``masked=True``, non-active filled slots render as ``*``.
 
-Repeat throttling
------------------
-The default :class:`InputManager` repeat cadence (120 ms) cycles
-digits at ~8/sec when UP/DOWN is held — fast enough that operators
-overshoot the digit they wanted. Digit cycling on this screen
-throttles ``REPEAT`` events to :data:`_DIGIT_REPEAT_THROTTLE_MS`
-(~3 cycles/sec), giving each digit step a deliberate visual beat.
-``PRESS`` always cycles immediately so single taps stay snappy. Cell
-movement (LEFT/RIGHT) is not throttled — it's clamped at ``length``
-slots and benefits from quick scrolling.
+A plain-text preview under the cells always shows the full PIN
+(empty slots as ``_``) so long values stay readable when the cell
+row is windowed.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from piwallet.core.vault import PIN_MAX_LEN, PIN_MIN_LEN
 from piwallet.ui.display import (
     COLOR_ACCENT,
     COLOR_BG,
     COLOR_DANGER,
     COLOR_DIM,
     COLOR_FG,
+    COLOR_OK,
     DISPLAY_HEIGHT,
     DISPLAY_WIDTH,
     FrameBuffer,
@@ -59,47 +58,100 @@ from piwallet.ui.display import (
 from piwallet.ui.input import Button, Event, EventKind
 from piwallet.ui.widgets import draw_text
 
-# Default visual layout — tuned for a 6-digit PIN on a 240x240 panel.
+# Digits first so classic numeric PINs match the old UP/DOWN feel.
+_PIN_DIGITS: tuple[str, ...] = tuple("0123456789")
+_PIN_LETTERS_LOWER: tuple[str, ...] = tuple("abcdefghijklmnopqrstuvwxyz")
+_PIN_LETTERS_UPPER: tuple[str, ...] = tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
 _CELL_WIDTH = 30
-_CELL_HEIGHT = 44
+_CELL_HEIGHT = 40
 _CELL_GAP = 6
 
-#: Minimum interval between digit cycles when UP/DOWN is held.
+#: Minimum interval between glyph cycles when UP/DOWN is held.
 _DIGIT_REPEAT_THROTTLE_MS: int = 320
+
+
+def _glyphs(*, upper: bool) -> tuple[str, ...]:
+    letters = _PIN_LETTERS_UPPER if upper else _PIN_LETTERS_LOWER
+    return _PIN_DIGITS + letters
 
 
 @dataclass
 class PinEntryScreen:
-    """Numeric PIN entry. See module docstring for controls."""
+    """Alphanumeric PIN entry. See module docstring for controls."""
 
-    length: int = 6
+    #: Initial / minimum slot count (classic vault PIN length).
+    length: int = PIN_MIN_LEN
+    #: Hard cap on growable slots.
+    max_len: int = PIN_MAX_LEN
     title: str = "Enter PIN"
-    subtitle: str = ""  # e.g. "3 attempts left"
+    subtitle: str = ""
     subtitle_color: tuple[int, int, int] = COLOR_DIM
-    subtitle_alert: str = ""  # optional red line above subtitle (e.g. "Wrong PIN")
+    subtitle_alert: str = ""
     masked: bool = False
     cursor: int = 0
     done: bool = False
-    result: object | None = None  # str pin on confirm; None while editing
-    digits: list[int | None] = field(default_factory=list)
-    # Wall time of the last accepted UP/DOWN cycle. Used to throttle
-    # REPEAT events so held-joystick scrolling lands on the right digit
-    # (see :data:`_DIGIT_REPEAT_THROTTLE_MS`). The very-negative default
-    # makes the first PRESS / first REPEAT after construction always
-    # accept regardless of clock skew.
+    result: object | None = None
+    #: Per-slot glyph; ``None`` = empty. Prefer seeding via ``chars``.
+    digits: list[str | None] = field(default_factory=list)
+    upper: bool = False
     _last_cycle_at_ms: int = field(default=-(10**9), repr=False)
 
     def __post_init__(self) -> None:
-        if self.length < 4 or self.length > 12:
-            raise ValueError(f"PIN length must be 4..12, got {self.length}")
+        if self.length < PIN_MIN_LEN or self.length > self.max_len:
+            raise ValueError(
+                f"PIN length must be {PIN_MIN_LEN}..{self.max_len}, got {self.length}"
+            )
+        if self.max_len < PIN_MIN_LEN or self.max_len > PIN_MAX_LEN:
+            raise ValueError(
+                f"max_len must be {PIN_MIN_LEN}..{PIN_MAX_LEN}, got {self.max_len}"
+            )
         if not self.digits:
             self.digits = [None] * self.length
-        elif len(self.digits) != self.length:
-            raise ValueError(
-                f"digits seed must match length={self.length}, "
-                f"got {len(self.digits)}"
-            )
+        else:
+            # Accept legacy int seeds from older callers/tests.
+            normalized: list[str | None] = []
+            for d in self.digits:
+                if d is None:
+                    normalized.append(None)
+                elif isinstance(d, int):
+                    if d < 0 or d > 9:
+                        raise ValueError(f"digit seed out of range: {d}")
+                    normalized.append(str(d))
+                else:
+                    ch = str(d)
+                    if len(ch) != 1 or not ch.isalnum():
+                        raise ValueError(f"invalid PIN char seed: {d!r}")
+                    normalized.append(ch)
+            self.digits = normalized
+            if len(self.digits) < PIN_MIN_LEN or len(self.digits) > self.max_len:
+                raise ValueError(
+                    f"digits seed length must be {PIN_MIN_LEN}..{self.max_len}, "
+                    f"got {len(self.digits)}"
+                )
+            self.length = len(self.digits)
         self.cursor = max(0, min(self.cursor, self.length - 1))
+
+    # -- helpers ------------------------------------------------------
+
+    def typed_text(self) -> str:
+        """Full PIN string with empty slots as ``_`` (preview source of truth)."""
+        return "".join("_" if c is None else c for c in self.digits)
+
+    def pin_value(self) -> str | None:
+        """Entered PIN if every cell is filled, else ``None``."""
+        if any(c is None for c in self.digits):
+            return None
+        return "".join(self.digits)  # type: ignore[arg-type]
+
+    def is_complete(self) -> bool:
+        return (
+            len(self.digits) >= PIN_MIN_LEN
+            and all(c is not None for c in self.digits)
+        )
+
+    def _glyph_set(self) -> tuple[str, ...]:
+        return _glyphs(upper=self.upper)
 
     # -- input handling -----------------------------------------------
 
@@ -119,19 +171,14 @@ class PinEntryScreen:
             self._move_cursor(-1)
         elif b == Button.RIGHT and k in (EventKind.PRESS, EventKind.REPEAT):
             self._move_cursor(+1)
-        elif b == Button.A and k == EventKind.PRESS:
-            self._confirm_or_advance()
         elif b == Button.SELECT and k == EventKind.PRESS:
+            self._toggle_case()
+        elif b == Button.A and k == EventKind.PRESS:
             self._confirm_or_advance()
         elif b == Button.B and k == EventKind.PRESS:
             self._backspace()
 
     def _should_cycle(self, kind: EventKind, at_ms: int) -> bool:
-        """Decide whether an UP/DOWN event should advance the current digit.
-
-        Always honours ``PRESS``; throttles ``REPEAT`` to the configured
-        digit cadence so held-joystick scrolling is controllable.
-        """
         if kind == EventKind.PRESS:
             return True
         if kind != EventKind.REPEAT:
@@ -139,19 +186,47 @@ class PinEntryScreen:
         return at_ms - self._last_cycle_at_ms >= _DIGIT_REPEAT_THROTTLE_MS
 
     def _cycle(self, delta: int) -> None:
+        glyphs = self._glyph_set()
         cur = self.digits[self.cursor]
-        new = 0 if cur is None else (cur + delta) % 10
-        self.digits[self.cursor] = new
+        if cur is None:
+            # First press lands on '0' for both UP and DOWN (classic feel).
+            self.digits[self.cursor] = glyphs[0]
+            return
+        # Map current char into the active glyph set (case-normalized).
+        key = cur.upper() if cur.isalpha() and self.upper else (
+            cur.lower() if cur.isalpha() and not self.upper else cur
+        )
+        if key not in glyphs:
+            # Digit while viewing letters set, etc. — snap to first glyph.
+            self.digits[self.cursor] = glyphs[0]
+            return
+        i = (glyphs.index(key) + delta) % len(glyphs)
+        self.digits[self.cursor] = glyphs[i]
+
+    def _toggle_case(self) -> None:
+        self.upper = not self.upper
+        cur = self.digits[self.cursor]
+        if cur is not None and cur.isalpha():
+            self.digits[self.cursor] = cur.upper() if self.upper else cur.lower()
 
     def _move_cursor(self, delta: int) -> None:
-        self.cursor = max(0, min(self.cursor + delta, self.length - 1))
+        new = self.cursor + delta
+        if new < 0:
+            return
+        if new >= self.length:
+            # Grow: RIGHT on the last cell appends an empty slot.
+            if delta > 0 and self.cursor == self.length - 1 and self.length < self.max_len:
+                self.digits.append(None)
+                self.length = len(self.digits)
+                self.cursor = self.length - 1
+            return
+        self.cursor = new
 
     def _confirm_or_advance(self) -> None:
-        if all(d is not None for d in self.digits):
+        if self.is_complete():
             self.done = True
-            self.result = "".join(str(d) for d in self.digits)
+            self.result = self.pin_value()
             return
-        # Otherwise jump to the next empty slot.
         for i in range(self.cursor + 1, self.length):
             if self.digits[i] is None:
                 self.cursor = i
@@ -162,33 +237,37 @@ class PinEntryScreen:
                 return
 
     def _backspace(self) -> None:
+        if self.length > PIN_MIN_LEN:
+            # Shrink: remove the current cell, floor at PIN_MIN_LEN.
+            del self.digits[self.cursor]
+            self.length = len(self.digits)
+            if self.cursor >= self.length:
+                self.cursor = self.length - 1
+            return
+        # At minimum length: clear in place (classic behaviour).
         if self.digits[self.cursor] is not None:
             self.digits[self.cursor] = None
         elif self.cursor > 0:
             self.cursor -= 1
             self.digits[self.cursor] = None
 
-    # -- introspection (for tests / composition) ----------------------
-
-    def is_complete(self) -> bool:
-        return all(d is not None for d in self.digits)
-
     def reset(self, *, keep_cursor: bool = False) -> None:
-        self.digits = [None] * self.length
+        self.digits = [None] * PIN_MIN_LEN
+        self.length = PIN_MIN_LEN
         if not keep_cursor:
             self.cursor = 0
+        else:
+            self.cursor = min(self.cursor, self.length - 1)
         self.done = False
         self.result = None
-        # Treat the next UP/DOWN as the first one again so the throttle
-        # doesn't reject an immediate re-entry attempt after a reset.
+        self.upper = False
         self._last_cycle_at_ms = -(10**9)
 
     # -- rendering ----------------------------------------------------
 
     def draw(self, fb: FrameBuffer) -> None:
         fb.clear(COLOR_BG)
-        # Title bar.
-        title_h = 30
+        title_h = 28
         fb.draw.rectangle((0, 0, DISPLAY_WIDTH, title_h), fill=(20, 20, 32))
         draw_text(
             fb,
@@ -200,8 +279,7 @@ class PinEntryScreen:
             anchor="mm",
         )
 
-        # Subtitle / helper lines under the title bar.
-        y_meta = title_h + 12
+        y_meta = title_h + 10
         if self.subtitle_alert:
             draw_text(
                 fb,
@@ -212,35 +290,61 @@ class PinEntryScreen:
                 color=COLOR_DANGER,
                 anchor="mm",
             )
-            y_meta += 16
+            y_meta += 14
+        meta_bits = []
         if self.subtitle:
-            draw_text(
-                fb,
-                DISPLAY_WIDTH // 2,
-                y_meta,
-                self.subtitle,
-                size=11,
-                color=self.subtitle_color,
-                anchor="mm",
-            )
-
-        # Center the row of digit cells horizontally and vertically.
-        row_width = (
-            self.length * _CELL_WIDTH + max(0, self.length - 1) * _CELL_GAP
+            meta_bits.append(self.subtitle)
+        case_hint = "ABC" if self.upper else "abc"
+        meta_bits.append(f"{self.length}/{self.max_len}  {case_hint}")
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            y_meta,
+            "  ·  ".join(meta_bits),
+            size=10,
+            color=self.subtitle_color if self.subtitle else COLOR_DIM,
+            anchor="mm",
         )
-        x0 = (DISPLAY_WIDTH - row_width) // 2
-        y0 = (DISPLAY_HEIGHT - _CELL_HEIGHT) // 2 + 4
 
-        for i in range(self.length):
-            cell_x = x0 + i * (_CELL_WIDTH + _CELL_GAP)
-            self._draw_cell(fb, i, cell_x, y0)
+        # ---- cell row (windowed when long) ---------------------------------
+        n = self.length
+        row_width = n * _CELL_WIDTH + max(0, n - 1) * _CELL_GAP
+        max_row = DISPLAY_WIDTH - 8
+        y0 = 78
+        if row_width <= max_row:
+            visible = list(range(n))
+            x0 = (DISPLAY_WIDTH - row_width) // 2
+        else:
+            visible, x0 = self._visible_window(max_row)
 
-        # Footer hints.
+        x = x0
+        for i in visible:
+            self._draw_cell(fb, i, x, y0)
+            x += _CELL_WIDTH + _CELL_GAP
+
+        # ---- preview (full PIN, empty as _) --------------------------------
+        preview = self.typed_text()
+        if self.masked:
+            preview = "".join("*" if c != "_" else "_" for c in preview)
+        pv = preview
+        if len(pv) > 34:
+            # Keep ends visible for long PINs.
+            pv = pv[:15] + "…" + pv[-15:]
+        draw_text(
+            fb,
+            DISPLAY_WIDTH // 2,
+            148,
+            pv,
+            size=12,
+            color=COLOR_OK if self.is_complete() else COLOR_DIM,
+            anchor="mm",
+        )
+
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
             DISPLAY_HEIGHT - 30,
-            "UP/DOWN digit   L/R cell",
+            "UP/DWN char  L/R cell  ● case",
             size=10,
             color=COLOR_DIM,
             anchor="mm",
@@ -248,12 +352,35 @@ class PinEntryScreen:
         draw_text(
             fb,
             DISPLAY_WIDTH // 2,
-            DISPLAY_HEIGHT - 16,
-            "A confirm   B clear digit",
+            DISPLAY_HEIGHT - 14,
+            "A confirm   B backspace",
             size=10,
             color=COLOR_DIM,
             anchor="mm",
         )
+
+    def _visible_window(self, max_row: int) -> tuple[list[int], int]:
+        """Indices + start_x so the cursor cell stays on-screen."""
+        n = self.length
+        cur = self.cursor
+        first = cur
+        last = cur
+
+        def width(lo: int, hi: int) -> int:
+            count = hi - lo + 1
+            return count * _CELL_WIDTH + max(0, count - 1) * _CELL_GAP
+
+        while True:
+            grew = False
+            if last + 1 < n and width(first, last + 1) <= max_row:
+                last += 1
+                grew = True
+            if first - 1 >= 0 and width(first - 1, last) <= max_row:
+                first -= 1
+                grew = True
+            if not grew:
+                break
+        return list(range(first, last + 1)), 4
 
     def _draw_cell(self, fb: FrameBuffer, idx: int, x: int, y: int) -> None:
         is_cursor = idx == self.cursor
@@ -265,22 +392,23 @@ class PinEntryScreen:
             outline=outline,
             width=2,
         )
-        digit = self.digits[idx]
-        if digit is None:
+        ch = self.digits[idx]
+        if ch is None:
             glyph = "_"
             color = COLOR_DIM
         elif self.masked and not is_cursor:
             glyph = "*"
             color = COLOR_FG
         else:
-            glyph = str(digit)
+            glyph = ch
             color = COLOR_FG if not is_cursor else COLOR_ACCENT
+        size = 18 if (ch is not None and ch.isalpha()) else 22
         draw_text(
             fb,
             x + _CELL_WIDTH // 2,
             y + _CELL_HEIGHT // 2,
             glyph,
-            size=22,
+            size=size,
             color=color,
             anchor="mm",
         )

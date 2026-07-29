@@ -240,7 +240,8 @@ see this screen again unless the disclaimer version changes.
 
 You'll see **First setup** with two choices:
 
-- **New vault (set PIN)** &mdash; choose and confirm a **6-digit** vault
+- **New vault (set PIN)** &mdash; choose and confirm a vault PIN
+  (**6–16** letters/digits; 6-digit numeric PINs still work)
   PIN. Use the joystick to scroll digits, **A** to confirm each digit,
   **B** to delete. The PIN protects the encrypted vault on disk.
 - **Restore from USB** &mdash; import a backup stick if you're

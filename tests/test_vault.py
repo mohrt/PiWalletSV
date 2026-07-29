@@ -60,11 +60,21 @@ def test_create_refuses_existing_file(vault_path: Path) -> None:
         v.create(pin=GOOD_PIN)
 
 
-@pytest.mark.parametrize("bad_pin", ["", "12345", "1234567", "abcdef", "1234ab", "12 345"])
+@pytest.mark.parametrize(
+    "bad_pin",
+    ["", "12345", "12 345", "12345678901234567", "pin!234"],
+)
 def test_create_rejects_bad_pins(vault_path: Path, bad_pin: str) -> None:
     v = vlt.Vault(vault_path)
     with pytest.raises(ValueError):
         v.create(pin=bad_pin)
+
+
+def test_create_accepts_alphanumeric_pin(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin="Ab12Cd34")
+    rec = v.add_wallet(pin="Ab12Cd34", mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
+    assert v.get_account_xpub("Ab12Cd34", rec.id).startswith("xpub")
 
 
 # ---- add / list / sign roundtrip ---------------------------------------
@@ -466,10 +476,12 @@ def test_change_pin_validates_new_pin(vault_path: Path) -> None:
     v = vlt.Vault(vault_path)
     v.create(pin=GOOD_PIN)
     v.add_wallet(pin=GOOD_PIN, mnemonic_phrase=CANONICAL_MNEMONIC, label="daily")
-    with pytest.raises(ValueError, match="PIN must be 6 digits"):
+    with pytest.raises(ValueError, match="PIN must be"):
         v.change_pin(GOOD_PIN, "12345")
-    with pytest.raises(ValueError, match="PIN must be 6 digits"):
-        v.change_pin(GOOD_PIN, "1234567")
+    with pytest.raises(ValueError, match="PIN must be"):
+        v.change_pin(GOOD_PIN, "12345678901234567")
+    with pytest.raises(ValueError, match="letters and digits"):
+        v.change_pin(GOOD_PIN, "12 456")
 
 
 def test_change_pin_no_op_when_old_equals_new(vault_path: Path) -> None:
