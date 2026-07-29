@@ -91,12 +91,26 @@ def test_backspace_at_min_length_clears_in_place() -> None:
 
 
 def test_right_on_last_cell_grows() -> None:
-    s = PinEntryScreen()
-    s.cursor = 5
+    s = PinEntryScreen(digits=["1", "2", "3", "4", "5", "6"], cursor=5)
     s.on_event(_evt(Button.RIGHT))
     assert s.length == 7
     assert s.digits[6] is None
     assert s.cursor == 6
+
+
+def test_cannot_move_horizontally_on_empty_cell() -> None:
+    s = PinEntryScreen()
+    s.on_event(_evt(Button.RIGHT))
+    assert s.cursor == 0
+    assert s.length == PIN_MIN_LEN
+    s.on_event(_evt(Button.UP))  # fill with "0"
+    s.on_event(_evt(Button.RIGHT))
+    assert s.cursor == 1
+    s.on_event(_evt(Button.LEFT))  # cell 1 still empty — blocked
+    assert s.cursor == 1
+    s.on_event(_evt(Button.UP))
+    s.on_event(_evt(Button.LEFT))
+    assert s.cursor == 0
 
 
 def test_grow_caps_at_max() -> None:

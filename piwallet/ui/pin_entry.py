@@ -19,9 +19,10 @@ Input  Effect
 ====== ======================================================
 UP     Cycle current cell forward (0-9, then a-z / A-Z).
 DOWN   Cycle current cell backward.
-LEFT   Move active cell left (clamped at 0).
-RIGHT  Move right; on the last cell, append an empty slot
-       (up to ``PIN_MAX_LEN``).
+LEFT   Move left only if the current cell is filled.
+RIGHT  Move right / grow only if the current cell is filled
+       (up to ``PIN_MAX_LEN``). Empty cells block horizontal move;
+       use B to retreat.
 SELECT Toggle upper / lower case for letter glyphs (and
        convert the current cell if it is a letter).
 A      Confirm when every cell is filled and length ≥ 6;
@@ -210,11 +211,15 @@ class PinEntryScreen:
             self.digits[self.cursor] = cur.upper() if self.upper else cur.lower()
 
     def _move_cursor(self, delta: int) -> None:
+        # Require the current cell to be filled before moving or growing.
+        # Backspace (B) is the way to retreat from an empty cell.
+        if self.digits[self.cursor] is None:
+            return
         new = self.cursor + delta
         if new < 0:
             return
         if new >= self.length:
-            # Grow: RIGHT on the last cell appends an empty slot.
+            # Grow: RIGHT on the last *filled* cell appends an empty slot.
             if delta > 0 and self.cursor == self.length - 1 and self.length < self.max_len:
                 self.digits.append(None)
                 self.length = len(self.digits)
