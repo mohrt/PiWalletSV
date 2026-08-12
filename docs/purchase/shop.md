@@ -31,11 +31,13 @@ card or BSV.
     <option value="IT">Italy</option>
     <option value="JP">Japan</option>
     <option value="LU">Luxembourg</option>
+    <option value="MY">Malaysia</option>
     <option value="NL">Netherlands</option>
     <option value="NZ">New Zealand</option>
     <option value="NO">Norway</option>
     <option value="PL">Poland</option>
     <option value="PT">Portugal</option>
+    <option value="SG">Singapore</option>
     <option value="ES">Spain</option>
     <option value="SE">Sweden</option>
     <option value="CH">Switzerland</option>
