@@ -491,15 +491,120 @@
         order.shippo_transaction_id ||
         order.easyship_shipment_id ||
         "";
+      const canRebuyLabel =
+        (order.status === "shipped" || (order.status === "fulfilled" && labelReady)) &&
+        !!(
+          labelReady ||
+          order.shippo_transaction_id ||
+          order.easyship_shipment_id ||
+          order.label_shipment_id
+        );
+
+      if (canRebuyLabel) {
+        const rebuyBtn = btn("Re-buy label", false);
+        rebuyBtn.title =
+          "Clear the prior label, then pick a new Shippo rate for this order";
+        rebuyBtn.addEventListener("click", function () {
+          clearPanels(container);
+          const panel = el("div", "piwalletsv-operator-panel");
+          panel.appendChild(
+            el(
+              "p",
+              "piwalletsv-operator-panel-copy",
+              "Prepares this order for a new label (does not purchase yet). Prior label IDs go to Order history. Next you will pick a shipping rate, then buy."
+            )
+          );
+          const stockWrap = el("label", "piwalletsv-operator-field");
+          const stockCheck = document.createElement("input");
+          stockCheck.type = "checkbox";
+          stockCheck.checked = true;
+          stockCheck.id = "rebuy-deduct-stock-" + order.order_id;
+          const stockText = el(
+            "span",
+            "piwalletsv-operator-label",
+            "Also deduct stock (another unit for tracked SKUs)"
+          );
+          stockWrap.appendChild(stockCheck);
+          stockWrap.appendChild(stockText);
+          panel.appendChild(stockWrap);
+          const row = el("div", "piwalletsv-operator-panel-actions");
+          const confirm = btn("Prepare & show rates", true);
+          const back = btn("Back", false);
+          confirm.addEventListener("click", function () {
+            confirm.disabled = true;
+            back.disabled = true;
+            api(
+              "POST",
+              "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/rebuy-label",
+              { deduct_inventory: !!stockCheck.checked }
+            )
+              .then(function () {
+                try {
+                  sessionStorage.setItem("piwalletsv_rebuy_rates", order.order_id);
+                } catch (e) {
+                  /* ignore */
+                }
+                return refresh();
+              })
+              .catch(function (e) {
+                setActionError(container, e.message || String(e));
+                confirm.disabled = false;
+                back.disabled = false;
+              });
+          });
+          back.addEventListener("click", function () {
+            clearPanels(container);
+          });
+          row.appendChild(confirm);
+          row.appendChild(back);
+          panel.appendChild(row);
+          container.appendChild(panel);
+        });
+        container.appendChild(rebuyBtn);
+      }
 
       if ((order.status === "paid" || order.status === "fulfilled") && !labelReady) {
         const ratesPanel = el("div", "piwalletsv-operator-rates");
         ratesPanel.hidden = true;
         let selectedRateId = "";
+        let ratesLoaded = false;
+        let requireRateSelection = false;
+        try {
+          requireRateSelection =
+            sessionStorage.getItem("piwalletsv_rebuy_rates") === order.order_id;
+        } catch (e) {
+          requireRateSelection = false;
+        }
 
-        const ratesBtn = btn("Get shipping rates", false);
-        const buyBtn = btn("Buy label", true);
-        buyBtn.title = "Buy cheapest rate under the label cap (or the rate you selected)";
+        const ratesBtn = btn("Get shipping rates", !requireRateSelection);
+        const buyBtn = btn(
+          requireRateSelection ? "Select a rate first" : "Buy label",
+          requireRateSelection
+        );
+        buyBtn.title = requireRateSelection
+          ? "Select a rate below, then buy that label"
+          : "Buy cheapest rate under the label cap (or the rate you selected)";
+        if (requireRateSelection) {
+          buyBtn.disabled = true;
+        }
+
+        function syncBuyButton() {
+          if (requireRateSelection || ratesLoaded) {
+            if (!selectedRateId) {
+              buyBtn.disabled = true;
+              buyBtn.textContent = "Select a rate first";
+              buyBtn.className = "piwalletsv-operator-btn";
+              return;
+            }
+            buyBtn.disabled = false;
+            buyBtn.textContent = "Buy selected label";
+            buyBtn.className = "piwalletsv-operator-btn piwalletsv-operator-btn--primary";
+            return;
+          }
+          buyBtn.disabled = false;
+          buyBtn.textContent = "Buy label";
+          buyBtn.className = "piwalletsv-operator-btn piwalletsv-operator-btn--primary";
+        }
 
         function formatRateAmount(amount, currency) {
           if (amount == null || isNaN(Number(amount))) {
@@ -515,7 +620,9 @@
         function renderRates(quote) {
           ratesPanel.innerHTML = "";
           ratesPanel.hidden = false;
+          ratesLoaded = true;
           selectedRateId = "";
+          syncBuyButton();
 
           const charged = order.shipping_cents;
           const chargedLabel = order.shipping_label || "Shipping charged";
@@ -529,7 +636,7 @@
                   (chargedLabel ? " (" + chargedLabel + ")" : "") +
                   ". Cap $" +
                   Number(quote.label_max_amount_usd || 25).toFixed(2) +
-                  "."
+                  ". Select a rate, then Buy selected label."
               )
             );
           } else {
@@ -539,7 +646,7 @@
                 "piwalletsv-operator-rates-note",
                 "Label purchase cap $" +
                   Number(quote.label_max_amount_usd || 25).toFixed(2) +
-                  ". Select a rate or Buy label for cheapest under cap."
+                  ". Select a rate, then Buy selected label."
               )
             );
           }
@@ -562,7 +669,7 @@
             radio.addEventListener("change", function () {
               if (radio.checked) {
                 selectedRateId = radio.value;
-                buyBtn.textContent = "Buy selected label";
+                syncBuyButton();
               }
             });
             const text = el(
@@ -581,10 +688,10 @@
           ratesPanel.appendChild(list);
         }
 
-        ratesBtn.addEventListener("click", function () {
+        function loadRates() {
           clearPanels(container);
           setBusy(ratesBtn, true);
-          api(
+          return api(
             "GET",
             "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/label-rates"
           )
@@ -597,9 +704,17 @@
             .finally(function () {
               setBusy(ratesBtn, false);
             });
+        }
+
+        ratesBtn.addEventListener("click", function () {
+          loadRates();
         });
 
         buyBtn.addEventListener("click", function () {
+          if ((requireRateSelection || ratesLoaded) && !selectedRateId) {
+            setActionError(container, "Select a shipping rate before buying the label.");
+            return;
+          }
           clearPanels(container);
           setBusy(buyBtn, true);
           const body = selectedRateId ? { rate_object_id: selectedRateId } : {};
@@ -608,7 +723,14 @@
             "/v1/admin/orders/" + encodeURIComponent(order.order_id) + "/fulfill",
             body
           )
-            .then(refresh)
+            .then(function () {
+              try {
+                sessionStorage.removeItem("piwalletsv_rebuy_rates");
+              } catch (e) {
+                /* ignore */
+              }
+              return refresh();
+            })
             .catch(function (e) {
               setActionError(container, e.message || String(e));
               setBusy(buyBtn, false);
@@ -618,6 +740,10 @@
         container.appendChild(ratesBtn);
         container.appendChild(buyBtn);
         container.appendChild(ratesPanel);
+
+        if (requireRateSelection) {
+          loadRates();
+        }
       }
 
       if (labelReady && labelShipmentId) {

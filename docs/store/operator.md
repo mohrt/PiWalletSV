@@ -11,4 +11,4 @@
   </div>
 </div>
 
-<script src="/assets/store-operator.js?v=terminal-actions-fix"></script>
+<script src="/assets/store-operator.js?v=rebuy-rates"></script>
