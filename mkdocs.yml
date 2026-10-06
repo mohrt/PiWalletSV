@@ -164,6 +164,7 @@ nav:
       - User manual: user-manual.md
       - Tutorials: tutorials.md
       - Recover without device: recover-without-device.md
+  - PiWallet Pay: https://piwalletpay.com
   - Operations:
       - Build & deploy: build.md
       - Operate: operate.md

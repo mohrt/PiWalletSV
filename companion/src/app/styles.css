@@ -111,7 +111,6 @@ a:hover {
   font-weight: 700;
   letter-spacing: 0.08em;
   vertical-align: middle;
-  text-transform: uppercase;
 }
 
 .page-header nav a {
@@ -1216,7 +1215,6 @@ body.terms-locked {
   font-weight: 700;
   letter-spacing: 0.08em;
   vertical-align: middle;
-  text-transform: uppercase;
 }
 
 /* =========================================================================

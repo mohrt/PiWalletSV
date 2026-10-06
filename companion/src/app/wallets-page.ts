@@ -248,7 +248,7 @@ export function mountWalletsPage(root: HTMLElement): () => void {
 
       const netBadge = wd.network === "test"
         ? `<span class="testnet-badge" title="BSV testnet">testnet</span>`
-        : `<span class="mainnet-badge" title="BSV mainnet">MAINNET</span>`;
+        : `<span class="mainnet-badge" title="BSV mainnet">mainnet</span>`;
 
       const balanceHtml = w.lastScan
         ? (() => {
