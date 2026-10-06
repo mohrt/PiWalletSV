@@ -38,6 +38,8 @@ export interface CameraScannerOptions {
   hideOnAccept?: boolean;
   onAccept: (validation: Extract<ScanValidation, { ok: true }>) => void;
   onStopped?: () => void;
+  /** A non-PW1 QR (PW1 workflows only). Return true to take it and stop scanning. */
+  onOtherQr?: (text: string) => boolean;
 }
 
 export interface CameraScannerHandle {
@@ -229,6 +231,14 @@ export function mountCameraScanner(
           onPw1Error: (msg) => {
             setStatus(`pw1 error: ${msg} (assembler reset)`, true);
           },
+          onOtherQr: options.onOtherQr
+            ? (text) => {
+                if (!options.onOtherQr!(text)) return false;
+                pw1Handle = null;
+                completeScan();
+                return true;
+              }
+            : undefined,
         },
       );
       return;

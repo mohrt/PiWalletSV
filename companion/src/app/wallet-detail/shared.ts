@@ -1,3 +1,5 @@
+import type { WalletPasskey } from "../../lib/wallets.js";
+
 export const RECENT_WINDOW = 8;
 export const SATS_PER_BSV = 100_000_000;
 export const RECEIVE_QR_SIZE_DEFAULT = 240;
@@ -53,6 +55,23 @@ export function shortXpub(xpub: string): string {
 export function shortAddress(addr: string): string {
   if (addr.length <= 20) return addr;
   return `${addr.slice(0, 10)}…${addr.slice(-6)}`;
+}
+
+export function passkeyListHtml(passkeys: WalletPasskey[]): string {
+  if (!passkeys.length) return `<li class="muted-line">No sites connected yet.</li>`;
+  const day = (iso: string): string => new Date(iso).toLocaleDateString();
+  return passkeys
+    .map(
+      (p) => `<li>
+        <span class="passkey-name">${escapeHtml(p.name)}</span>
+        <span class="muted-line">${escapeHtml(p.appOrigin)} · added ${escapeHtml(day(p.createdAt))}${p.lastUsedAt ? ` · last used ${escapeHtml(day(p.lastUsedAt))}` : ""}</span>
+        <span class="actions">
+          <button type="button" data-passkey-rename="${escapeHtml(p.credentialId)}">Rename</button>
+          <button type="button" class="danger-outline" data-passkey-remove="${escapeHtml(p.credentialId)}">Remove</button>
+        </span>
+      </li>`,
+    )
+    .join("");
 }
 
 export function wrapHex(hex: string, width: number): string {

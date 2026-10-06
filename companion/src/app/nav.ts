@@ -17,7 +17,7 @@
  */
 import { DOCS_BASE_URL } from "../lib/config.js";
 
-export type ActivePage = "wallets" | "settings";
+export type ActivePage = "wallets" | "scan" | "settings";
 
 /**
  * Render the header `<header class="page-header">…</header>` block.
@@ -46,6 +46,7 @@ export function renderHeader(
       </div>
       <nav aria-label="Main">
         ${navLink("wallets", "#/wallets", "Wallets")}
+        ${navLink("scan", "#/scan", "Scan")}
         ${navLink("settings", "#/settings", "Settings")}
         <a href="${DOCS_BASE_URL}/" class="ext"
            target="_blank" rel="noopener noreferrer"

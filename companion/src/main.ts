@@ -1,10 +1,13 @@
 import "./app/styles.css";
+import { mountNoWalletsHere, mountPassPage } from "./app/pass-page.js";
 import { mountScannerPage } from "./app/scanner.js";
 import { mountSettingsPage } from "./app/settings-page.js";
 import { ensureTermsAccepted } from "./app/terms-modal.js";
 import { mountWalletDetailPage } from "./app/wallet-detail.js";
 import { mountWalletsPage } from "./app/wallets-page.js";
 import { DOCS_BASE_URL } from "./lib/config.js";
+import { requestUrlFromHash } from "./lib/pass-protocol.js";
+import { listWallets } from "./lib/wallets.js";
 import { captureInstallPrompt } from "./lib/pwa-install.js";
 import { applyTheme, watchSystemTheme } from "./lib/theme.js";
 import { APP_VERSION, formatAppVersion } from "./lib/version.js";
@@ -54,7 +57,11 @@ function render(): void {
   const route = (window.location.hash || DEFAULT_ROUTE).toLowerCase();
   let mounted: Teardown;
 
-  if (route === "" || route === "#" || route === "#/" || route === "#/wallets") {
+  // Matched before lowercasing: the request URL inside is case-sensitive.
+  const passRequestUrl = requestUrlFromHash(window.location.hash);
+  if (window.location.hash.startsWith("#/pass?")) {
+    mounted = mountPassPage(app, passRequestUrl);
+  } else if (route === "" || route === "#" || route === "#/" || route === "#/wallets") {
     mounted = mountWalletsPage(app);
   } else if (route === "#/scan/tx") {
     sessionStorage.setItem(
@@ -109,9 +116,28 @@ function render(): void {
   }
 }
 
-window.addEventListener("hashchange", render);
+let started = false;
+window.addEventListener("hashchange", () => {
+  if (started) render();
+});
 window.addEventListener("beforeunload", () => {
   if (pageTeardown) pageTeardown();
 });
 
-void ensureTermsAccepted().then(render);
+async function begin(route?: string): Promise<void> {
+  await ensureTermsAccepted();
+  started = true;
+  if (route && window.location.hash !== route) {
+    window.location.hash = route;
+  } else {
+    render();
+  }
+}
+
+void (async () => {
+  if (window.location.hash.startsWith("#/pass?") && (await listWallets()).length === 0) {
+    mountNoWalletsHere(app, () => void begin("#/scan"));
+    return;
+  }
+  await begin();
+})();

@@ -19,14 +19,15 @@ import type { NetworkT } from "../lib/envelope.js";
 import {
   mountCameraScanner,
 } from "./camera-scanner.js";
+import { requestUrlFromLink } from "../lib/pass-protocol.js";
 
 export function mountScannerPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
-      ${renderHeader("Add wallet", "wallets")}
+      ${renderHeader("Scan", "scan")}
 
       <section class="card scan-card">
-        <p class="muted-line scan-card-desc">Scan xpub from the Pi or another companion wallet.</p>
+        <p class="muted-line scan-card-desc">Scan xpub from the Pi or another companion wallet, or a PiWallet Pass code from a website.</p>
         <div id="pairCameraHost" class="camera-scanner-host"></div>
       </section>
 
@@ -122,6 +123,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
     },
     onStopped: () => {
       $pairCameraHost.hidden = true;
+    },
+    onOtherQr: (text) => {
+      const requestUrl = requestUrlFromLink(text, window.location.origin);
+      if (!requestUrl) return false;
+      window.location.hash = `#/pass?rq=${encodeURIComponent(requestUrl)}`;
+      return true;
     },
   });
 

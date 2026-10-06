@@ -6,7 +6,7 @@ import {
   getDefaultFeeTier,
   getFiatCurrency,
 } from "../settings-page.js";
-import { escapeHtml, shortXpub } from "./shared.js";
+import { escapeHtml, passkeyListHtml, shortXpub } from "./shared.js";
 import type { DisplayUnit, Tab, WalletDetailWallet } from "./types.js";
 
 export function renderWalletDetailShell(
@@ -435,6 +435,20 @@ export function renderWalletDetailShell(
                 To move all wallets and companion settings to another device, use
                 <a href="#/settings">Backup &amp; migration</a> in Settings.
               </p>
+            </div>
+          </details>
+
+          <details class="backup-fold advanced-fold" id="advancedFoldPasskeys"${wallet.passkeys?.length ? " open" : ""}>
+            <summary>PiWallet Pass passkeys</summary>
+            <div class="backup-fold-body">
+              <p class="muted-line">
+                Sites this wallet signs in to with PiWallet Pass. A site adds
+                one when you connect it; scan its code from
+                <a href="#/scan">Scan</a>. Removing one here does not remove it
+                from the site or your phone's passkeys.
+              </p>
+              <ul class="passkey-list" id="passkeyList">${passkeyListHtml(wallet.passkeys ?? [])}</ul>
+              <p id="passkeyStatus" class="muted-line"></p>
             </div>
           </details>
 
