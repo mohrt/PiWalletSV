@@ -13,7 +13,7 @@ tests, but only the round-trip on real hardware can prove that:
   Pi camera (xpub envelope round-trip including the new `net` field).
 - The companion's per-wallet WoC base URL actually points at testnet
   WhatsOnChain when the wallet was created with `network=test`.
-- The "TESTNET" badge fires consistently in three places (wallets list
+- The "testnet" badge fires consistently in three places (wallets list
   row, wallet detail header, scan page pair card).
 - A testnet P2PKH receive address scans, accepts faucet TBSV, and the
   resulting UTXO appears in the companion within a sane number of
@@ -100,8 +100,7 @@ From the wallet list:
 Drill into the wallet (`A`) and pick **Wallet info**. The screen
 must show:
 
-- `Network: TESTNET` (capitalised — that's the operator-readable
-  shout-out for the no-real-money case).
+- `Network: testnet`
 - `HD path: m/44'/236'/0'`
 - A 4-byte fingerprint and a creation date.
 
@@ -125,13 +124,13 @@ On the phone:
     - Wallet label (`wallet-1`).
     - Fingerprint (first 4 bytes hex).
     - HD path (`m/44'/236'/0'`).
-    - **`TESTNET` badge** rendered in red/orange next to the label.
+    - **`testnet` badge** rendered in red/orange next to the label.
 4. Tap **Pair this wallet**. The companion writes a record to
    IndexedDB and bounces you back to the Wallets tab.
-5. The Wallets list now shows `wallet-1` with a `TESTNET` badge
+5. The Wallets list now shows `wallet-1` with a `testnet` badge
    beside the label.
 
-If the **TESTNET badge is missing**, the round-trip failed silently:
+If the **testnet badge is missing**, the round-trip failed silently:
 either the bonnet didn't include `net: "test"` in the envelope, or
 the companion's `parseXpub` defaulted it back to `"main"`. Check the
 bonnet's pairing payload by re-running with `PIWALLET_LOG_LEVEL=DEBUG`
@@ -141,7 +140,7 @@ and grepping the journal.
 
 Tap the wallet row to open the detail page. The header should show:
 
-- `wallet-1` with the TESTNET badge.
+- `wallet-1` with the testnet badge.
 - `BSV testnet` in the metadata line (compare with the wording for a
   mainnet wallet — it should read `BSV mainnet` there).
 
@@ -239,7 +238,7 @@ If something looks off:
   `piwallet/bonnet/network_chooser.py`.
 - Wallet info "Network" row formatting: edit
   `piwallet/bonnet/wallet_info.py::WalletInfoScreen._format_network`.
-- Companion TESTNET badge styling: `companion/src/app/styles.css`
+- Companion testnet badge styling: `companion/src/app/styles.css`
   → `.testnet-badge`.
 - Per-wallet WoC base URL selection: `companion/src/lib/woc.ts`
   → `wocBaseForNetwork`.

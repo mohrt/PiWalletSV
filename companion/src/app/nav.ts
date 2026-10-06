@@ -24,7 +24,7 @@ export type ActivePage = "wallets" | "scan" | "settings";
  *
  * @param title       page title shown next to the brand suffix
  * @param active      which top-nav item to mark as `class="active"`
- * @param titleSuffix optional inline-HTML extra (e.g. a TESTNET badge);
+ * @param titleSuffix optional inline-HTML extra (e.g. a testnet badge);
  *                    rendered inside the `<h1>` after the title
  */
 export function renderHeader(

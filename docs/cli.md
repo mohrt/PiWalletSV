@@ -201,9 +201,7 @@ Where:
 - `<fp>` — BIP32 fingerprint, 4 bytes hex (8 chars).
 - `<label>` — human label as supplied to `vault add` / `rename`.
 - `<hd_path>` — derivation path, e.g. `m/44'/236'/0'`.
-- `<network>` — rendered as **`mainnet`** or **`TESTNET`** (caps for
-  emphasis so a testnet wallet can't be missed in a mixed-network
-  listing).
+- `<network>` — rendered as **`mainnet`** or **`testnet`**.
 - `<words>` — `12 words`, `24 words`, etc.
 - `<created_at>` — ISO 8601 timestamp.
 
@@ -211,7 +209,7 @@ Where:
 `no vault at <path>` and exits clean — making this safe to use as a
 "does it exist?" probe in shell scripts).
 
-**Scripting tip:** parse with `cut -f 1` for ids, `awk '$5=="TESTNET"'`
+**Scripting tip:** parse with `cut -f 1` for ids, `awk '$5=="testnet"'`
 to filter testnet wallets, etc.
 
 ---

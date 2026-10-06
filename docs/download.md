@@ -79,7 +79,7 @@ Once the image is verified and flashed:
   [GitHub Releases](https://github.com/mohrt/PiWalletSV/releases) —
   [User manual § Verify your SD card](user-manual.md#verify-sd-card-on-arrival).
 - Follow [Flash and first run](build-image.md) for disclaimer, vault PIN,
-  wallet creation, airgap check, and a TESTNET smoke test.
+  wallet creation, airgap check, and a testnet smoke test.
 - Routine use: [User manual](user-manual.md) ([USB backup](user-manual.md#usb-backup),
   [Upgrade your device](user-manual.md#upgrade-your-device),
   [Airgap status](user-manual.md#airgap-status)).

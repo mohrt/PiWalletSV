@@ -16,7 +16,7 @@ export function renderWalletDetailShell(
 ): string {
   const netBadge =
     wallet.network === "test"
-      ? ' <span class="testnet-badge" title="This wallet is on BSV testnet (TBSV).">TESTNET</span>'
+      ? ' <span class="testnet-badge" title="This wallet is on BSV testnet (TBSV).">testnet</span>'
       : "";
 
   const tabBtn = (tab: Tab, label: string): string => {

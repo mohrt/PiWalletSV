@@ -483,7 +483,7 @@ re-install from the site); only the Pi device follows the steps below.
 | 2 | Download and verify the new image |
 | 3 | Re-flash the microSD (full wipe) |
 | 4 | Restore from USB, mnemonic, or vault file |
-| 5 | Accept disclaimer, re-verify airgap, TESTNET smoke test |
+| 5 | Accept disclaimer, re-verify airgap, testnet smoke test |
 
 ### Step 1 — Back up before you flash
 
@@ -637,7 +637,7 @@ it is still sealed:
 1. **Press B** → **Settings** → **Maintenance** → **Airgap status** → **A**. Every row
    should read `OK` and the header should say **Air-gapped**. See
    [§14 Airgap status](#airgap-status) if anything shows `!!`.
-2. Run a **TESTNET** send round-trip ([Flash and first run § Step 9](build-image.md#step-9-sign-your-first-transaction))
+2. Run a **testnet** send round-trip ([Flash and first run § Step 9](build-image.md#step-9-sign-your-first-transaction))
    before returning to mainnet amounts.
 
 ### Companion app after a Pi upgrade
