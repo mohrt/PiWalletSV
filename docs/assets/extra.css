@@ -296,6 +296,18 @@
   outline-offset: 1px;
 }
 
+.piwalletsv-store-ship-country--needed select,
+.piwalletsv-store-ship-country--needed select:focus {
+  border-color: var(--md-code-hl-error-color, #cf6679);
+  outline: 2px solid color-mix(in srgb, var(--md-code-hl-error-color, #cf6679) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.piwalletsv-store-ship-note {
+  color: var(--md-code-hl-error-color, #cf6679);
+  font-weight: 600;
+}
+
 .piwalletsv-store-ship-country select option[disabled] {
   color: var(--md-default-fg-color--light);
 }

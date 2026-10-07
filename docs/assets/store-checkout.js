@@ -80,21 +80,48 @@
     return country === "US" ? "US" : "international";
   }
 
+  // Buttons stay clickable without a country so the click can point the
+  // buyer at the ship-to picker; only out-of-stock buttons are disabled.
   function applyCheckoutEnabled() {
-    const countryOk = selectedShipCountry() !== null;
     document.querySelectorAll("[data-store-checkout]").forEach(function (btn) {
       if (btn.classList.contains("piwalletsv-store-oos")) {
         return;
       }
-      btn.disabled = !countryOk;
-      if (countryOk) {
-        btn.removeAttribute("aria-disabled");
-        btn.removeAttribute("title");
-      } else {
-        btn.setAttribute("aria-disabled", "true");
-        btn.title = "Select where to ship first";
-      }
+      btn.disabled = false;
+      btn.removeAttribute("aria-disabled");
+      btn.removeAttribute("title");
     });
+  }
+
+  function promptShipCountry() {
+    const select = document.querySelector("[data-store-ship-country]");
+    if (!select) {
+      return;
+    }
+    const box = select.closest(".piwalletsv-store-ship-country") || select;
+    box.classList.add("piwalletsv-store-ship-country--needed");
+    let note = box.querySelector(".piwalletsv-store-ship-note");
+    if (!note) {
+      note = document.createElement("span");
+      note.className = "piwalletsv-store-ship-note";
+      note.setAttribute("role", "alert");
+      box.appendChild(note);
+    }
+    note.textContent = "Choose where to ship first.";
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+    select.focus({ preventScroll: true });
+  }
+
+  function clearShipCountryPrompt() {
+    const box = document.querySelector(".piwalletsv-store-ship-country--needed");
+    if (!box) {
+      return;
+    }
+    box.classList.remove("piwalletsv-store-ship-country--needed");
+    const note = box.querySelector(".piwalletsv-store-ship-note");
+    if (note) {
+      note.remove();
+    }
   }
 
   function applyStockUi() {
@@ -184,7 +211,7 @@
 
   const countrySelect = document.querySelector("[data-store-ship-country]");
   if (countrySelect) {
-    countrySelect.addEventListener("change", applyCheckoutEnabled);
+    countrySelect.addEventListener("change", clearShipCountryPrompt);
   }
   applyCheckoutEnabled();
   loadInventory();
@@ -198,7 +225,7 @@
       }
       const country = selectedShipCountry();
       if (!country) {
-        showError(btn, "Select where to ship first.");
+        promptShipCountry();
         return;
       }
       const zone = shippingZoneForCountry(country);
