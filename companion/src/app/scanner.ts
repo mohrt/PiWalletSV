@@ -20,6 +20,7 @@ import {
   mountCameraScanner,
 } from "./camera-scanner.js";
 import { requestUrlFromLink } from "../lib/pass-protocol.js";
+import { SHOW_PIWALLET_PASS } from "../lib/config.js";
 
 export function mountScannerPage(root: HTMLElement): () => void {
   root.innerHTML = `
@@ -27,7 +28,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
       ${renderHeader("Scan", "scan")}
 
       <section class="card scan-card">
-        <p class="muted-line scan-card-desc">Scan xpub from the Pi or another companion wallet, or a PiWallet Pass code from a website.</p>
+        <p class="muted-line scan-card-desc">Scan xpub from the Pi or another companion wallet${SHOW_PIWALLET_PASS ? ", or a PiWallet Pass code from a website" : ""}.</p>
         <div id="pairCameraHost" class="camera-scanner-host"></div>
       </section>
 
@@ -125,6 +126,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
       $pairCameraHost.hidden = true;
     },
     onOtherQr: (text) => {
+      if (!SHOW_PIWALLET_PASS) return false;
       const requestUrl = requestUrlFromLink(text, window.location.origin);
       if (!requestUrl) return false;
       window.location.hash = `#/pass?rq=${encodeURIComponent(requestUrl)}`;

@@ -27,6 +27,14 @@
 export const DOCS_BASE_URL: string =
   import.meta.env.VITE_DOCS_BASE_URL ?? "https://piwalletsv.com";
 
+/**
+ * PiWallet Pass sign-in for PiWallet Pay, which has not launched yet.
+ * publish.sh sets `VITE_SHOW_PIWALLET_PASS=1` for `--env dev` only, so prod
+ * and plain `npm run build` bundles leave the Pass UI out.
+ */
+export const SHOW_PIWALLET_PASS: boolean =
+  import.meta.env.VITE_SHOW_PIWALLET_PASS === "1";
+
 /** `${DOCS_BASE_URL}/<path>` with no double slashes. */
 export function docsUrl(path = ""): string {
   const trimmed = path.replace(/^\/+/, "");
