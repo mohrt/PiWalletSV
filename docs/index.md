@@ -25,16 +25,16 @@ phone or laptop talks to the chain; the Pi just signs.
 </div>
 
 <div class="pwsv-photo-strip pwsv-photo-strip--portrait" markdown="0">
-  <img src="assets/home/piwalletpro-splash.png" alt="PiWalletSV Pro touch screen showing the boot logo" width="960" height="1440" loading="lazy">
   <img src="assets/home/piwalletpro-pin-login.png" alt="PiWalletSV Pro PIN keypad" width="960" height="1440" loading="lazy">
   <img src="assets/home/piwalletpro-wallet-list.png" alt="PiWalletSV Pro wallet list" width="960" height="1440" loading="lazy">
+  <img src="assets/home/piwalletpro-wallet-menu.png" alt="PiWalletSV Pro wallet menu" width="960" height="1440" loading="lazy">
   <img src="assets/home/piwalletpro-qr.png" alt="PiWalletSV Pro showing a receive address as a QR code" width="960" height="1440" loading="lazy">
 </div>
 
 <div class="pwsv-photo-strip" markdown="0">
   <img src="assets/home/device-home.png" alt="PiWalletSV device showing the home screen" width="360" height="270" loading="lazy">
   <img src="assets/home/device-maintenance.png" alt="PiWalletSV maintenance menu on the device" width="360" height="270" loading="lazy">
-  <img src="assets/home/device-qr.png" alt="PiWalletSV displaying a QR code for air-gap transfer" width="360" height="270" loading="lazy">
+  <img src="assets/home/piwalletpro-product.jpeg" alt="PiWalletSV Pro in its case showing the PIN keypad" width="640" height="480" loading="lazy">
   <img src="assets/home/companion-wallets.png" alt="PiWalletSV companion app wallet list" width="336" height="680" loading="lazy">
 </div>
 
