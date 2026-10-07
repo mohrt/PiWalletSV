@@ -1,5 +1,5 @@
 ---
-description: PiWallet two-repo layout, infra conventions, pilot context
+description: PiWallet repo layout, infra conventions, pilot context
 alwaysApply: true
 ---
 
@@ -8,7 +8,9 @@ alwaysApply: true
 ## Repos
 
 - **PiWallet** (this repo) — MkDocs site, store checkout UI (`docs/store/`, `docs/assets/store-*.js`). Branch `store-dev` for pilot. Status: `PILOT.md`.
-- **piwalletsv-infra** (`~/piwalletsv-infra`) — Store Lambda, Terraform, tests. Ops: `store/OPERATOR.md`, status: `PILOT.md`.
+- **piwalletsv-store** (`~/piwalletsv-store`, private) — Store Lambda, catalogs, tests. Ops: `store/OPERATOR.md`. Never copy store code into this public repo.
+- **piwalletsv-infra** (`~/piwalletsv-infra`, private) — Terraform, deploy and publish scripts; packages `../piwalletsv-store/store`. Status: `PILOT.md`.
+- **piwalletsv-pay** (`~/piwalletsv-pay`, private) — PiWallet Pay, separate from the store and site.
 
 Dev: https://dev.piwalletsv.com · API: https://store.dev.piwalletsv.com
 
