@@ -1,4 +1,4 @@
-import { DOCS_BASE_URL } from "../../lib/config.js";
+import { DOCS_BASE_URL, SHOW_PIWALLET_PASS } from "../../lib/config.js";
 import { DEFAULT_FEE_RATE_SATSKB } from "../../lib/fee.js";
 import { renderHeader } from "../nav.js";
 import {
@@ -451,7 +451,7 @@ export function renderWalletDetailShell(
             </div>
           </details>
 
-          <details class="backup-fold advanced-fold" id="advancedFoldPasskeys"${wallet.passkeys?.length ? " open" : ""}>
+          ${SHOW_PIWALLET_PASS ? `<details class="backup-fold advanced-fold" id="advancedFoldPasskeys"${wallet.passkeys?.length ? " open" : ""}>
             <summary>PiWallet Pass passkeys</summary>
             <div class="backup-fold-body">
               <p class="muted-line">
@@ -463,7 +463,7 @@ export function renderWalletDetailShell(
               <ul class="passkey-list" id="passkeyList">${passkeyListHtml(wallet.passkeys ?? [])}</ul>
               <p id="passkeyStatus" class="muted-line"></p>
             </div>
-          </details>
+          </details>` : ""}
 
           <details class="backup-fold advanced-fold" id="advancedFoldRename">
             <summary>Rename</summary>

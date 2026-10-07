@@ -122,6 +122,9 @@ plugins:
   - macros:
       on_undefined: strict
 
+hooks:
+  - mkdocs_hooks/piwallet_pay.py
+
 extra_css:
   - assets/extra.css?v=ship-prompt
 
@@ -145,6 +148,9 @@ extra:
   # store.piwalletsv.com for --env prod.
   store_api_url: !ENV [PIWALLETSV_STORE_API_URL, ""]
   store_dev_banner: !ENV [PIWALLETSV_STORE_DEV_BANNER, ""]
+  # PiWallet Pay is not launched yet. publish.sh sets PIWALLETSV_SHOW_PAY=1
+  # for --env dev only; prod and local builds leave it out.
+  show_piwallet_pay: !ENV [PIWALLETSV_SHOW_PAY, ""]
 
 nav:
   - Home: index.md
