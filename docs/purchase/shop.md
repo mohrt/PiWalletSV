@@ -126,7 +126,8 @@ Pro (3.5 inch touch screen). Choose ship-to country, then pay with card or BSV.
     <p>
       Raspberry Pi 3 Model B, Waveshare 3.5&nbsp;inch capacitive touch screen,
       OV5647 camera, factory-flashed microSD (installed), 5&nbsp;V power adapter,
-      USB cable, printed Pro case, and kit insert.
+      USB cable, printed Pro case, and kit insert, plus the extra hardware and
+      manuals that come with the Pi parts.
     </p>
     <div class="piwalletsv-store-actions">
       <button type="button" class="md-button md-button--primary" data-store-checkout="stripe" data-sku="pro-kit">
