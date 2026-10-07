@@ -32,6 +32,10 @@ The complete disclosure / reporting policy lives in the project's
   Both services see only public data: BSV addresses, transaction
   IDs, and raw transaction hex. They never see your seed, PIN,
   or private keys.
+- **If you sign in to [PiWallet Pay](https://piwalletpay.com) with the
+  companion,** it also talks to PiWallet Pay to approve the sign-in. It
+  sends no seed, PIN, private key, or xpub. See
+  [PiWallet Pay security](https://piwalletpay.com/docs/security/).
 - **Losing the browser profile is not a loss of funds.** The companion
   only holds *public* material; spending still requires the Pi (and
   ultimately your seed phrase). Prefer **Chrome** or **Firefox** on

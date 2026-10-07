@@ -83,6 +83,8 @@ DEK_LEN: int = 32  # AES-256
 SALT_LEN: int = 16
 NONCE_LEN: int = 12  # 96-bit IV per AES-GCM standard
 
+_PIN_CHECK_PLAINTEXT = b"piwallet-pin-ok"
+
 DEFAULT_PIN_THRESHOLD: int = 10
 """Per the locked plan: 10 wrong PINs triggers permanent vault wipe."""
 
@@ -215,6 +217,7 @@ class _VaultState:
     locked_until: float | None = None
     terms_accepted_at: str | None = None
     terms_version: int = 1
+    pin_check: bytes | None = None
     wallets: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -258,6 +261,8 @@ class Vault:
             raise VaultError(f"vault already exists at {self.path}")
         _validate_pin(pin)
         self._state = _VaultState()
+        kek = _derive_kek(pin, self._state.scrypt_salt)
+        self._state.pin_check = _aesgcm_encrypt(kek, _PIN_CHECK_PLAINTEXT)
         self._save()
 
     def accept_terms(self, version: int) -> None:
@@ -297,6 +302,25 @@ class Vault:
             )
             for w in self._state.wallets
         ]
+
+    def check_pin(self, pin: str) -> None:
+        """Reject a wrong PIN even when the vault has no wallets yet.
+
+        A wallet's wrapped key is the check once one exists. Before that,
+        ``create`` stores a PIN check so a later unlock cannot accept a
+        different 6-digit string.
+        """
+        if self._state is None:
+            raise VaultError("vault not initialized")
+        _validate_pin(pin)
+        if self._state.wallets:
+            self._unwrap_dek(pin, self._state.wallets[0])
+            return
+        if self._state.pin_check is None:
+            return
+        got = self._decrypt_with_pin(pin, self._state.pin_check)
+        if got != _PIN_CHECK_PLAINTEXT:
+            raise VaultError("PIN check failed")
 
     @property
     def attempts_remaining(self) -> int:
@@ -456,11 +480,12 @@ class Vault:
             return
 
         if not self._state.wallets:
-            # No ciphertext exists to verify ``old_pin`` against — same
-            # limitation as :meth:`remove_wallet` / :meth:`rename_wallet`
-            # on an empty vault. Rotate the salt anyway so the next
-            # wallet added will be wrapped under the new PIN's KEK.
-            self._state.scrypt_salt = secrets.token_bytes(SALT_LEN)
+            if self._state.pin_check is not None:
+                self._decrypt_with_pin(old_pin, self._state.pin_check)
+            new_salt = secrets.token_bytes(SALT_LEN)
+            new_kek = _derive_kek(new_pin, new_salt)
+            self._state.scrypt_salt = new_salt
+            self._state.pin_check = _aesgcm_encrypt(new_kek, _PIN_CHECK_PLAINTEXT)
             self._save()
             return
 
@@ -551,18 +576,20 @@ class Vault:
         Bumps the attempt counter pre-decrypt, decrements on success. On
         threshold breach, wipes the vault and raises `VaultWipedError`.
         """
+        return self._decrypt_with_pin(pin, wallet["wrappedDek"])
+
+    def _decrypt_with_pin(self, pin: str, blob: bytes) -> bytes:
+        """Bump the attempt counter, then decrypt ``blob`` under the PIN."""
         assert self._state is not None
-        # Pre-bump counter and persist; only decrement on success.
         self._state.pin_attempt_counter += 1
         self._save()
         if self._state.pin_attempt_counter > self._state.pin_attempt_threshold:
-            # Should not reach here normally; below we wipe on the threshold.
             self.wipe()
             raise VaultWipedError("vault wiped: too many failed PIN attempts")
 
         kek = _derive_kek(pin, self._state.scrypt_salt)
         try:
-            dek = _aesgcm_decrypt(kek, wallet["wrappedDek"])
+            plain = _aesgcm_decrypt(kek, blob)
         except Exception as exc:
             remaining = max(0, self._state.pin_attempt_threshold - self._state.pin_attempt_counter)
             if remaining == 0:
@@ -573,7 +600,7 @@ class Vault:
         # Success -> fully reset the attempt counter.
         self._state.pin_attempt_counter = 0
         self._save()
-        return dek
+        return plain
 
     def _reconstruct_xprv_str(self, payload: bytearray, wallet: dict[str, Any]) -> str:
         """Decode the decrypted ASCII payload back into a Base58Check xprv string."""
@@ -618,6 +645,7 @@ class Vault:
             locked_until=data.get("lockedUntil"),
             terms_accepted_at=data.get("termsAcceptedAt"),
             terms_version=data.get("termsVersion", 1),
+            pin_check=bytes(data["pinCheck"]) if data.get("pinCheck") else None,
             wallets=wallets,
         )
 
@@ -633,6 +661,7 @@ class Vault:
             "lockedUntil": self._state.locked_until,
             "termsAcceptedAt": self._state.terms_accepted_at,
             "termsVersion": self._state.terms_version,
+            "pinCheck": self._state.pin_check,
             "wallets": self._state.wallets,
         }
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")

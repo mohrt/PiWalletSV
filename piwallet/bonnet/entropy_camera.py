@@ -35,9 +35,13 @@ class EntropyDualStreamCamera:
         *,
         preview_settle_s: float = 0.5,
         jpeg_quality: int = 85,
+        rotation_degrees: int | None = None,
     ) -> None:
         self._preview_settle_s = preview_settle_s
         self._jpeg_quality = jpeg_quality
+        self._rotation = (
+            PIWALLET_CAMERA_ROTATION_DEG if rotation_degrees is None else rotation_degrees
+        )
         self._cam = None
         self._preview_size: tuple[int, int] | None = None
 
@@ -107,7 +111,7 @@ class EntropyDualStreamCamera:
             raw = self._cam.capture_array("main")
         except IndexError as exc:
             raise _camera_unavailable(exc) from exc
-        return rotate_rgb888(raw, PIWALLET_CAMERA_ROTATION_DEG)
+        return rotate_rgb888(raw, self._rotation)
 
     def read_lores_rgb(self):
         """Backward-compatible alias (:func:`read_preview_rgb`)."""

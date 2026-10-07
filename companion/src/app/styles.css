@@ -96,7 +96,7 @@ a:hover {
   margin-left: 0.5rem;
 }
 
-/* TESTNET indicator. Renders inline next to a wallet label or any
+/* testnet indicator. Renders inline next to a wallet label or any
    testnet-only surface so the operator can't confuse a testnet
    wallet with a real-money one at a glance. Yellow background,
    black text — high contrast on both light and dark themes. */
@@ -111,7 +111,6 @@ a:hover {
   font-weight: 700;
   letter-spacing: 0.08em;
   vertical-align: middle;
-  text-transform: uppercase;
 }
 
 .page-header nav a {
@@ -1234,7 +1233,6 @@ body.terms-locked {
   font-weight: 700;
   letter-spacing: 0.08em;
   vertical-align: middle;
-  text-transform: uppercase;
 }
 
 /* =========================================================================
@@ -2478,3 +2476,52 @@ label.button-like:hover {
   min-width: 6rem;
 }
 
+
+/* PiWallet Pass request screen and wallet passkey list. */
+.pass-origin {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  word-break: break-all;
+}
+
+.pass-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 0.9rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.pass-facts dt {
+  color: var(--muted);
+}
+
+.pass-facts dd {
+  margin: 0;
+}
+
+.pass-wallets label {
+  display: flex;
+  margin: 0.35rem 0;
+}
+
+.passkey-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+
+.passkey-list li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.passkey-list .muted-line {
+  margin: 0;
+}
+
+.passkey-name {
+  font-weight: 600;
+}

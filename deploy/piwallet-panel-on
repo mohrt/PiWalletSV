@@ -1,0 +1,29 @@
+#!/bin/sh
+# Light the Waveshare 3.5 inch LCD (F) and start it scanning.
+#
+# The panel modalias is spi:st7796s, so udev does not load panel-mipi-dbi.
+# gpio-backlight has no default-on, so the lamp stays off until something
+# writes it. With HDMI connected the console never switches to the panel,
+# and the glass stays blank even after the lamp is on.
+set -u
+
+/sbin/modprobe panel-mipi-dbi 2>/dev/null || true
+
+for b in /sys/class/backlight/*; do
+    [ -e "$b/brightness" ] || continue
+    echo 0 > "$b/bl_power" 2>/dev/null || true
+    [ -r "$b/max_brightness" ] || continue
+    cat "$b/max_brightness" > "$b/brightness" 2>/dev/null || true
+done
+
+for f in /sys/class/graphics/fb[0-9]*; do
+    [ -r "$f/name" ] || continue
+    name=$(cat "$f/name" 2>/dev/null || true)
+    case $name in
+        panel-mipi-dbi*)
+            echo 0 > "$f/blank" 2>/dev/null || true
+            ;;
+    esac
+done
+
+exit 0

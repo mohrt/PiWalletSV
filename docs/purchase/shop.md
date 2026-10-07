@@ -1,7 +1,7 @@
 # Shop
 
-Limited round-one beta kits and printed cases. Choose ship-to country, then pay with
-card or BSV.
+Limited beta kits and printed cases for the Zero (joystick, 1.3 inch screen) and the
+Pro (3.5 inch touch screen). Choose ship-to country, then pay with card or BSV.
 
 !!! warning "Before you buy"
     **Beta** software, **no warranty**. Restocking fees apply on change-of-mind
@@ -31,18 +31,20 @@ card or BSV.
     <option value="IT">Italy</option>
     <option value="JP">Japan</option>
     <option value="LU">Luxembourg</option>
+    <option value="MY">Malaysia</option>
     <option value="NL">Netherlands</option>
     <option value="NZ">New Zealand</option>
     <option value="NO">Norway</option>
     <option value="PL">Poland</option>
     <option value="PT">Portugal</option>
+    <option value="SG">Singapore</option>
     <option value="ES">Spain</option>
     <option value="SE">Sweden</option>
     <option value="CH">Switzerland</option>
   </select>
 </label>
 
-## Full kit
+## Zero kit
 
 <div class="piwalletsv-product">
   <div class="piwalletsv-product-media">
@@ -75,7 +77,7 @@ card or BSV.
   </div>
 </div>
 
-## Printed case
+## Zero printed case
 
 <div class="piwalletsv-product">
   <div class="piwalletsv-product-media">
@@ -106,6 +108,75 @@ card or BSV.
     </p>
   </div>
 </div>
+
+<section data-store-listing="pro-kit" hidden>
+<h2 id="pro-kit">Pro kit</h2>
+<div class="piwalletsv-product">
+  <div class="piwalletsv-product-media">
+    <img class="piwalletsv-product-photo"
+         src="/assets/products/pro-kit.jpg"
+         alt="Assembled PiWalletSV Pro with camera module, USB cable, and power adapter"
+         width="1024"
+         height="768"
+         loading="lazy" />
+  </div>
+  <div class="piwalletsv-product-body">
+    <p class="piwalletsv-product-price">$179.00</p>
+    <p class="piwalletsv-store-stock" data-store-stock="pro-kit" hidden></p>
+    <p>
+      Raspberry Pi 3 Model B, Waveshare 3.5&nbsp;inch capacitive touch screen,
+      OV5647 camera, factory-flashed microSD (installed), 5&nbsp;V power adapter,
+      USB cable, printed Pro case, and kit insert, plus the extra hardware and
+      manuals that come with the Pi parts.
+    </p>
+    <div class="piwalletsv-store-actions">
+      <button type="button" class="md-button md-button--primary" data-store-checkout="stripe" data-sku="pro-kit">
+        Buy with card
+      </button>
+      <button type="button" class="md-button md-button--primary" data-store-checkout="bsv" data-sku="pro-kit">
+        Buy with BSV
+      </button>
+    </div>
+    <p class="piwalletsv-store-follow" data-store-follow="pro-kit" hidden>
+      Follow <a href="https://x.com/PiWalletSV">@PiWalletSV on X</a> for restock updates.
+    </p>
+  </div>
+</div>
+</section>
+
+<section data-store-listing="pro-case" hidden>
+<h2 id="pro-printed-case">Pro printed case</h2>
+<div class="piwalletsv-product">
+  <div class="piwalletsv-product-media">
+    <img class="piwalletsv-product-photo"
+         src="/assets/products/pro-case.jpg"
+         alt="PiWalletSV Pro printed case"
+         width="1024"
+         height="768"
+         loading="lazy" />
+  </div>
+  <div class="piwalletsv-product-body">
+    <p class="piwalletsv-product-price">$39.00</p>
+    <p class="piwalletsv-store-stock" data-store-stock="pro-case" hidden></p>
+    <p>
+      One-piece printed PiWalletSV Pro case. The screen is the lid, and it uses
+      the screws that come with the screen. For builders who already have a
+      Pi 3 Model B and the Waveshare 3.5&nbsp;inch LCD (F).
+    </p>
+    <div class="piwalletsv-store-actions">
+      <button type="button" class="md-button md-button--primary" data-store-checkout="stripe" data-sku="pro-case">
+        Buy with card
+      </button>
+      <button type="button" class="md-button md-button--primary" data-store-checkout="bsv" data-sku="pro-case">
+        Buy with BSV
+      </button>
+    </div>
+    <p class="piwalletsv-store-follow" data-store-follow="pro-case" hidden>
+      Follow <a href="https://x.com/PiWalletSV">@PiWalletSV on X</a> for restock updates.
+    </p>
+  </div>
+</div>
+</section>
 
 ---
 

@@ -247,8 +247,8 @@ export function mountWalletsPage(root: HTMLElement): () => void {
       li.dataset.id = w.id;
 
       const netBadge = wd.network === "test"
-        ? `<span class="testnet-badge" title="BSV testnet">TESTNET</span>`
-        : `<span class="mainnet-badge" title="BSV mainnet">MAINNET</span>`;
+        ? `<span class="testnet-badge" title="BSV testnet">testnet</span>`
+        : `<span class="mainnet-badge" title="BSV mainnet">mainnet</span>`;
 
       const balanceHtml = w.lastScan
         ? (() => {

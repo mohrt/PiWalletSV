@@ -330,12 +330,12 @@ the bonnet for an explicit human-confirmed signature.
 
 To round-trip the full flow with no risk:
 
-1. In the companion, switch to **TESTNET** mode (Settings &rarr; Network).
-2. Send a small TESTNET amount to one of your wallet's receive
+1. In the companion, switch to **testnet** mode (Settings &rarr; Network).
+2. Send a small testnet amount to one of your wallet's receive
    addresses (use a faucet such as
    [satoshisvision.network](https://satoshisvision.network/)).
 3. Once the UTXO is visible in the companion, draft an outgoing
-   TESTNET transaction (back to the faucet, or to any TESTNET
+   testnet transaction (back to the faucet, or to any testnet
    address you control).
 4. The companion produces an **unsigned proposal** as an animated QR
    sequence. Point the bonnet's camera at the screen.
@@ -346,7 +346,7 @@ To round-trip the full flow with no risk:
 7. The companion broadcasts the signed transaction to the BSV
    testnet via [WhatsOnChain](https://test.whatsonchain.com/).
 
-If steps 1&ndash;7 round-trip cleanly on TESTNET, the device is fully
+If steps 1&ndash;7 round-trip cleanly on testnet, the device is fully
 operational.
 
 ## Routine use
@@ -383,7 +383,7 @@ Brief summary:
 3. Re-flash the microSD (Step&nbsp;2 above).
 4. Restore from your written-down mnemonic, or copy `vault.bin` back
    onto the new image — see the user manual for step-by-step detail.
-5. Re-run **Airgap status** and a TESTNET smoke test.
+5. Re-run **Airgap status** and a testnet smoke test.
 
 ## Troubleshooting
 

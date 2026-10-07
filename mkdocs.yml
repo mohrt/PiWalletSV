@@ -123,12 +123,12 @@ plugins:
       on_undefined: strict
 
 extra_css:
-  - assets/extra.css?v=tutorials-1
+  - assets/extra.css?v=ship-prompt
 
 extra_javascript:
   - assets/env-links.js
   - assets/qrcode-generator.js
-  - assets/store-checkout.js?v=zone-required
+  - assets/store-checkout.js?v=ship-prompt
   - assets/store-checkout-bsv.js?v=validate-disabled
   - assets/store-verify-email.js?v=auto-redirect
   - assets/store-pending-bsv.js?v=bsv-expiry-3h
@@ -164,6 +164,7 @@ nav:
       - User manual: user-manual.md
       - Tutorials: tutorials.md
       - Recover without device: recover-without-device.md
+  - PiWallet Pay: https://piwalletpay.com
   - Operations:
       - Build & deploy: build.md
       - Operate: operate.md

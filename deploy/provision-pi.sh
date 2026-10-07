@@ -6,10 +6,15 @@
 # This is the script we run when **building the official image**.
 # It assumes:
 #
-#   * Raspberry Pi OS Lite **32-bit** (Bookworm or Trixie) on the SD
-#     card, booted into a working shell. Primary target: **Pi Zero W /
-#     Zero WH** (ARMv6). Pi Zero 2 W (64-bit) is also supported.
-#   * The bonnet hardware (TFT + buttons + camera) is wired up.
+#   * --product zero (default): Raspberry Pi OS Lite **32-bit**
+#     (Bookworm or Trixie). Primary target: **Pi Zero W / Zero WH**
+#     (ARMv6). Pi Zero 2 W (64-bit) is also supported. The Adafruit
+#     bonnet (TFT + buttons + camera) is wired up. The service owns tty1.
+#   * --product pro: Raspberry Pi OS Lite **64-bit** (Trixie) on a
+#     Pi 3 Model B with the Waveshare 3.5 inch LCD (F). The touch
+#     app draws /dev/fb1. HDMI tty1 stays a login console. Do not
+#     run this product on the Zero card, and do not run the Zero
+#     product on the Pro card.
 #   * Network is reachable for the duration of provisioning so apt
 #     can fetch packages. Radio *packages* are purged on first boot
 #     after seal (not over a live Wi-Fi SSH session — see
@@ -27,8 +32,11 @@
 #   * Wi-Fi and Bluetooth disabled at four layers: firmware overlay,
 #     modprobe blacklist, masked services, and (on first boot after
 #     seal) purged userspace packages. SSH off. Audio off.
-#   * SPI / I2C / camera enabled.
-#   * piwallet-bonnet.service installed, enabled, owns tty1.
+#   * SPI / I2C / camera enabled. Pro also installs the ST7796S panel
+#     init firmware and the mipi-dbi-spi + goodix overlays. vc4-kms-v3d
+#     stays enabled. LCD-show, fbcp, and Waveshare35f.dtbo are not used.
+#   * zero: piwallet-bonnet.service enabled, owns tty1.
+#   * pro: piwallet-touch.service enabled (piwallet touch --device pi3-ws35f).
 #   * journald bounded so a misbehaving log can't fill the SD card.
 #   * Sealed builds (no --keep-ssh / --keep-radios) scrub Imager
 #     Wi-Fi/cloud-init network artifacts from the boot partition and
@@ -36,14 +44,17 @@
 #     HDMI/keyboard troubleshooting; SSH stays off and radios stay off.
 #
 # Usage:
-#   sudo deploy/provision-pi.sh [--src PATH] [--release-version VER]
-#                 [--image-channel CH] [--keep-ssh] [--keep-radios]
-#                 [--local] [--dry-run]
+#   sudo deploy/provision-pi.sh [--product zero|pro] [--src PATH]
+#                 [--release-version VER] [--image-channel CH]
+#                 [--keep-ssh] [--keep-radios] [--local] [--dry-run]
 #
-#   --release-version VER   Baked into /etc/piwalletsv-release (default:
-#                           PIWALLETSV_RELEASE_VERSION or 0.1.0-r3).
-#   --image-channel CH      Image channel label (default:
-#                           PIWALLETSV_IMAGE_CHANNEL or round1-zero-w).
+#   --product zero|pro      Appliance to build (default: zero).
+#   --release-version VER   Baked into /etc/piwalletsv-release.
+#                           Default: 0.1.0-r3 (zero) or 0.1.0-r1 (pro),
+#                           unless PIWALLETSV_RELEASE_VERSION is set.
+#   --image-channel CH      Image channel label. Default:
+#                           round1-zero-w (zero) or pro-pi3 (pro),
+#                           unless PIWALLETSV_IMAGE_CHANNEL is set.
 #
 #   --src PATH    Install the app from a local directory (rsync) instead
 #                 of cloning github.com/mohrt/PiWalletSV. Used by image
@@ -79,7 +90,9 @@ set -euo pipefail
 readonly RUNTIME_USER="pwsv"
 readonly RUNTIME_HOME="/home/${RUNTIME_USER}"
 readonly RUNTIME_STATE_DIR="${RUNTIME_HOME}/.piwallet"
-readonly RUNTIME_GROUPS="spi,gpio,video,i2c,dialout,render"
+# Set after --product is parsed. Zero needs SPI/GPIO for the bonnet.
+# Pro needs the framebuffer, the GT911 evdev node, and the camera.
+RUNTIME_GROUPS="spi,gpio,video,i2c,dialout,render"
 readonly APP_DIR="/opt/piwallet"
 readonly APP_VENV="${APP_DIR}/.venv"
 readonly APP_REPO="https://github.com/mohrt/PiWalletSV.git"
@@ -184,20 +197,23 @@ readonly MASK_ALWAYS_UNITS=(
 # ============================================================
 
 src_dir=""
-release_version="${PIWALLETSV_RELEASE_VERSION:-0.1.0-r3}"
-image_channel="${PIWALLETSV_IMAGE_CHANNEL:-round1-zero-w}"
+product="zero"
+release_version="${PIWALLETSV_RELEASE_VERSION:-}"
+image_channel="${PIWALLETSV_IMAGE_CHANNEL:-}"
 keep_ssh=0
 keep_radios=0
 dry_run=0
 local_provision=0  # force inline radio purge even when SSH_CONNECTION is set
 
 usage() {
-    sed -n '2,40p' "$0" | sed 's|^# *||'
+    sed -n '2,78p' "$0" | sed 's|^# *||'
     exit "${1:-2}"
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --product)     product=${2:?--product requires zero or pro}; shift ;;
+        --product=*)   product=${1#--product=} ;;
         --src)         src_dir=${2:?--src requires a path}; shift ;;
         --src=*)       src_dir=${1#--src=} ;;
         --release-version) release_version=${2:?--release-version requires a value}; shift ;;
@@ -213,6 +229,31 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+case "$product" in
+    zero|pro) ;;
+    *) echo "error: --product must be zero or pro (got '$product')" >&2; exit 2 ;;
+esac
+
+# Defaults stay product-specific unless the operator (or the environment)
+# set them. A Pro card must not inherit the Zero release label.
+if [[ -z "$release_version" ]]; then
+    if [[ "$product" == "pro" ]]; then
+        release_version="0.1.0-r1"
+    else
+        release_version="0.1.0-r3"
+    fi
+fi
+if [[ -z "$image_channel" ]]; then
+    if [[ "$product" == "pro" ]]; then
+        image_channel="pro-pi3"
+    else
+        image_channel="round1-zero-w"
+    fi
+fi
+if [[ "$product" == "pro" ]]; then
+    RUNTIME_GROUPS="video,input,render,i2c"
+fi
 
 # ============================================================
 # Logging
@@ -325,6 +366,11 @@ preflight() {
         log "  src:     ${APP_REPO}"
     fi
 
+    if [[ "$product" == "pro" && "$(uname -m)" != "aarch64" ]]; then
+        fail "Pro image requires 64-bit Raspberry Pi OS (uname -m is $(uname -m))"
+    fi
+
+    log "  product:     ${product}"
     log "  keep_ssh:    ${keep_ssh}"
     log "  keep_radios: ${keep_radios}"
     log "  local:       ${local_provision}"
@@ -357,6 +403,9 @@ step_apt_install() {
             pkgs+=("$pkg")
         fi
     done
+    if [[ "$product" == "pro" ]]; then
+        pkgs+=(python3-evdev)
+    fi
     run env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         "${pkgs[@]}"
 }
@@ -452,11 +501,76 @@ step_cmdline_spidev() {
     sed -i "s|\$| ${SPI_BUFSIZ}|" "$file"
 }
 
+step_pro_panel() {
+    log "Pro panel: ST7796S framebuffer + GT911 (leave vc4-kms-v3d)"
+    # Drop overlays that drive a different panel or fake an HDMI display.
+    local drop
+    for drop in \
+        "dtoverlay=waveshare35a" \
+        "dtoverlay=waveshare35b-v2" \
+        "dtoverlay=waveshare35f" \
+        "dtoverlay=Waveshare35f" \
+        "dtoverlay=ads7846"
+    do
+        remove_boot_config_line "$drop" "$BOOT_CFG"
+    done
+
+    # Same lines as the working dev Pi. The \0 in compatible is two
+    # characters (backslash, zero): config.txt's NUL between strings.
+    local line
+    for line in \
+        "dtparam=spi=on" \
+        "dtoverlay=mipi-dbi-spi,speed=48000000" \
+        'dtparam=compatible=st7796s\0panel-mipi-dbi-spi' \
+        "dtparam=width=320,height=480,width-mm=49,height-mm=79" \
+        "dtparam=reset-gpio=27,dc-gpio=22,backlight-gpio=18" \
+        "dtoverlay=goodix,addr=0x5d"
+    do
+        ensure_line "$line" "$BOOT_CFG"
+    done
+
+    if ! grep -qE '^dtoverlay=vc4-kms-v3d(,|[[:space:]]|$)' "$BOOT_CFG"; then
+        log "  vc4-kms-v3d was not active — enabling it for the camera"
+        ensure_line "dtoverlay=vc4-kms-v3d" "$BOOT_CFG"
+    fi
+}
+
+step_pro_firmware() {
+    log "install ST7796S panel init firmware"
+    local fw_src="$APP_DIR/deploy/firmware/st7796s.bin"
+    [[ -f "$fw_src" ]] || fail "missing $fw_src"
+    run install -d -m 0755 /lib/firmware
+    run install -m 0644 "$fw_src" /lib/firmware/st7796s.bin
+
+    # The panel's modalias is spi:st7796s (the firmware name), so udev
+    # does not load panel-mipi-dbi on its own. Without this, /dev/fb*
+    # never appears and the touch service exits.
+    local modules="/etc/modules-load.d/piwallet-panel.conf"
+    if [[ $dry_run -eq 1 ]]; then
+        log "  DRY: write $modules"
+    else
+        install -d -m 0755 /etc/modules-load.d
+        printf '%s\n' "panel-mipi-dbi" > "$modules"
+        chmod 0644 "$modules"
+    fi
+
+    # Turns the lamp on and starts panel scanout. udev and the touch
+    # service both call this; the overlay itself leaves the lamp off.
+    local panel_on="$APP_DIR/deploy/piwallet-panel-on"
+    [[ -f "$panel_on" ]] || fail "missing $panel_on"
+    run install -d -m 0755 /usr/local/sbin
+    run install -m 0755 "$panel_on" /usr/local/sbin/piwallet-panel-on
+}
+
 step_boot_config() {
     log "boot config: enable SPI/I2C/camera, audio/radios per flags"
     [[ -f "$BOOT_CFG" ]] || fail "$BOOT_CFG missing"
 
-    step_cmdline_spidev
+    if [[ "$product" == "zero" ]]; then
+        step_cmdline_spidev
+    else
+        log "cmdline spidev bufsiz: skipped (Pro panel is a kernel framebuffer)"
+    fi
 
     # Hardware enables.
     ensure_line "dtparam=spi=on"        "$BOOT_CFG"
@@ -468,6 +582,10 @@ step_boot_config() {
     # DIY no-EEPROM sensors: see docs/build.md for manual dtoverlay=ov5647.
     set_boot_config_key "camera_auto_detect" "1" "$BOOT_CFG"
     remove_boot_config_line "dtoverlay=ov5647" "$BOOT_CFG"
+
+    if [[ "$product" == "pro" ]]; then
+        step_pro_panel
+    fi
 
     # Audio off. dtparam=audio=off matches raspi-config; setting
     # it twice is harmless because ensure_line is idempotent.
@@ -553,8 +671,12 @@ step_mask_radio_units() {
 }
 
 step_mask_units() {
-    step_mask_console_units
-    step_enable_tty2_getty
+    if [[ "$product" == "zero" ]]; then
+        step_mask_console_units
+        step_enable_tty2_getty
+    else
+        log "HDMI console stays on tty1 (touch UI draws /dev/fb1)"
+    fi
     if [[ $keep_radios -eq 1 ]]; then
         log "  radio units: SKIPPED (--keep-radios)"
     else
@@ -650,30 +772,41 @@ step_install_app() {
 
     # App code stays root-owned and read-only for the runtime user.
     # A code-execution exploit can't rewrite the binary it just ran.
+    # Leave .venv alone: a second provision used to chmod pip to 0644 and
+    # then die with "Permission denied" on the existing interpreter.
     run chown -R root:root "$APP_DIR"
-    run find "$APP_DIR" -type d -exec chmod 0755 {} +
-    run find "$APP_DIR" -type f -exec chmod 0644 {} +
+    run find "$APP_DIR" \( -path "$APP_DIR/.venv" -o -path "$APP_DIR/.venv/*" \) -prune \
+        -o -type d -exec chmod 0755 {} +
+    run find "$APP_DIR" \( -path "$APP_DIR/.venv" -o -path "$APP_DIR/.venv/*" \) -prune \
+        -o -type f -exec chmod 0644 {} +
     # ...except things that need to be executable.
-    run find "$APP_DIR" -type f -name '*.sh' -exec chmod 0755 {} +
+    run find "$APP_DIR" \( -path "$APP_DIR/.venv" -o -path "$APP_DIR/.venv/*" \) -prune \
+        -o -type f -name '*.sh' -exec chmod 0755 {} +
     run find "$APP_DIR/scripts" -type f -name '*.py' -exec chmod 0755 {} + 2>/dev/null || true
 
     log "  build venv at $APP_VENV (pip install may take several minutes on Pi Zero W)"
     if [[ ! -x "$APP_VENV/bin/python" ]]; then
         run python3 -m venv --system-site-packages "$APP_VENV"
     fi
+    # Repair a venv whose bin scripts lost +x on an earlier run.
+    if [[ -d "$APP_VENV/bin" ]]; then
+        run chmod a+rx "$APP_VENV/bin"
+        run find "$APP_VENV/bin" -maxdepth 1 -type f -exec chmod a+rx {} +
+    fi
     # Pinned via --upgrade-strategy only-if-needed so a re-run picks
     # up new requirements without churning unaffected packages.
     run "$APP_VENV/bin/pip" install --upgrade --quiet pip
-    # Install with the [display,camera] extras: the bonnet binds
-    # board/digitalio (adafruit-blinka) for SPI + GPIO on the ST7789
-    # panel, and pyzbar for QR decode in the camera flow. Without
-    # these, ST7789Display() raises ImportError -> open_display("auto")
-    # silently falls back to HeadlessDisplay and the panel stays dark.
-    # scripts/install-piwallet-deps.sh handles the armv6l coincurve pin
-    # when experimental 32-bit images are provisioned with --src.
+    # Zero needs [display] for the ST7789 bonnet (Blinka). Pro draws a
+    # kernel framebuffer and reads GT911 through python3-evdev, so the
+    # Blinka stack is not installed on that image.
+    local extras="display,camera"
+    if [[ "$product" == "pro" ]]; then
+        extras="camera"
+    fi
     run bash "$APP_DIR/scripts/install-piwallet-deps.sh" \
         --repo "$APP_DIR" \
-        --venv "$APP_VENV"
+        --venv "$APP_VENV" \
+        --extras "$extras"
 }
 
 step_bonnet_hardware() {
@@ -729,22 +862,33 @@ step_install_unit() {
     else
         unit_root="$APP_DIR/$UNIT_SRC_DIR"
     fi
-    local svc_src="$unit_root/piwallet-bonnet.service"
+    local svc_name="piwallet-bonnet.service"
+    if [[ "$product" == "pro" ]]; then
+        svc_name="piwallet-touch.service"
+    fi
+    local svc_src="$unit_root/$svc_name"
     local jrn_src="$unit_root/journald-piwallet.conf.example"
 
     [[ -f "$svc_src" ]] || fail "missing $svc_src"
     [[ -f "$jrn_src" ]] || fail "missing $jrn_src"
 
-    run install -m 0644 "$svc_src" "$UNIT_DST_DIR/piwallet-bonnet.service"
+    run install -m 0644 "$svc_src" "$UNIT_DST_DIR/$svc_name"
     run install -d -m 0755 "$(dirname "$JOURNALD_CONF")"
     run install -m 0644 "$jrn_src" "$JOURNALD_CONF"
 
     run systemctl disable piwallet-boot-status.service 2>/dev/null || true
     run rm -f "$UNIT_DST_DIR/piwallet-boot-status.service"
+    # Only one appliance unit should be enabled. A re-run that switches
+    # product must not leave the other one queued for boot.
+    if [[ "$product" == "pro" ]]; then
+        run systemctl disable piwallet-bonnet.service 2>/dev/null || true
+    else
+        run systemctl disable piwallet-touch.service 2>/dev/null || true
+    fi
 
     run systemctl daemon-reload
     run systemctl restart systemd-journald
-    run systemctl enable piwallet-bonnet.service
+    run systemctl enable "$svc_name"
 }
 
 step_hostname() {
@@ -1017,16 +1161,47 @@ step_verify_sealed_for_capture() {
     elif [[ -f "$CMDLINE_LEGACY" ]]; then
         cmdline="$CMDLINE_LEGACY"
     fi
-    if [[ -n "$cmdline" ]] && ! grep -q "$SPI_BUFSIZ" "$cmdline" 2>/dev/null; then
-        problems+=("spidev.bufsiz=131072 missing from $cmdline — bonnet display will garble")
-    fi
-    local bufsiz
-    bufsiz="$(cat /sys/module/spidev/parameters/bufsiz 2>/dev/null || echo 0)"
-    if [[ "$bufsiz" != "131072" ]]; then
-        if [[ -n "$cmdline" ]] && grep -q "$SPI_BUFSIZ" "$cmdline" 2>/dev/null; then
-            log "  note: kernel spidev bufsiz is ${bufsiz} until reboot (cmdline already has 131072)"
-        else
-            problems+=("kernel spidev bufsiz is ${bufsiz} (need 131072 in cmdline)")
+    if [[ "$product" == "zero" ]]; then
+        if [[ -n "$cmdline" ]] && ! grep -q "$SPI_BUFSIZ" "$cmdline" 2>/dev/null; then
+            problems+=("spidev.bufsiz=131072 missing from $cmdline — bonnet display will garble")
+        fi
+        local bufsiz
+        bufsiz="$(cat /sys/module/spidev/parameters/bufsiz 2>/dev/null || echo 0)"
+        if [[ "$bufsiz" != "131072" ]]; then
+            if [[ -n "$cmdline" ]] && grep -q "$SPI_BUFSIZ" "$cmdline" 2>/dev/null; then
+                log "  note: kernel spidev bufsiz is ${bufsiz} until reboot (cmdline already has 131072)"
+            else
+                problems+=("kernel spidev bufsiz is ${bufsiz} (need 131072 in cmdline)")
+            fi
+        fi
+    else
+        if [[ ! -f /lib/firmware/st7796s.bin ]]; then
+            problems+=("missing /lib/firmware/st7796s.bin")
+        fi
+        if ! grep -qxF "dtoverlay=mipi-dbi-spi,speed=48000000" "$BOOT_CFG"; then
+            problems+=("mipi-dbi-spi overlay missing from $BOOT_CFG")
+        fi
+        if ! grep -qxF 'dtparam=compatible=st7796s\0panel-mipi-dbi-spi' "$BOOT_CFG"; then
+            problems+=("ST7796S compatible line missing from $BOOT_CFG")
+        fi
+        if ! grep -qE '^dtoverlay=vc4-kms-v3d(,|[[:space:]]|$)' "$BOOT_CFG"; then
+            problems+=("dtoverlay=vc4-kms-v3d missing — camera stack must stay enabled")
+        fi
+        if grep -qE '^dtoverlay=(waveshare35|Waveshare35|ads7846)' "$BOOT_CFG"; then
+            problems+=("Waveshare LCD-show or ads7846 overlay still in $BOOT_CFG")
+        fi
+        if [[ ! -x /usr/local/sbin/piwallet-panel-on ]]; then
+            problems+=("missing /usr/local/sbin/piwallet-panel-on — panel lamp stays off at boot")
+        fi
+        if ! grep -q '/usr/local/sbin/piwallet-panel-on' /etc/udev/rules.d/99-piwallet-hardware.rules 2>/dev/null; then
+            problems+=("udev rules do not light the panel")
+        fi
+        if ! grep -qxF 'ExecStartPre=+/usr/local/sbin/piwallet-panel-on' \
+            /etc/systemd/system/piwallet-touch.service 2>/dev/null; then
+            problems+=("piwallet-touch.service does not light the panel before start")
+        fi
+        if ! grep -qxF 'panel-mipi-dbi' /etc/modules-load.d/piwallet-panel.conf 2>/dev/null; then
+            problems+=("panel-mipi-dbi is not loaded at boot")
         fi
     fi
     if [[ ${#problems[@]} -gt 0 ]]; then
@@ -1094,6 +1269,7 @@ PIWALLETSV_BUILT_AT=${built_at}
 PIWALLETSV_BOARD_MODEL="${model}"
 PIWALLETSV_OS="${os_pretty}"
 PIWALLETSV_ARCH=${arch}
+PIWALLETSV_PRODUCT=${product}
 EOF
     chmod 0644 "$RELEASE_FILE"
 
@@ -1106,6 +1282,7 @@ EOF
     export PIWALLETSV_BOARD_MODEL="$model"
     export PIWALLETSV_OS="$os_pretty"
     export PIWALLETSV_ARCH="$arch"
+    export PIWALLETSV_PRODUCT="$product"
     export PIWALLETSV_RELEASE_JSON="$RELEASE_JSON"
 
     python3 <<'PY'
@@ -1123,6 +1300,7 @@ payload = {
     "board_model": os.environ["PIWALLETSV_BOARD_MODEL"],
     "os": os.environ["PIWALLETSV_OS"],
     "arch": os.environ["PIWALLETSV_ARCH"],
+    "product": os.environ["PIWALLETSV_PRODUCT"],
 }
 Path(os.environ["PIWALLETSV_RELEASE_JSON"]).write_text(
     json.dumps(payload, indent=2) + "\n", encoding="utf-8"
@@ -1153,7 +1331,12 @@ main() {
     step_install_app
     step_install_udev
     step_release_metadata
-    step_bonnet_hardware
+    if [[ "$product" == "zero" ]]; then
+        step_bonnet_hardware
+    else
+        log "bonnet hardware: skipped (Pro uses the kernel framebuffer)"
+        step_pro_firmware
+    fi
     step_usb_backup
     step_install_unit
     step_seal_device
@@ -1165,48 +1348,51 @@ main() {
     step_verify_sealed_for_capture
 
     log "done."
+    local svc_name="piwallet-bonnet"
+    local console_note="After reboot the bonnet service starts on tty1 with no login prompt."
+    if [[ "$product" == "pro" ]]; then
+        svc_name="piwallet-touch"
+        console_note="After reboot the touch app draws the LCD. HDMI tty1 stays a login console."
+    fi
     cat <<EOF
 
 ================================================================
-PiWalletSV provisioning complete.
+PiWalletSV provisioning complete (${product}).
 
 A reboot is required to pick up the boot-config / modprobe changes.
-After reboot the bonnet service starts on tty1 with no login prompt.
+${console_note}
 
 EOF
     if [[ $keep_radios -eq 1 ]]; then
-        cat <<'EOF'
+        cat <<EOF
 TEST MODE — radios kept enabled. Verify after reboot:
 
   * SSH still reachable (Wi-Fi / Ethernet up)
-  * systemctl status piwallet-bonnet      # active (running)
+  * systemctl status ${svc_name}           # active (running)
   * systemctl status piwallet-usb-mount   # active (running)
-  * systemctl status getty@tty1           # masked
   * ls -la /home/pwsv/.piwallet/          # vault.bin appears after
                                             first-boot setup
-  * cat /boot/firmware/config.txt         # SPI/I2C/audio set,
-                                            disable-wifi/-bt absent
 
 When the test is happy, RE-FLASH the SD card and run provisioning
-WITHOUT --keep-radios to produce the actual sealed image.
+WITHOUT --keep-ssh and WITHOUT --keep-radios to produce the sealed image.
 EOF
     else
-        cat <<'EOF'
+        cat <<EOF
 SEALED MODE — radios firmware-disabled.
 Radio packages were purged inline (local console) or will purge on next
 boot (piwallet-purge-radios.service, SSH path). After reboot verify:
 
-  * systemctl status piwallet-bonnet        # active (running)
+  * systemctl status ${svc_name}            # active (running)
   * cat /var/lib/piwallet/radio-purge.done  # exists (inline or post-boot)
 
 Imager Wi-Fi/network files are scrubbed automatically before you reboot.
 The Imager login user (e.g. pisv) is kept for local HDMI/keyboard access.
-For image capture: reboot after seal, wait for bonnet disclaimer, power
-off, then dd. Provision from **tty2** with inline radio purge so the
-captured image does **not** run apt on the buyer's first boot.
+Power off after the disclaimer is on screen, then capture the card.
+Provision from the local HDMI console with --local so the captured image
+does not run apt on the buyer's first boot.
 
-PiShrink **expands the rootfs to the SD size on first flash** (one automatic
-reboot). Set ``PISHRINK_SKIP_AUTOEXPAND=1`` when capturing if you want to skip
+PiShrink expands the rootfs to the SD size on first flash (one automatic
+reboot). Set PISHRINK_SKIP_AUTOEXPAND=1 when capturing if you want to skip
 expand (8 GB cards only; saves ~1–2 min on first flash).
 EOF
     fi

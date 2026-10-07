@@ -63,6 +63,27 @@ export interface WalletRecord {
    * Persisted so the toggle survives page reloads.
    */
   displayUnit?: "sats" | "bsv" | "fiat";
+  /**
+   * PiWallet Pass passkeys this wallet answers with, one per app origin
+   * (piwalletsv-pay/notes/pass-protocol.md). The keys live in the phone's passkey store;
+   * these records only name them and tie them to this wallet.
+   */
+  passkeys?: WalletPasskey[];
+}
+
+export interface WalletPasskey {
+  /** Name the person gave it; also the WebAuthn user.displayName. */
+  name: string;
+  /** App origin, e.g. `https://dev.piwalletpay.com`. */
+  appOrigin: string;
+  /** App name as the app claimed it when the passkey was made. */
+  appName: string;
+  /** base64url credential id. */
+  credentialId: string;
+  /** base64url WebAuthn user.id (16 random bytes). */
+  userHandle: string;
+  createdAt: string;
+  lastUsedAt?: string;
 }
 
 /** Cached output of the gap-limit UTXO scan, persisted per wallet. */
@@ -389,6 +410,47 @@ export async function setDisplayUnit(
     if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
     cur.displayUnit = unit;
     await txPromise(store.put(cur), "put");
+  });
+}
+
+async function updateWallet(id: string, change: (cur: WalletRecord) => void): Promise<void> {
+  await withStore("readwrite", async (store) => {
+    const cur = await txPromise<WalletRecord | undefined>(
+      store.get(id) as IDBRequest<WalletRecord | undefined>,
+      "get",
+    );
+    if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
+    change(cur);
+    await txPromise(store.put(cur), "put");
+  });
+}
+
+export async function addPasskey(id: string, passkey: WalletPasskey): Promise<void> {
+  await updateWallet(id, (cur) => {
+    cur.passkeys = [...(cur.passkeys ?? []).filter((p) => p.credentialId !== passkey.credentialId), passkey];
+  });
+}
+
+export async function touchPasskey(id: string, credentialId: string, at = new Date().toISOString()): Promise<void> {
+  await updateWallet(id, (cur) => {
+    const found = cur.passkeys?.find((p) => p.credentialId === credentialId);
+    if (found) found.lastUsedAt = at;
+  });
+}
+
+export async function renamePasskey(id: string, credentialId: string, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new WalletStoreError("passkey name cannot be empty");
+  await updateWallet(id, (cur) => {
+    const found = cur.passkeys?.find((p) => p.credentialId === credentialId);
+    if (!found) throw new WalletStoreError("no such passkey on this wallet");
+    found.name = trimmed.slice(0, 64);
+  });
+}
+
+export async function removePasskey(id: string, credentialId: string): Promise<void> {
+  await updateWallet(id, (cur) => {
+    cur.passkeys = (cur.passkeys ?? []).filter((p) => p.credentialId !== credentialId);
   });
 }
 

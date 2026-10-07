@@ -19,14 +19,15 @@ import type { NetworkT } from "../lib/envelope.js";
 import {
   mountCameraScanner,
 } from "./camera-scanner.js";
+import { requestUrlFromLink } from "../lib/pass-protocol.js";
 
 export function mountScannerPage(root: HTMLElement): () => void {
   root.innerHTML = `
     <main class="page">
-      ${renderHeader("Add wallet", "wallets")}
+      ${renderHeader("Scan", "scan")}
 
       <section class="card scan-card">
-        <p class="muted-line scan-card-desc">Scan xpub from the Pi or another companion wallet.</p>
+        <p class="muted-line scan-card-desc">Scan xpub from the Pi or another companion wallet, or a PiWallet Pass code from a website.</p>
         <div id="pairCameraHost" class="camera-scanner-host"></div>
       </section>
 
@@ -123,6 +124,12 @@ export function mountScannerPage(root: HTMLElement): () => void {
     onStopped: () => {
       $pairCameraHost.hidden = true;
     },
+    onOtherQr: (text) => {
+      const requestUrl = requestUrlFromLink(text, window.location.origin);
+      if (!requestUrl) return false;
+      window.location.hash = `#/pass?rq=${encodeURIComponent(requestUrl)}`;
+      return true;
+    },
   });
 
   function focusableIn(container: HTMLElement): HTMLElement[] {
@@ -158,7 +165,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
     $pairLabel.disabled = false;
     $pairSave.textContent = "Save wallet";
     $pairOpenList.hidden = true;
-    const netLabel = env.network === "test" ? " · TESTNET" : "";
+    const netLabel = env.network === "test" ? " · testnet" : "";
     $pairFp.textContent = `fingerprint ${fpHex} · ${env.path}${netLabel}`;
     $pairStatus.classList.remove("error");
 
@@ -187,8 +194,8 @@ export function mountScannerPage(root: HTMLElement): () => void {
       $pairSave.disabled = true;
       $pairOpenList.hidden = false;
     } else if (existing) {
-      const otherNet = (existing.network ?? "main") === "test" ? "TESTNET" : "mainnet";
-      const thisNet = env.network === "test" ? "TESTNET" : "mainnet";
+      const otherNet = (existing.network ?? "main") === "test" ? "testnet" : "mainnet";
+      const thisNet = env.network === "test" ? "testnet" : "mainnet";
       $pairStatus.textContent =
         `note: this seed is already paired as "${existing.label}" on ${otherNet}; ` +
         `saving will create a new ${thisNet} entry alongside it.`;
@@ -227,7 +234,7 @@ export function mountScannerPage(root: HTMLElement): () => void {
         network: pairXpub.network,
       });
       $pairStatus.classList.remove("error");
-      const netSuffix = rec.network === "test" ? " (TESTNET)" : "";
+      const netSuffix = rec.network === "test" ? " (testnet)" : "";
       $pairStatus.textContent =
         `saved "${rec.label}"${netSuffix} — opening wallets…`;
       $pairLabel.disabled = true;

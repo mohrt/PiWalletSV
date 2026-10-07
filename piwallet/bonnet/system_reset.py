@@ -42,11 +42,8 @@ def _make_verify_fn(vault: Vault):
     """Verify the operator's PIN before erasing device state."""
 
     def verify(pin: str) -> VerifyResult:
-        wallets = vault.list_wallets()
-        if not wallets:
-            return ("ok", None)
         try:
-            vault.get_account_xpub(pin, wallets[0].id)
+            vault.check_pin(pin)
         except WrongPinError as exc:
             return ("wrong", exc.attempts_remaining)
         except VaultWipedError:

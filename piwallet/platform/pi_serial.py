@@ -1,11 +1,22 @@
-"""Read Raspberry Pi board serial numbers from kernel interfaces."""
+"""Read the Raspberry Pi board serial and model from kernel interfaces."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 _DEVICE_TREE_SERIAL = Path("/proc/device-tree/serial-number")
+_DEVICE_TREE_MODEL = Path("/proc/device-tree/model")
 _CPUINFO = Path("/proc/cpuinfo")
+
+
+def read_pi_model(path: Path = _DEVICE_TREE_MODEL) -> str | None:
+    """Return the board model, e.g. ``Pi 3 Model B Rev 1.2``, or ``None``."""
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    text = raw.decode("ascii", errors="ignore").strip("\0").strip()
+    return text.removeprefix("Raspberry ") or None
 
 
 def read_pi_serial() -> str | None:

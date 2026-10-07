@@ -54,6 +54,13 @@ prune_literal() {
     fi
 }
 
+keep_runtime_env() {
+    case "$1" in
+        .venv|venv|env) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 prune_glob() {
     local pattern=$1
     local count=0
@@ -63,7 +70,7 @@ prune_glob() {
         elif command -v sudo &>/dev/null && sudo -n rm -rf "$path" 2>/dev/null; then
             count=$((count + 1))
         fi
-    done < <(find "$ROOT" -name "$pattern" -print0 2>/dev/null)
+    done < <(find "$ROOT" \( -path "$ROOT/.venv" -o -path "$ROOT/venv" -o -path "$ROOT/env" \) -prune -o -name "$pattern" -print0 2>/dev/null)
     if [[ $count -gt 0 ]]; then
         echo "prune-pi-payload: removed $count path(s) matching $pattern"
     fi
@@ -73,6 +80,10 @@ while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line%%#*}"
     line="${line%"${line##*[![:space:]]}"}"
     [[ -z "$line" ]] && continue
+
+    if keep_runtime_env "$line"; then
+        continue
+    fi
 
     case "$line" in
         *\**)

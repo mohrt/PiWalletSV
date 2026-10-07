@@ -162,6 +162,16 @@ export interface WocTxDetail {
  */
 export const WOC_BULK_BATCH_MAX = 20;
 
+/**
+ * Page size for `GET /address/{addr}/confirmed/unspent` follow-ups.
+ * The bulk endpoint returns at most 20 confirmed outputs per address
+ * and a `nextPageToken` for the rest. WoC allows 1–10000 here.
+ */
+const WOC_UNSPENT_PAGE_LIMIT = 10_000;
+
+/** Guard so a repeating page token cannot loop forever. */
+const WOC_UNSPENT_MAX_PAGES = 50;
+
 export interface WocTxProof {
   /** Position of the tx within the block's transaction tree. */
   txIndex: number;
@@ -461,10 +471,17 @@ export class WocClient {
    * already being spent by an in-flight transaction and reusing them
    * would guarantee a double-spend.
    *
+   * Bulk confirmed unspent returns at most 20 outputs per address.
+   * When a row includes `nextPageToken`, the remainder is loaded from
+   * `GET /address/{addr}/{confirmed|unconfirmed}/unspent` until the
+   * token is absent. Passing the token back on the bulk POST does not
+   * advance the page.
+   *
    * Used by the gap-limit scanner so a fresh-wallet scan turns 40
    * paced GETs into ~2 paced POST pairs — see {@link scanWalletUtxos}.
    * The two POSTs flow through {@link _paced} so they still respect
-   * `_minIntervalMs` against WoC's rate limiter.
+   * `_minIntervalMs` against WoC's rate limiter. Page follow-ups are
+   * paced the same way and only happen for addresses that overflow.
    */
   async getUnspentBatch(addresses: string[]): Promise<WocBulkUnspentResult[]> {
     if (addresses.length === 0) return [];
@@ -487,10 +504,66 @@ export class WocClient {
     interface RawAddressRow {
       address?: string;
       script?: string;
-      result?: RawUtxoEntry[];
+      result?: RawUtxoEntry[] | null;
       error?: string;
+      nextPageToken?: string;
     }
-    const fetchOne = async (path: string): Promise<RawAddressRow[]> => {
+    const assertNoRowError = (path: string, row: RawAddressRow): void => {
+      if (typeof row.error === "string" && row.error.length > 0) {
+        throw new WocError(
+          path,
+          200,
+          `address ${row.address ?? "?"} failed: ${row.error}`,
+        );
+      }
+    };
+    const collectPages = async (
+      kind: "confirmed" | "unconfirmed",
+      row: RawAddressRow,
+    ): Promise<RawUtxoEntry[]> => {
+      const out = [...(row.result ?? [])];
+      let token = row.nextPageToken ?? "";
+      if (!token) return out;
+      if (!row.address) {
+        throw new WocError(
+          `/address/?/${kind}/unspent`,
+          200,
+          "unspent page token had no address",
+        );
+      }
+      const seen = new Set<string>();
+      let pages = 0;
+      while (token) {
+        if (seen.has(token) || pages >= WOC_UNSPENT_MAX_PAGES) {
+          throw new WocError(
+            `/address/${row.address}/${kind}/unspent`,
+            200,
+            "unspent pagination did not terminate",
+          );
+        }
+        seen.add(token);
+        pages += 1;
+        const path =
+          `/address/${encodeURIComponent(row.address)}/${kind}/unspent` +
+          `?limit=${WOC_UNSPENT_PAGE_LIMIT}&token=${encodeURIComponent(token)}`;
+        const page = await this.request<RawAddressRow | { error?: string }>(
+          "GET",
+          path,
+        );
+        if (!page || typeof page !== "object" || Array.isArray(page)) {
+          throw new WocError(path, 200, "unexpected payload");
+        }
+        assertNoRowError(path, page as RawAddressRow);
+        const next = page as RawAddressRow;
+        out.push(...(next.result ?? []));
+        token = next.nextPageToken ?? "";
+      }
+      return out;
+    };
+    const fetchOne = async (
+      path: string,
+      kind: "confirmed" | "unconfirmed",
+    ): Promise<RawAddressRow[]> => {
       const raw = await this.request<RawAddressRow[] | { error?: string }>(
         "POST",
         path,
@@ -503,22 +576,21 @@ export class WocClient {
             : "unexpected shape";
         throw new WocError(path, 200, `unexpected payload: ${msg}`);
       }
-      const failed = raw.find(
-        (e) => typeof e.error === "string" && e.error.length > 0,
-      );
-      if (failed) {
-        throw new WocError(
-          path,
-          200,
-          `address ${failed.address ?? "?"} failed: ${failed.error}`,
-        );
+      for (const row of raw) assertNoRowError(path, row);
+      const expanded: RawAddressRow[] = [];
+      for (const row of raw) {
+        expanded.push({
+          ...row,
+          result: await collectPages(kind, row),
+          nextPageToken: undefined,
+        });
       }
-      return raw;
+      return expanded;
     };
 
     const [confirmedRows, unconfirmedRows] = await Promise.all([
-      fetchOne("/addresses/confirmed/unspent"),
-      fetchOne("/addresses/unconfirmed/unspent"),
+      fetchOne("/addresses/confirmed/unspent", "confirmed"),
+      fetchOne("/addresses/unconfirmed/unspent", "unconfirmed"),
     ]);
 
     // Merge per-address. Map keyed by address, seeded with empty

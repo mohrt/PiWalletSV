@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "description": "PiWallet Pass v1 challenge vectors. text is joined with \\n and has no trailing newline; the challenge is SHA-256 of its UTF-8 bytes. request.wallet is the fingerprint, or empty when the request names no wallet.",
+  "vectors": [
+    {
+      "name": "sign-in with a named wallet",
+      "request": {
+        "origin": "https://shop.example",
+        "id": "q7ZtR2vXkY0aB9cD",
+        "purpose": "sign-in",
+        "mode": "get",
+        "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "wallet": "cf987d8c"
+      },
+      "text": "piwallet-pass:v1\norigin:https://shop.example\nid:q7ZtR2vXkY0aB9cD\npurpose:sign-in\nmode:get\nnonce:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\nwallet:cf987d8c",
+      "sha256_hex": "0b6753fee43611eb33213c3f9d29e867d72c221d3e9dd30e89bdb822d282a5ee",
+      "challenge_b64url": "C2dT_uQ2EeszITw_nSnoZ9csIh0-ndMOib24ItKCpe4"
+    },
+    {
+      "name": "create with no wallet named",
+      "request": {
+        "origin": "https://dev.piwalletpay.com",
+        "id": "signup-0001",
+        "purpose": "create-account",
+        "mode": "create",
+        "nonce": "__79_Pv6-fj39vX08_Lx8O_u7ezr6uno5-bl5OPi4eA",
+        "wallet": ""
+      },
+      "text": "piwallet-pass:v1\norigin:https://dev.piwalletpay.com\nid:signup-0001\npurpose:create-account\nmode:create\nnonce:__79_Pv6-fj39vX08_Lx8O_u7ezr6uno5-bl5OPi4eA\nwallet:",
+      "sha256_hex": "5f2630c22206543b8e53dec8258b230e75b36cb21ccbcf74378d133d6a712a75",
+      "challenge_b64url": "XyYwwiIGVDuOU97IJYsjDnWzbLIcy890N40TPWpxKnU"
+    },
+    {
+      "name": "origin with a port",
+      "request": {
+        "origin": "https://localhost:8443",
+        "id": "A_b-9xyz",
+        "purpose": "confirm",
+        "mode": "get",
+        "nonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "wallet": "00000000"
+      },
+      "text": "piwallet-pass:v1\norigin:https://localhost:8443\nid:A_b-9xyz\npurpose:confirm\nmode:get\nnonce:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nwallet:00000000",
+      "sha256_hex": "4ea830e5e086c0e8968e2cc3aba12cecd1fc03ab444c39e5479a25965a0723cb",
+      "challenge_b64url": "Tqgw5eCGwOiWjizDq6Es7NH8A6tETDnlR5ollloHI8s"
+    }
+  ],
+  "wallet_proof": {
+    "description": "walletProof = base64url(HMAC-SHA256(key, \"piwallet-pass:v1:wallet-proof\\n\" || challenge)). key is bytes 13..78 of the base58check-decoded xpub (chain code, then compressed public key). The xpub is the BIP32 test vector 1 master key.",
+    "xpub": "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8",
+    "proofs": {
+      "sign-in with a named wallet": "mmkJysDy4ftVwEtYC1-oduSTVPKEZ6ulVZeaPP7BtNw",
+      "create with no wallet named": "Y61-mykA8g6gb0KVE4p7sVrnL_ADC3Zud85jHhN4-FU"
+    }
+  }
+}

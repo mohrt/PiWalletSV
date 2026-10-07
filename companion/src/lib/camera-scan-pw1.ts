@@ -52,6 +52,8 @@ export async function startPw1Scan(
   options?: {
     scanIntervalMs?: number;
     onPw1Error?: (msg: string) => void;
+    /** A QR that is not a PW1 frame. Return true to take it and stop the camera. */
+    onOtherQr?: (text: string) => boolean;
   },
 ): Promise<Pw1ScanHandle> {
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -145,6 +147,9 @@ export async function startPw1Scan(
           } else {
             emitProgress(asm, onProgress);
           }
+        } else if (options?.onOtherQr?.(trimmed)) {
+          release();
+          return;
         }
       }
     }

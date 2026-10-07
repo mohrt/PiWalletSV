@@ -71,3 +71,56 @@ def test_open_display_st7789_raises_without_extras() -> None:
 def test_open_display_rejects_unknown_backend() -> None:
     with pytest.raises(ValueError, match="unknown display backend"):
         open_display("oscilloscope")
+
+
+def test_console_claim_switches_the_vt_to_graphics(monkeypatch: pytest.MonkeyPatch) -> None:
+    import fcntl
+
+    from piwallet.ui.display import _KD_GRAPHICS, _KD_TEXT, _KDSETMODE, claim_linux_console
+
+    calls: list[tuple[int, int]] = []
+
+    def open_tty(path: str, flags: int) -> int:
+        import os
+
+        assert path == "/dev/tty0"
+        assert flags & os.O_ACCMODE == os.O_WRONLY
+        return 7
+
+    def ioctl(fd: int, request: int, arg: int = 0) -> int:
+        calls.append((request, arg))
+        return 0
+
+    closed: list[int] = []
+    monkeypatch.setattr("os.open", open_tty)
+    monkeypatch.setattr("os.close", lambda fd: closed.append(fd))
+    monkeypatch.setattr(fcntl, "ioctl", ioctl)
+
+    claim = claim_linux_console()
+    assert claim.tty_fd == 7
+    assert calls == [(_KDSETMODE, _KD_GRAPHICS)]
+    claim.release()
+    assert calls == [(_KDSETMODE, _KD_GRAPHICS), (_KDSETMODE, _KD_TEXT)]
+    assert closed == [7]
+    assert claim.tty_fd is None
+
+
+def test_console_claim_turns_blink_off_when_the_tty_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    from piwallet.ui.display import claim_linux_console
+
+    blink = tmp_path / "cursor_blink"
+    blink.write_text("1\n", encoding="ascii")
+    monkeypatch.setattr("piwallet.ui.display._CURSOR_BLINK", str(blink))
+
+    def no_tty(*_args: object, **_kwargs: object) -> int:
+        raise OSError("no tty")
+
+    monkeypatch.setattr("os.open", no_tty)
+
+    claim = claim_linux_console()
+    assert claim.tty_fd is None
+    assert blink.read_text(encoding="ascii") == "0\n"
+    claim.release()
+    assert blink.read_text(encoding="ascii") == "1\n"

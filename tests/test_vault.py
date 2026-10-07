@@ -51,6 +51,15 @@ def test_create_initializes_file(vault_path: Path) -> None:
     assert v.is_initialized
     assert v.list_wallets() == []
     assert v.attempts_remaining == 10
+    v.check_pin(GOOD_PIN)
+
+
+def test_empty_vault_rejects_a_different_pin(vault_path: Path) -> None:
+    v = vlt.Vault(vault_path)
+    v.create(pin="000000")
+    with pytest.raises(vlt.WrongPinError):
+        v.check_pin("000001")
+    assert v.attempts_remaining == 9
 
 
 def test_create_refuses_existing_file(vault_path: Path) -> None:

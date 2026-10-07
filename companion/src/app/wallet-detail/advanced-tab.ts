@@ -9,8 +9,8 @@ import {
   startPw1QrPlayback,
   wirePw1QrControls,
 } from "../../lib/pw1-qr-playback.js";
-import { removeWallet, updateLabel } from "../../lib/wallets.js";
-import { escapeHtml } from "./shared.js";
+import { getWallet, removePasskey, removeWallet, renamePasskey, updateLabel } from "../../lib/wallets.js";
+import { escapeHtml, passkeyListHtml } from "./shared.js";
 import type { WalletDetailRuntime, WalletDetailTab } from "./types.js";
 
 export interface AdvancedTab extends WalletDetailTab {
@@ -158,7 +158,36 @@ export function createAdvancedTab(rt: WalletDetailRuntime): AdvancedTab {
     }
   }
 
+  async function onPasskeyAction(e: Event): Promise<void> {
+    if (!rt.wallet) return;
+    const target = e.target as HTMLElement;
+    const renameId = target.closest<HTMLElement>("[data-passkey-rename]")?.dataset.passkeyRename;
+    const removeId = target.closest<HTMLElement>("[data-passkey-remove]")?.dataset.passkeyRemove;
+    const $status = rt.root.querySelector<HTMLElement>("#passkeyStatus");
+    const current = rt.wallet.passkeys?.find((p) => p.credentialId === (renameId ?? removeId));
+    if (!current || !$status) return;
+    try {
+      if (renameId) {
+        const name = window.prompt("Passkey name", current.name);
+        if (name === null || !name.trim() || name.trim() === current.name) return;
+        await renamePasskey(rt.wallet.id, renameId, name);
+      } else if (removeId) {
+        if (!window.confirm(`Remove "${current.name}" from this companion? Remove it in ${current.appOrigin}'s settings too.`)) return;
+        await removePasskey(rt.wallet.id, removeId);
+      }
+      const fresh = await getWallet(rt.wallet.id);
+      rt.wallet = { ...rt.wallet, passkeys: fresh?.passkeys ?? [] };
+      rt.root.querySelector<HTMLElement>("#passkeyList")!.innerHTML = passkeyListHtml(rt.wallet.passkeys ?? []);
+      $status.textContent = "";
+    } catch (err) {
+      $status.textContent = (err as Error).message;
+    }
+  }
+
   function bind(): void {
+    rt.root
+      .querySelector<HTMLElement>("#passkeyList")
+      ?.addEventListener("click", (e) => void onPasskeyAction(e));
     rt.root
       .querySelector<HTMLButtonElement>("#exportShow")
       ?.addEventListener("click", () => void onShowExport());

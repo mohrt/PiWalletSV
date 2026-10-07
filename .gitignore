@@ -61,11 +61,11 @@ companion/node_modules/
 companion/dist/
 node_modules/
 
-# Private commerce stack (Lambda + catalog + operator runbooks).
-# Canonical copy lives in the private piwalletsv-infra repo.
+# Private commerce stack (Lambda + catalog + operator runbooks). It lives in
+# the private piwalletsv-store repo; never commit a copy here.
 /store/
 
-# Store API tests (run from piwalletsv-infra with PYTHONPATH=../PiWallet if needed)
+# Store API tests (they live in piwalletsv-store)
 tests/test_store_api.py
 tests/test_store_tracking.py
 tests/test_store_amounts.py

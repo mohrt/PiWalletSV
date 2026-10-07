@@ -12,8 +12,9 @@
 # Options:
 # --version VER release version (required)
 # --board SLUG processor tier (required):
-# pi0 (Zero v1.3 / Zero W / WH), pi02w (Zero 2 W, Pi 3 B),
-# pi2 (Pi 2 B), pi4 (Pi 4 / 400)
+# pi0 (Zero v1.3 / Zero W / WH), pi02w (Zero 2 W),
+# pi2 (Pi 2 B), pi4 (Pi 4 / 400),
+# pro-pi3 (Pro on Pi 3 Model B + 3.5 inch LCD F)
 # --maturity STAGE alpha | beta | release (default: release)
 # alpha/beta add a suffix to the filename; alpha stays local
 # --from PATH skip dd — shrink/compress/checksum an existing .img capture
@@ -93,8 +94,8 @@ done
 [[ "$VERSION" != *"/"* ]] || fail "invalid version: $VERSION"
 
 case "$BOARD" in
- pi0|pi02w|pi2|pi4) ;;
- *) fail "--board must be pi0, pi02w, pi2, or pi4 (got '$BOARD')" ;;
+ pi0|pi02w|pi2|pi4|pro-pi3) ;;
+ *) fail "--board must be pi0, pi02w, pi2, pi4, or pro-pi3 (got '$BOARD')" ;;
 esac
 
 case "$MATURITY" in
@@ -268,7 +269,7 @@ write_sha256sums() {
  else
  hash=$(sha256sum "$XZ" | awk '{print $1}')
  fi
- line="$hash $name"
+ line="$hash  $name"
 
  # Single-line file for GitHub Release upload (this version only).
  log "writing upload bundle $(basename "$SUMS")"
@@ -310,34 +311,35 @@ with open(path, encoding="utf-8") as f:
 
 base = f"piwalletsv-{version}-{board}"
 if maturity in ("alpha", "beta"):
- base = f"{base}-{maturity}"
+    base = f"{base}-{maturity}"
 image_xz = f"{base}.img.xz"
 
 for rel in data.get("releases", []):
- if rel.get("version") != version:
- continue
- if rel.get("board") not in (None, board):
- continue
- rel["board"] = board
- rel["sha256"] = sha256
- tag = rel.get("tag", f"v{version}")
- base_url = f"https://github.com/mohrt/PiWalletSV/releases/download/{tag}"
- assets = rel.setdefault("assets", {})
- assets["image_xz"] = f"{base_url}/{image_xz}"
- assets["image_asc"] = f"{base_url}/{image_xz}.asc"
- assets["sha256sums"] = f"{base_url}/SHA256SUMS"
- assets["sha256sums_asc"] = f"{base_url}/SHA256SUMS.asc"
- break
+    if rel.get("version") != version:
+        continue
+    # Entries written before the board field existed are all Zero images.
+    if rel.get("board", "pi0") != board:
+        continue
+    rel["board"] = board
+    rel["sha256"] = sha256
+    tag = rel.get("tag", f"v{version}")
+    base_url = f"https://github.com/mohrt/PiWalletSV/releases/download/{tag}"
+    assets = rel.setdefault("assets", {})
+    assets["image_xz"] = f"{base_url}/{image_xz}"
+    assets["image_asc"] = f"{base_url}/{image_xz}.asc"
+    assets["sha256sums"] = f"{base_url}/SHA256SUMS"
+    assets["sha256sums_asc"] = f"{base_url}/SHA256SUMS.asc"
+    break
 else:
- print(
- f"[capture-sd] warn: version {version} (board {board}) not found in releases.json",
- file=sys.stderr,
- )
- sys.exit(0)
+    print(
+        f"[capture-sd] warn: version {version} (board {board}) not found in releases.json",
+        file=sys.stderr,
+    )
+    sys.exit(0)
 
 with open(path, "w", encoding="utf-8") as f:
- json.dump(data, f, indent=2)
- f.write("\n")
+    json.dump(data, f, indent=2)
+    f.write("\n")
 PY
  log "updated releases.json for $VERSION ($BOARD)"
 }

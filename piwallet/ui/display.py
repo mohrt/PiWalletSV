@@ -322,7 +322,221 @@ class ST7789Display(Display):
             self._backlight.value = False
 
 
-def open_display(backend: str = "auto") -> Display:
+def rgb_to_fb_bytes(image: Image.Image, bits_per_pixel: int) -> bytes:
+    """Pack an RGB image for a Linux framebuffer.
+
+    16-bit panels (the Waveshare SPI HAT) want RGB565. 32-bit panels
+    want BGRX, which is what the Pi's framebuffer usually uses.
+    """
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    raw = image.tobytes("raw", "RGB")
+    if bits_per_pixel == 16:
+        return _rgb565_le(raw)
+    if bits_per_pixel == 32:
+        return _bgra32(raw)
+    raise ValueError(f"unsupported framebuffer depth: {bits_per_pixel}")
+
+
+def _rgb565_le(raw: bytes) -> bytes:
+    """RGB888 bytes to little-endian RGB565. One pass, no Python per pixel."""
+    import numpy as np
+
+    rgb = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3)
+    r = rgb[:, 0].astype(np.uint16)
+    g = rgb[:, 1].astype(np.uint16)
+    b = rgb[:, 2].astype(np.uint16)
+    pixel = ((r & np.uint16(0xF8)) << np.uint16(8)) | ((g & np.uint16(0xFC)) << np.uint16(3)) | (
+        b >> np.uint16(3)
+    )
+    return pixel.astype("<u2").tobytes()
+
+
+def _bgra32(raw: bytes) -> bytes:
+    import numpy as np
+
+    rgb = np.frombuffer(raw, dtype=np.uint8).reshape(-1, 3)
+    out = np.empty((rgb.shape[0], 4), dtype=np.uint8)
+    out[:, 0] = rgb[:, 2]
+    out[:, 1] = rgb[:, 1]
+    out[:, 2] = rgb[:, 0]
+    out[:, 3] = 255
+    return out.tobytes()
+
+
+# linux/kd.h — switch the VT off text mode so fbcon stops drawing its cursor
+# into the same framebuffer the wallet is painting.
+_KDSETMODE = 0x4B3A
+# FBIOBLANK with FB_BLANK_UNBLANK. Writes alone do not start the panel
+# CRTC when the console is on HDMI.
+_FBIOBLANK = 0x4611
+_FB_BLANK_UNBLANK = 0
+_KD_TEXT = 0
+_KD_GRAPHICS = 1
+_CONSOLE_TTY = "/dev/tty0"
+_CURSOR_BLINK = "/sys/class/graphics/fbcon/cursor_blink"
+
+
+class ConsoleClaim:
+    """Hold on the Linux console while a framebuffer app owns the panel."""
+
+    def __init__(self) -> None:
+        self.tty_fd: int | None = None
+        self.blink_off = False
+
+    def release(self) -> None:
+        import fcntl
+        import os
+
+        if self.tty_fd is not None:
+            with contextlib.suppress(OSError):
+                fcntl.ioctl(self.tty_fd, _KDSETMODE, _KD_TEXT)
+            os.close(self.tty_fd)
+            self.tty_fd = None
+        if self.blink_off:
+            with contextlib.suppress(OSError):
+                with open(_CURSOR_BLINK, "w", encoding="ascii") as blink:
+                    blink.write("1\n")
+            self.blink_off = False
+
+
+def claim_linux_console() -> ConsoleClaim:
+    """Stop the console cursor from drawing over the panel.
+
+    Graphics mode is the real handoff: the kernel leaves the framebuffer
+    alone until the claim is released. Turning blink off is the fallback
+    when this user cannot open the console.
+    """
+    import fcntl
+    import os
+    import sys
+
+    claim = ConsoleClaim()
+    # Group tty can write this device, not read it. The graphics-mode
+    # ioctl still needs CAP_SYS_TTY_CONFIG or a session whose controlling
+    # terminal is this console. An SSH login has neither, so usermod
+    # cannot clear the cursor.
+    tty_error: OSError | None = None
+    try:
+        tty = os.open(_CONSOLE_TTY, os.O_WRONLY | os.O_NOCTTY)
+    except OSError as exc:
+        tty = None
+        tty_error = exc
+    if tty is not None:
+        try:
+            fcntl.ioctl(tty, _KDSETMODE, _KD_GRAPHICS)
+        except OSError as exc:
+            tty_error = exc
+            os.close(tty)
+        else:
+            claim.tty_fd = tty
+            return claim
+    try:
+        with open(_CURSOR_BLINK, "w", encoding="ascii") as blink:
+            blink.write("0\n")
+    except OSError as exc:
+        print(
+            "Could not hide the console cursor "
+            f"({tty_error or exc}). The wallet is still starting.\n"
+            "From the Pi, run this once, then start the wallet again:\n"
+            "  sudo python3 -c 'import os,fcntl; "
+            "fd=os.open(\"/dev/tty0\", os.O_RDWR); fcntl.ioctl(fd, 0x4B3A, 1)'",
+            file=sys.stderr,
+        )
+        return claim
+    claim.blink_off = True
+    return claim
+
+
+class FramebufferDisplay(Display):
+    """Write frames to a Linux framebuffer. No X server.
+
+    Width and height come from the device profile. The kernel's reported
+    size wins when the ioctl succeeds, so a panel that disagrees with the
+    profile fails loudly instead of painting off the edge. The Linux
+    console on that same framebuffer is switched to graphics mode so its
+    cursor does not blink through the frame.
+    """
+
+    def __init__(self, path: str, width: int, height: int) -> None:
+        self.path = path
+        self.width = width
+        self.height = height
+        self._fd: int | None = None
+        self._bpp = 16
+        self._console = ConsoleClaim()
+        self._open()
+        self._console = claim_linux_console()
+
+    def _open(self) -> None:
+        import fcntl
+        import os
+        import struct
+
+        try:
+            fd = os.open(self.path, os.O_RDWR)
+        except OSError as exc:
+            raise RuntimeError(f"cannot open framebuffer {self.path}: {exc}") from exc
+        self._fd = fd
+        # FBIOGET_VSCREENINFO. The first seven fields are __u32 on every
+        # architecture: xres, yres, xres_virtual, yres_virtual, xoffset,
+        # yoffset, bits_per_pixel.
+        buf = bytearray(160)
+        try:
+            fcntl.ioctl(fd, 0x4600, buf)
+        except OSError as exc:
+            os.close(fd)
+            self._fd = None
+            raise RuntimeError(f"FBIOGET_VSCREENINFO failed on {self.path}: {exc}") from exc
+        xres, yres, _xv, _yv, _xo, _yo, bpp = struct.unpack_from("<7I", buf)
+        if (xres, yres) != (self.width, self.height):
+            os.close(fd)
+            self._fd = None
+            raise RuntimeError(
+                f"{self.path} is {xres}x{yres}, profile expects "
+                f"{self.width}x{self.height}"
+            )
+        if bpp not in (16, 32):
+            os.close(fd)
+            self._fd = None
+            raise RuntimeError(f"{self.path} bits_per_pixel={bpp}, want 16 or 32")
+        self._bpp = bpp
+        try:
+            fcntl.ioctl(fd, _FBIOBLANK, _FB_BLANK_UNBLANK)
+        except OSError as exc:
+            logger.warning("unblank %s failed: %s", self.path, exc)
+        logger.info("framebuffer %s %dx%d %dbpp", self.path, xres, yres, bpp)
+
+    def flip(self, framebuf: FrameBuffer) -> None:
+        if self._fd is None:
+            raise RuntimeError("framebuffer is closed")
+        if framebuf.size != (self.width, self.height):
+            raise ValueError(
+                f"framebuf size {framebuf.size} does not match display "
+                f"{(self.width, self.height)}"
+            )
+        import os
+
+        img = framebuf.image
+        if self.brightness < MAX_BRIGHTNESS:
+            from PIL import ImageEnhance
+
+            img = ImageEnhance.Brightness(img).enhance(self.brightness)
+        payload = rgb_to_fb_bytes(img, self._bpp)
+        os.lseek(self._fd, 0, os.SEEK_SET)
+        os.write(self._fd, payload)
+
+    def close(self) -> None:
+        self._console.release()
+        if self._fd is None:
+            return
+        import os
+
+        os.close(self._fd)
+        self._fd = None
+
+
+def open_display(backend: str = "auto", *, fb_device: str = "/dev/fb1", width: int = 480, height: int = 320) -> Display:
     """Construct a display backend.
 
     ``backend`` can be:
@@ -338,6 +552,8 @@ def open_display(backend: str = "auto") -> Display:
         return HeadlessDisplay()
     if backend == "st7789":
         return ST7789Display()
+    if backend == "framebuffer":
+        return FramebufferDisplay(fb_device, width, height)
     if backend == "auto":
         try:
             return ST7789Display()

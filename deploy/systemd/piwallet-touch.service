@@ -1,0 +1,66 @@
+# PiWalletSV touch UI — production systemd unit for the Pro SD image.
+#
+# Draws to the Waveshare 3.5 inch LCD (F). The app picks the framebuffer
+# by the kernel name panel-mipi-dbi, because HDMI swaps fb0 and fb1.
+# HDMI tty1 stays a login console. This unit does not take the VT.
+#
+# Layout assumed by this unit (same as the Zero image):
+#   /opt/piwallet/                  app source, owned by root:root
+#   /opt/piwallet/.venv/            venv built with --system-site-packages
+#   /home/pwsv/.piwallet/           vault, settings, terms (mode 0700)
+#
+[Unit]
+Description=PiWalletSV touch UI
+Documentation=https://piwalletsv.com/operate/
+After=local-fs.target piwallet-usb-mount.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=pwsv
+Group=pwsv
+# video: the panel framebuffer and the camera. input: GT911 evdev. render: dma_heap.
+SupplementaryGroups=video input render i2c
+
+WorkingDirectory=/home/pwsv
+
+# Load the panel driver, turn the lamp on, and start scanout before the
+# app opens the framebuffer. "+" runs this as root.
+ExecStartPre=+/usr/local/sbin/piwallet-panel-on
+
+Environment=LIBCAMERA_LOG_LEVELS=*:WARN
+Environment=PICAMERA2_LOG_LEVEL=0
+Environment=PIWALLET_LOG_LEVEL=WARNING
+Environment=XDG_CACHE_HOME=/var/cache/piwallet-touch
+
+ExecStart=/opt/piwallet/.venv/bin/piwallet touch --device pi3-ws35f
+
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/pwsv/.piwallet /mnt/piwallet-usb
+CacheDirectory=piwallet-touch
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+ReadOnlyPaths=-/sys/class/rfkill -/proc/modules -/etc/modprobe.d -/boot/firmware/config.txt
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

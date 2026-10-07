@@ -25,9 +25,10 @@ Each release filename includes a **board slug** for the Raspberry Pi model
 | Board slug | Raspberry Pi hardware |
 |------------|------------------------|
 | **pi0** | Pi Zero v1.3, Pi Zero W, Pi Zero WH |
-| **pi02w** | Pi Zero 2 W, Pi 3 Model B *(future)* |
+| **pi02w** | Pi Zero 2 W *(future)* |
 | **pi2** | Pi 2 Model B *(future)* |
 | **pi4** | Pi 4 Model B, Pi 400 *(future)* |
+| **pro-pi3** | PiWalletSV Pro: Pi 3 Model B + Waveshare 3.5 inch LCD (F) |
 
 For round‑1 kits use **`pi0`**. Exact filenames and tags are on the
 GitHub release page for that version.
@@ -79,7 +80,7 @@ Once the image is verified and flashed:
   [GitHub Releases](https://github.com/mohrt/PiWalletSV/releases) —
   [User manual § Verify your SD card](user-manual.md#verify-sd-card-on-arrival).
 - Follow [Flash and first run](build-image.md) for disclaimer, vault PIN,
-  wallet creation, airgap check, and a TESTNET smoke test.
+  wallet creation, airgap check, and a testnet smoke test.
 - Routine use: [User manual](user-manual.md) ([USB backup](user-manual.md#usb-backup),
   [Upgrade your device](user-manual.md#upgrade-your-device),
   [Airgap status](user-manual.md#airgap-status)).

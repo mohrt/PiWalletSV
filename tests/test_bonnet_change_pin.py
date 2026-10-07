@@ -177,8 +177,8 @@ def test_change_pin_cancels_when_new_equals_current(
 def test_change_pin_on_empty_vault_succeeds(
     monkeypatch: pytest.MonkeyPatch, empty_vault: Vault
 ) -> None:
-    """Empty vault has no ciphertext — verify accepts any well-formed
-    PIN, change_pin rotates the salt, the flow reports ``"changed"``."""
+    """An empty vault still checks the PIN stored at creation, then
+    change_pin rotates the salt and the flow reports ``"changed"``."""
     pin = "123456"
     _make_runner(
         monkeypatch,

@@ -165,6 +165,87 @@ describe("WocClient", () => {
     });
   });
 
+  it("getUnspentBatch follows nextPageToken until the address is exhausted", async () => {
+    // Bulk confirmed unspent caps at 20 outputs and returns a token
+    // for the rest. The token only works on the single-address GET.
+    const { fetch, calls } = stubFetch((url) => {
+      if (url.endsWith("/addresses/confirmed/unspent")) {
+        return jsonResponse([
+          {
+            address: "addrA",
+            result: [
+              {
+                tx_hash: "aa".repeat(32),
+                tx_pos: 0,
+                value: 1000,
+                height: 800001,
+                isSpentInMempoolTx: false,
+              },
+            ],
+            nextPageToken: "page-2",
+            error: "",
+          },
+        ]);
+      }
+      if (url.endsWith("/addresses/unconfirmed/unspent")) {
+        return jsonResponse([
+          { address: "addrA", result: [], error: "" },
+        ]);
+      }
+      if (
+        url.includes("/address/addrA/confirmed/unspent") &&
+        url.includes("token=page-2")
+      ) {
+        return jsonResponse({
+          address: "addrA",
+          result: [
+            {
+              tx_hash: "bb".repeat(32),
+              tx_pos: 4,
+              value: 2000,
+              height: 800002,
+              isSpentInMempoolTx: false,
+            },
+          ],
+          nextPageToken: "page-3",
+          error: "",
+        });
+      }
+      if (
+        url.includes("/address/addrA/confirmed/unspent") &&
+        url.includes("token=page-3")
+      ) {
+        return jsonResponse({
+          address: "addrA",
+          result: [
+            {
+              tx_hash: "cc".repeat(32),
+              tx_pos: 1,
+              value: 3000,
+              height: 800003,
+              isSpentInMempoolTx: false,
+            },
+          ],
+          error: "",
+        });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const w = new WocClient({ fetch, minIntervalMs: 0 });
+    const rows = await w.getUnspentBatch(["addrA"]);
+    expect(rows).toEqual([
+      {
+        address: "addrA",
+        utxos: [
+          { txid: "aa".repeat(32), vout: 0, sats: 1000, height: 800001 },
+          { txid: "bb".repeat(32), vout: 4, sats: 2000, height: 800002 },
+          { txid: "cc".repeat(32), vout: 1, sats: 3000, height: 800003 },
+        ],
+      },
+    ]);
+    expect(calls).toHaveLength(4);
+  });
+
   it("getUnspentBatch filters UTXOs already being spent in mempool", async () => {
     // A confirmed UTXO can be flagged `isSpentInMempoolTx: true`
     // when the wallet has just broadcast a tx that consumes it.
