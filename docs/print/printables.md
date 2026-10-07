@@ -1,6 +1,7 @@
 # Kit insert (print)
 
-Ship **one printed copy** of the kit insert inside every full kit, and
+Ship **one printed copy** of the matching kit insert inside every full kit
+(Zero or Pro), and
 offer the seed backup sheet for offline BIP39 records. Customers should
 keep both with their seed backup paperwork.
 
@@ -11,7 +12,8 @@ keep both with their seed backup paperwork.
     - **Background graphics:** On (optional gold/green accent bars)
 
     Before a production batch, update **Firmware** and **Image ID** on page 1
-    in [`kit-insert.html`](https://github.com/mohrt/PiWalletSV/blob/main/docs/print/kit-insert.html).
+    in [`kit-insert.html`](https://github.com/mohrt/PiWalletSV/blob/main/docs/print/kit-insert.html)
+    or [`kit-insert-pro.html`](https://github.com/mohrt/PiWalletSV/blob/main/docs/print/kit-insert-pro.html).
 
 Extended checklist (verify SD, upgrade path): [kit-insert.md](kit-insert.md).
 
@@ -32,7 +34,7 @@ and one **24-word**. Print, cut along the guide, store separately from the devic
 
 ## Kit insert
 
-Two-page welcome + quick-start insert for full kits.
+Two-page welcome + quick-start insert for Pi Zero full kits.
 
 [Open kit insert](kit-insert.html){ .md-button .md-button--primary target=_blank }
 
@@ -40,6 +42,21 @@ Two-page welcome + quick-start insert for full kits.
   <iframe
     src="/print/kit-insert.html?embed=1"
     title="PiWalletSV kit insert — 2 pages"
+    loading="lazy"
+  ></iframe>
+</div>
+
+## Pro kit insert
+
+Two-page welcome + quick-start insert for Pro kits (Pi 3 Model B and
+touch screen).
+
+[Open Pro kit insert](kit-insert-pro.html){ .md-button .md-button--primary target=_blank }
+
+<div class="kit-insert-preview">
+  <iframe
+    src="/print/kit-insert-pro.html?embed=1"
+    title="PiWalletSV Pro kit insert — 2 pages"
     loading="lazy"
   ></iframe>
 </div>

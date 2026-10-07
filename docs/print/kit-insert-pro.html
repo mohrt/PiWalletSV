@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PiWalletSV Pro — Kit Insert</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Serif+Display&display=swap");
+
+    :root {
+      --ink: #061018;
+      --navy: #0b1a2e;
+      --gold: #f0b90b;
+      --green: #51cf66;
+      --green-soft: #e8f8ec;
+      --muted: #5c6b7a;
+      --line: #d8e0ea;
+      --paper: #fafbfc;
+      --warn-bg: #fff8e6;
+      --warn-border: #f0b90b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    @page { size: letter; margin: 0; }
+
+    html, body {
+      font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+      font-size: 10pt;
+      line-height: 1.4;
+      color: var(--ink);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page {
+      width: 8.5in;
+      height: 11in;
+      max-height: 11in;
+      page-break-after: always;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .page:last-child { page-break-after: auto; break-after: auto; }
+
+    /* ── Page 1 ─────────────────────────────────────────────────── */
+
+    .welcome {
+      background: #fff;
+      color: var(--ink);
+      height: 100%;
+      padding: 0.48in 0.58in 0.44in;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      justify-content: flex-start;
+    }
+
+    .welcome::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--gold) 0%, var(--green) 100%);
+    }
+
+    .welcome::after {
+      content: "";
+      position: absolute;
+      inset: 0.32in;
+      border: 1.5px solid var(--line);
+      border-radius: 6px;
+      pointer-events: none;
+    }
+
+    .logo-wrap { margin-top: 0.08in; margin-bottom: 0.22in; }
+
+    .logo-wrap img {
+      width: 2in;
+      height: auto;
+      filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.08));
+    }
+
+    .welcome h1 {
+      font-family: "DM Serif Display", Georgia, serif;
+      font-size: 26pt;
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.05;
+      margin-bottom: 0.12in;
+      color: var(--navy);
+    }
+
+    .tagline {
+      font-size: 12pt;
+      color: var(--muted);
+      max-width: 5.8in;
+      margin: 0 auto 0.26in;
+    }
+
+    .welcome-lead {
+      font-size: 10.5pt;
+      color: #243040;
+      max-width: 6.2in;
+      margin: 0 auto 0.28in;
+      text-align: left;
+      line-height: 1.45;
+    }
+
+    .welcome-lead strong { color: var(--ink); }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.1in;
+      justify-content: center;
+      margin-bottom: 0.28in;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.06in 0.14in;
+      border-radius: 999px;
+      font-size: 8.5pt;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: #fff;
+      border: 1.5px solid var(--line);
+      color: var(--muted);
+    }
+
+    .pill.gold { border-color: #d4a008; color: #7a5a00; background: var(--warn-bg); }
+    .pill.green { border-color: #3db856; color: #1a5c2e; background: var(--green-soft); }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0.14in;
+      width: 100%;
+      max-width: 7.1in;
+      margin-bottom: 0.28in;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0.16in 0.14in 0.15in;
+      text-align: left;
+      border-top: 3px solid var(--navy);
+    }
+
+    .card:nth-child(1) { border-top-color: var(--gold); }
+    .card:nth-child(2) { border-top-color: var(--navy); }
+    .card:nth-child(3) { border-top-color: var(--green); }
+
+    .card-icon { font-size: 15pt; line-height: 1; margin-bottom: 0.07in; }
+
+    .card h2 {
+      font-size: 9.75pt;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 0.06in;
+      line-height: 1.2;
+    }
+
+    .card p { font-size: 8.75pt; color: #3d4f5f; line-height: 1.42; }
+    .card em { color: #7a5a00; font-style: normal; font-weight: 600; }
+    .card strong { color: var(--ink); }
+
+    .beta-strip {
+      width: 100%;
+      max-width: 7.1in;
+      background: var(--warn-bg);
+      border: 1.5px solid #e8c84a;
+      border-radius: 8px;
+      padding: 0.14in 0.16in 0.13in;
+      text-align: left;
+      font-size: 8.75pt;
+      color: #4a3a00;
+      line-height: 1.45;
+    }
+
+    .beta-strip .beta-title {
+      color: #7a5a00;
+      display: block;
+      font-size: 9pt;
+      font-weight: 700;
+      margin-bottom: 0.07in;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .beta-strip p { margin: 0; }
+    .beta-strip p + p { margin-top: 0.06in; }
+
+    .meta-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.24in;
+      width: 100%;
+      max-width: 7.1in;
+      margin-top: 0.2in;
+      font-size: 8.25pt;
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: baseline;
+      gap: 0.1in;
+      padding-top: 0.08in;
+      border-top: 1px solid var(--line);
+    }
+
+    .meta-label { color: var(--muted); font-weight: 600; white-space: nowrap; }
+    .meta-value { color: var(--ink); font-weight: 500; }
+
+    /* ── Page 2 ─────────────────────────────────────────────────── */
+
+    .essentials {
+      background: var(--paper);
+      height: 100%;
+      padding: 0.36in 0.48in 0.32in;
+      font-size: 9pt;
+      line-height: 1.35;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+    }
+
+    .essentials header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.2in;
+      padding-bottom: 0.08in;
+      margin-bottom: 0.1in;
+      border-bottom: 2px solid var(--ink);
+      flex-shrink: 0;
+    }
+
+    .essentials header h1 {
+      font-family: "DM Serif Display", Georgia, serif;
+      font-size: 15pt;
+      font-weight: 400;
+      line-height: 1;
+    }
+
+    .essentials header .urls {
+      text-align: right;
+      font-size: 7.5pt;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .essentials header .urls strong { color: var(--ink); font-weight: 600; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.14in;
+      margin-bottom: 0.1in;
+    }
+
+    .essentials section.block { margin-bottom: 0.08in; }
+
+    section.block h2 {
+      font-size: 8.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--navy);
+      margin-bottom: 0.05in;
+      display: flex;
+      align-items: center;
+      gap: 0.06in;
+    }
+
+    section.block h2::before {
+      content: "";
+      display: inline-block;
+      width: 0.12in;
+      height: 0.12in;
+      border-radius: 2px;
+      background: linear-gradient(135deg, var(--gold), var(--green));
+      flex-shrink: 0;
+    }
+
+    section.block p,
+    section.block li { font-size: 8pt; color: #243040; }
+
+    section.block ul,
+    section.block ol { padding-left: 0.17in; margin: 0; }
+
+    section.block li { margin-bottom: 0.03in; }
+
+    .block-lead {
+      font-size: 8pt;
+      color: #243040;
+      margin-bottom: 0.05in;
+      line-height: 1.35;
+    }
+
+    .callout {
+      background: var(--green-soft);
+      border-left: 3px solid var(--green);
+      border-radius: 0 6px 6px 0;
+      padding: 0.08in 0.1in;
+      font-size: 7.75pt;
+      color: #1a3d24;
+      margin-bottom: 0.1in;
+      line-height: 1.35;
+    }
+
+    .callout.warn {
+      background: var(--warn-bg);
+      border-left-color: var(--warn-border);
+      color: #4a3a00;
+    }
+
+    .callout strong { display: block; margin-bottom: 0.03in; }
+
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      padding: 0;
+    }
+
+    .steps li {
+      counter-increment: step;
+      position: relative;
+      padding-left: 0.24in;
+      margin-bottom: 0.035in;
+      font-size: 7.75pt;
+      line-height: 1.32;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0.01in;
+      width: 0.16in;
+      height: 0.16in;
+      border-radius: 50%;
+      background: var(--navy);
+      color: #fff;
+      font-size: 6.5pt;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    table.do-dont {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 7.5pt;
+    }
+
+    table.do-dont th {
+      text-align: left;
+      padding: 0.06in 0.08in;
+      background: #f3f6f9;
+      color: var(--navy);
+      font-weight: 700;
+      font-size: 8pt;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border-bottom: 2px solid var(--navy);
+    }
+
+    table.do-dont td {
+      padding: 0.06in 0.08in;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      color: #243040;
+    }
+
+    table.do-dont tr:nth-child(even) td { background: #f3f6f9; }
+
+    .footer-strip {
+      margin-top: auto;
+      padding-top: 0.08in;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 0.2in;
+      font-size: 7pt;
+      color: var(--muted);
+      line-height: 1.35;
+      flex-shrink: 0;
+    }
+
+    .footer-strip .qr-hint {
+      font-size: 7.5pt;
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    @media print {
+      html, body { margin: 0; padding: 0; }
+    }
+
+    @media screen {
+      body { background: #e8ecf0; padding: 3.25rem 0 2rem; }
+      .print-toolbar {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        padding: 0.55rem 1rem;
+        background: var(--navy);
+        color: #fff;
+        font-size: 0.8125rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      }
+      .print-toolbar a,
+      .print-toolbar button {
+        font: inherit;
+        cursor: pointer;
+        border: 1px solid rgba(255,255,255,0.35);
+        border-radius: 4px;
+        padding: 0.35rem 0.85rem;
+        background: transparent;
+        color: #fff;
+        text-decoration: none;
+      }
+      .print-toolbar button.primary,
+      .print-toolbar a.primary {
+        background: var(--gold);
+        border-color: var(--gold);
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .print-toolbar span { opacity: 0.85; }
+      .page { margin: 0 auto 1.5rem; box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+    }
+
+    @media print {
+      .print-toolbar { display: none !important; }
+      body { padding: 0; background: #fff; }
+      .page { margin: 0; box-shadow: none; }
+    }
+
+    @media screen {
+      body {
+        background: #dde3ea;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+      }
+      .page {
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+        border-radius: 2px;
+      }
+    }
+
+    /* Docs-site iframe preview: flush letter pages, no chrome/margins. */
+    html.embed,
+    html.embed body {
+      background: #fff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      display: block !important;
+      gap: 0 !important;
+    }
+    html.embed .print-toolbar {
+      display: none !important;
+    }
+    html.embed .page {
+      margin: 0 !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
+  </style>
+  <script>
+    (function () {
+      if (window.self !== window.top || /(?:^|[?&])embed=1(?:&|$)/.test(location.search)) {
+        document.documentElement.classList.add("embed");
+      }
+    })();
+  </script>
+</head>
+<body>
+
+  <div class="print-toolbar" aria-label="Print controls">
+    <span>PiWalletSV Pro kit insert · US Letter · 2 pages</span>
+    <button type="button" class="primary" onclick="window.print()">Print</button>
+    <a href="printables/">Back to docs</a>
+  </div>
+
+  <!-- Page 1 — Welcome -->
+  <div class="page welcome">
+    <div class="logo-wrap">
+      <img src="../assets/logo.png" alt="PiWalletSV">
+    </div>
+
+    <h1>Welcome to PiWalletSV Pro</h1>
+    <p class="tagline">
+      Your air-gapped Bitcoin SV cold wallet —<br>
+      keys on the Pi, chain on your phone.
+    </p>
+
+    <p class="welcome-lead">
+      Thank you for supporting an open, non-custodial signer built from
+      <strong>off-the-shelf parts you can inspect and replace</strong>.
+      This little computer holds your signing keys and <strong>never
+      connects to Wi‑Fi, Bluetooth, or Ethernet</strong>. Your phone or
+      laptop runs the companion app to watch the chain and build
+      transactions — the Pi only signs what you approve on its touch screen.
+    </p>
+
+    <div class="pill-row">
+      <span class="pill green">Air-gapped by design</span>
+      <span class="pill">Open source · MIT</span>
+      <span class="pill gold">Pro beta kit</span>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">⏳</div>
+        <h2>Be patient at boot</h2>
+        <p>
+          Power-on takes <em>under 30 seconds</em> before the logo
+          appears — the screen may stay dark while the system starts.
+          <em>Don't unplug it; let it finish.</em>
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🖥</div>
+        <h2>Pi 3 + touch screen</h2>
+        <p>
+          Your Pro uses a <strong>Raspberry Pi 3 Model B</strong> and a
+          <strong>3.5 inch touch screen</strong>. Tap instead of a joystick,
+          type seed words on an on-screen keyboard, and show your whole
+          xpub in <em>one QR code</em>. Same firmware and seeds as the Zero kit.
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔑</div>
+        <h2>You are the backup</h2>
+        <p>
+          Write your <em>12- or 24-word seed phrase</em> on paper or steel.
+          No company can recover lost seeds or PINs. Your funds always remain
+          recoverable in any BIP39 wallet — PiWalletSV is not required.
+        </p>
+      </div>
+    </div>
+
+    <div class="beta-strip">
+      <span class="beta-title">Beta software — read before funding</span>
+      <p>
+        PiWalletSV software is beta. It is fully functional with no currently
+        known issues. Bugs will be fixed and released; all notices are posted
+        on @PiWalletSV (x.com/PiWalletSV).
+      </p>
+      <p>
+        There is no warranty and no custodial recovery service.
+        The screen shows a disclaimer on first boot; the full
+        text is at piwalletsv.com/disclaimer
+      </p>
+    </div>
+
+    <div class="meta-bar">
+      <div class="meta-item">
+        <span class="meta-label">Firmware</span>
+        <span class="meta-value">________</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">Image ID</span>
+        <span class="meta-value">________</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Page 2 — Quick reference -->
+  <div class="page essentials">
+    <header>
+      <h1>Quick start</h1>
+      <div class="urls">
+        <strong>piwalletsv.com</strong><br>
+        Companion: <strong>app.piwalletsv.com</strong><br>
+        Verify: <strong>github.com/mohrt/PiWalletSV/releases</strong>
+      </div>
+    </header>
+
+    <div class="callout warn">
+      <strong>Before you fund — verify the microSD (strongly recommended)</strong>
+      Kits are boot-tested before shipment, so the card no longer byte-matches the pristine
+      image checksum. Proper cold-wallet practice: verify the signed download on
+      GitHub Releases and re-flash before creating a wallet or receiving funds.
+    </div>
+
+    <div class="grid-2">
+      <section class="block">
+        <h2>First boot on the touch screen</h2>
+        <p class="block-lead">Plug the included power adapter into the Pi’s <strong>micro-USB power port</strong> (long edge, next to HDMI), then wait up to 30 seconds for the logo.</p>
+        <ol class="steps">
+          <li><strong>Disclaimer</strong> — read it; press and hold <strong>Hold to accept</strong>.</li>
+          <li><strong>Vault PIN</strong> — 6 digits on the keypad.</li>
+          <li><strong>Your first wallet</strong> — tap <strong>Add</strong> (or <strong>Restore</strong>); write every seed word offline. Keys stay on the device.</li>
+          <li><strong>Airgap check</strong> — Settings → Maintenance → Airgap status.</li>
+          <li><strong>Pair companion</strong> — open app.piwalletsv.com; on the Pi, tap your wallet → <strong>Show xpub (QR)</strong> and scan it (watch-only; never the seed).</li>
+        </ol>
+        <div class="callout" style="margin-top:0.06in;margin-bottom:0;">
+          <strong>Too many wrong PINs in a row wipe the vault on the device.</strong>
+          The keypad shows how many tries are left. Your seed phrase is the real backup — not the PIN, not support.
+        </div>
+      </section>
+
+      <section class="block">
+        <h2>Touch &amp; daily use</h2>
+        <ul>
+          <li><strong>Tap</strong> to choose · <strong>Back</strong> / <strong>Cancel</strong> at the top right</li>
+          <li><strong>Hold a finger ~5 s</strong> on the boot logo — factory diagnostics</li>
+          <li>Home screen: <strong>Add</strong> · <strong>Restore</strong> · <strong>Settings</strong> across the top, wallets below</li>
+          <li><strong>Receive</strong> — tap wallet → Show deposit address; compare with the companion for large amounts.</li>
+          <li><strong>Send</strong> — companion builds tx → tap wallet → Sign transaction → camera scans QR → review → tap <strong>Sign</strong> → companion broadcasts.</li>
+          <li><strong>Backup / upgrade</strong> — USB stick in any USB port (no adapter needed) → Settings → Maintenance → USB backup, or restore from written seed.</li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="grid-2">
+      <section class="block">
+        <h2>Swap or re-flash microSD</h2>
+        <p class="block-lead">Export vault to a USB stick <strong>or</strong> confirm you have your seed phrase(s) before re-flashing.</p>
+        <div class="callout" style="margin-bottom:0.06in;">
+          <strong>Tweezers shortcut (recommended for re-imaging)</strong>
+          Power off. Pull the microSD with a <strong>thin pair of tweezers</strong> through the case slot (end opposite the USB ports) — no disassembly. Re-flash on your computer, then reinsert the same way.
+        </div>
+        <p class="block-lead"><strong>Full service</strong> (hardware repair / if tweezers won’t reach):</p>
+        <ol class="steps">
+          <li><strong>Power off</strong> — unplug and wait a few seconds.</li>
+          <li><strong>Screws</strong> — remove the four screws on the back of the case.</li>
+          <li><strong>Lift out</strong> — the screen is the lid; carefully wiggle the screen and Pi out together. Don’t force it. The camera stays in the case on its ribbon.</li>
+          <li><strong>microSD</strong> — pull straight out (no spring latch).</li>
+          <li><strong>Computer</strong> — USB reader; verify and re-flash from GitHub Releases.</li>
+          <li><strong>Reassemble</strong> — card → screen and Pi into the case → four screws, snug only (the screen is glass).</li>
+        </ol>
+      </section>
+
+      <section class="block">
+        <h2>Assembly</h2>
+        <p class="block-lead">Your kit ships <strong>fully assembled</strong>. Use these only if you took it apart.</p>
+        <ol class="steps">
+          <li><strong>Pi off.</strong> Seat the screen on the 40-pin header, straight and fully down.</li>
+          <li>Camera ribbon → CSI (latch open → insert → latch closed).</li>
+          <li>Insert the microSD (label side as printed on the Pi).</li>
+          <li>Power into the <strong>micro-USB</strong> port only.</li>
+        </ol>
+        <div class="callout" style="margin-top:0.06in;margin-bottom:0;">
+          <strong>Ports</strong>
+          <strong style="display:inline;font-weight:600;">Micro-USB</strong> — power only (included adapter).
+          <strong style="display:inline;font-weight:600;">USB (four on the end)</strong> — optional USB stick for vault backup; or restore from seed on the screen.
+          <strong style="display:inline;font-weight:600;">Ethernet, HDMI, audio</strong> — leave empty.
+        </div>
+      </section>
+    </div>
+
+    <section class="block">
+      <h2>Do / Don't</h2>
+      <table class="do-dont">
+        <thead>
+          <tr>
+            <th style="width:50%">Do</th>
+            <th>Don't</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Re-flash from signed download before mainnet funds</td>
+            <td>Type your seed into a phone, laptop, or website</td>
+          </tr>
+          <tr>
+            <td>Store seed phrase separately from the device</td>
+            <td>Plug in an Ethernet cable or connect a computer to the Pi</td>
+          </tr>
+          <tr>
+            <td>Check Airgap status after upgrades</td>
+            <td>Share your PIN or seed with anyone — ever</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="footer-strip">
+      <div>
+        <div class="qr-hint">Keep this card with your seed backup records.</div>
+        @PiWalletSV on X · piwalletsv.com/user-manual · piwalletsv.com/security
+      </div>
+      <div style="text-align:right;font-size:6.5pt;">
+        kit-insert-pro · rev 1<br>
+        US Letter · double-sided
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
