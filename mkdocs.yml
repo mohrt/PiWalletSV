@@ -126,7 +126,7 @@ hooks:
   - mkdocs_hooks/piwallet_pay.py
 
 extra_css:
-  - assets/extra.css?v=pro-photos-2
+  - assets/extra.css?v=pro-screens
 
 extra_javascript:
   - assets/env-links.js

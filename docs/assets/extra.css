@@ -88,7 +88,7 @@
 
 .pwsv-photo-strip--portrait img {
   height: auto;
-  aspect-ratio: 3 / 4;
+  aspect-ratio: 2 / 3;
   object-position: center;
 }
 
