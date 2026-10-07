@@ -2,6 +2,10 @@ import { Transaction } from "@bsv/sdk/transaction";
 
 import { CHANGE_BRANCH, deriveAddress } from "../../lib/derive.js";
 import {
+  summarizeSignedTxForDisplay,
+  signedTxMatchesProposal,
+} from "../../lib/signed-tx-summary.js";
+import {
   KIND_SIGNED,
   type SignedTxT,
   bytesToHex,
@@ -672,6 +676,26 @@ export function createSendTab(
     if ($rate) $rate.textContent = formatFeeRate(rt.sendStep.feeRate);
   }
 
+  function renderProposalQrSummary(): void {
+    const $wrap = rt.root.querySelector<HTMLElement>("#proposalQrSummary");
+    const $to = rt.root.querySelector<HTMLElement>("#proposalQrTo");
+    const $amount = rt.root.querySelector<HTMLElement>("#proposalQrAmount");
+    const $fee = rt.root.querySelector<HTMLElement>("#proposalQrFee");
+    if (!$wrap || !$to) return;
+    if (!lastSendSummary) {
+      $wrap.hidden = true;
+      $to.textContent = "";
+      if ($amount) $amount.textContent = "";
+      if ($fee) $fee.textContent = "";
+      return;
+    }
+    // Full address so it can be matched against the Pi confirm screen.
+    $to.textContent = lastSendSummary.recipient;
+    if ($amount) $amount.textContent = formatSats(lastSendSummary.sats);
+    if ($fee) $fee.textContent = formatSats(lastSendSummary.feeSats);
+    $wrap.hidden = false;
+  }
+
   async function onBuildProposal(): Promise<void> {
     if (!rt.wallet || rt.sendBusy || rt.sendStep.step !== "review") return;
     const $status = rt.root.querySelector<HTMLElement>("#reviewStatus")!;
@@ -769,6 +793,7 @@ export function createSendTab(
         sats: rt.sendStep.sats,
         feeSats: rt.sendStep.feeSats,
       };
+      renderProposalQrSummary();
       showSendStep("qr");
       rt.sendStep = { step: "qr" };
       resetBroadcastWidget();
@@ -955,10 +980,11 @@ export function createSendTab(
     let txid = "";
     let rawHex = "";
     let sizeBytes = 0;
+    let parsedTx: Transaction | null = null;
     try {
-      const tx = Transaction.fromAtomicBEEF(Array.from(signed.atomicBeef));
-      txid = tx.id("hex") as string;
-      rawHex = tx.toHex();
+      parsedTx = Transaction.fromAtomicBEEF(Array.from(signed.atomicBeef));
+      txid = parsedTx.id("hex") as string;
+      rawHex = parsedTx.toHex();
       sizeBytes = rawHex.length / 2;
     } catch (e) {
       if ($info) {
@@ -973,12 +999,72 @@ export function createSendTab(
     if ($info) {
       $info.innerHTML = `Ready to broadcast<br><code class="mono" style="font-size:0.75rem;word-break:break-all">${txid}</code>${sizeBytes ? `<br><span class="muted-line">${sizeBytes} bytes</span>` : ""}`;
     }
-    if ($broadcastStatus) $broadcastStatus.textContent = "";
+
+    const network = rt.wallet?.network ?? "main";
+    const fromTx = summarizeSignedTxForDisplay(parsedTx, network);
+    const $readySummary = rt.root.querySelector<HTMLElement>("#broadcastSuccessSummary");
+    const $btn = rt.root.querySelector<HTMLButtonElement>("#broadcastBtn");
+
+    const rejectBroadcast = (reason: string): void => {
+      if ($broadcastStatus) {
+        $broadcastStatus.classList.add("error");
+        $broadcastStatus.textContent = reason;
+      }
+      if ($readySummary) {
+        $readySummary.hidden = true;
+        $readySummary.innerHTML = "";
+      }
+      if ($btn) {
+        delete $btn.dataset.signedHex;
+        delete $btn.dataset.txid;
+        $btn.disabled = true;
+        $btn.textContent = "Broadcast";
+      }
+      showBroadcastWidget();
+      switchSendQrTab("scan");
+      hideBroadcastDone();
+    };
+
+    if (!fromTx) {
+      rejectBroadcast(
+        "signed transaction has no readable P2PKH destination — refusing broadcast",
+      );
+      return;
+    }
+
+    if (lastSendSummary) {
+      const match = signedTxMatchesProposal(fromTx, lastSendSummary);
+      if (!match.ok) {
+        rejectBroadcast(match.reason);
+        return;
+      }
+    }
+
+    // Display values always come from the parsed signed tx.
+    const feeSats = fromTx.feeSats ?? lastSendSummary?.feeSats ?? null;
+    if ($readySummary) {
+      $readySummary.hidden = false;
+      const amountRow = `<dt>Amount</dt><dd>${escapeHtml(formatSats(fromTx.sats))}</dd>`;
+      const feeRow =
+        feeSats != null
+          ? `<dt>Fee</dt><dd>${escapeHtml(formatSats(feeSats))}</dd>`
+          : "";
+      $readySummary.innerHTML =
+        `<dl class="broadcast-success-details">` +
+        `<dt>To</dt><dd>${escapeHtml(shortAddress(fromTx.recipient))}</dd>` +
+        amountRow +
+        feeRow +
+        `</dl>`;
+    }
+
+    if ($broadcastStatus) {
+      $broadcastStatus.classList.remove("error", "success");
+      $broadcastStatus.textContent = "";
+    }
     showBroadcastWidget();
     switchSendQrTab("scan");
     hideBroadcastDone();
 
-    const $btn = rt.root.querySelector<HTMLButtonElement>("#broadcastBtn");
     if ($btn) {
       $btn.dataset.signedHex = rawHex;
       $btn.dataset.txid = txid;
@@ -1137,6 +1223,8 @@ export function createSendTab(
     updateSendFlowProgress("form");
     resetBroadcastWidget();
     resetSpvUi();
+    lastSendSummary = null;
+    renderProposalQrSummary();
     const $status = rt.root.querySelector<HTMLElement>("#sendFormStatus");
     if ($status) {
       $status.classList.remove("error");

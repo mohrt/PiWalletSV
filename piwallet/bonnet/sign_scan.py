@@ -567,6 +567,19 @@ class ConfirmProposalScreen:
             if idx != v.change_index
         )
 
+    def _destination_addrs(self, v: vfy.VerifiedProposal) -> list[str]:
+        """P2PKH addresses for non-change outputs (or ``non-P2PKH`` fallback)."""
+        addrs: list[str] = []
+        for idx, (script, _sats) in enumerate(v.outputs):
+            if idx == v.change_index:
+                continue
+            addr = vfy.script_address_or_none(
+                script,
+                network=self.network,  # type: ignore[arg-type]
+            )
+            addrs.append(addr if addr is not None else "non-P2PKH")
+        return addrs
+
     def draw(self, fb: FrameBuffer) -> None:
         from piwallet.ui.widgets import wrap_text_lines
 
@@ -641,16 +654,27 @@ class ConfirmProposalScreen:
             )
             y += 16
 
+        dests = self._destination_addrs(v)
+        draw_text(fb, 12, y, "To", size=12, color=COLOR_DIM, anchor="lm")
+        y += 14
+        for addr in dests or ["—"]:
+            for ln in wrap_text_lines(addr, max_chars=28)[:3]:
+                draw_text(fb, 12, y, ln, size=11, color=COLOR_FG, anchor="lm")
+                y += 13
+            y += 2
+
         rows = [
             ("Send", f"{self._send_sats(v):,} sat"),
             ("Fee", f"{v.fee_sats:,} sat"),
             ("Net", self.network),
         ]
 
-        row_gap = 20
+        row_gap = 18
         for label, value in rows:
             draw_text(fb, 12, y, label, size=12, color=COLOR_DIM, anchor="lm")
-            draw_text(fb, DISPLAY_WIDTH - 12, y, value, size=12, color=COLOR_FG, anchor="rm")
+            draw_text(
+                fb, DISPLAY_WIDTH - 12, y, value, size=12, color=COLOR_FG, anchor="rm"
+            )
             y += row_gap
 
         draw_text(

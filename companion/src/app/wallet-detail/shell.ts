@@ -222,6 +222,19 @@ export function renderWalletDetailShell(
               aria-labelledby="sendQrTabBtn-proposal" tabindex="0">
               <p id="spvCompleteBanner" class="spv-complete-banner" hidden></p>
               <p id="proposalQrHint" class="muted-line">Point the Pi camera at this animated QR.</p>
+              <div id="proposalQrSummary" class="proposal-qr-summary" hidden>
+                <dl class="broadcast-success-details">
+                  <dt>To</dt>
+                  <dd id="proposalQrTo" class="mono proposal-qr-to"></dd>
+                  <dt>Amount</dt>
+                  <dd id="proposalQrAmount"></dd>
+                  <dt>Fee</dt>
+                  <dd id="proposalQrFee"></dd>
+                </dl>
+                <p class="muted-line proposal-qr-compare-hint">
+                  Match <strong>To</strong> with the address on the Pi confirm screen before signing.
+                </p>
+              </div>
               <canvas id="proposalQr" width="320" height="320"></canvas>
               <p class="muted-line">
                 Frame <span id="proposalFrameIdx">0</span> /

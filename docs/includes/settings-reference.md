@@ -41,7 +41,7 @@ Press **B** to return to the Settings hub.
 
 | Row | What it does |
 |-----|----------------|
-| **Change PIN** | Re-enter the current PIN, then set a new **6-digit** vault PIN. |
+| **Change PIN** | Re-enter the current PIN, then set a new vault PIN (**6–16** letters/digits; existing 6-digit PINs remain valid). |
 | **Airgap status** | Live Wi-Fi / Bluetooth / Network check — see [§ Airgap status](#airgap-status). |
 | **USB backup** | Export or import the encrypted vault to a USB stick — see [§ USB backup](#usb-backup). |
 | **About** | Version, website, wallet count, Pi serial, and hostname. |

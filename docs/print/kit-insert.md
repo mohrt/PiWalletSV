@@ -230,7 +230,7 @@ disclaimer appears.
 
 ### 2. Vault PIN
 
-- Choose **New vault** and set a **PIN** (6 digits).
+- Choose **New vault** and set a **PIN** (6–16 letters/digits; 6 digits still fine).
 - **Wrong PIN six times in a row wipes the vault** on the device.
 - The PIN protects the encrypted file on the SD card — **not** your seed.
 
@@ -319,7 +319,7 @@ Start with **testnet** until you trust the full flow.
 |------|---------|
 | Re-flash SD from signed download before funding (Step 0) | Boot Pi to "verify" or trust pre-flashed card blindly |
 | Write seed offline; store securely | Type seed into any networked device |
-| Protect your 6-digit PIN; test on testnet first | Share PIN or seed with anyone |
+| Protect your PIN; test on testnet first | Share PIN or seed with anyone |
 | Check **Airgap status** periodically | Connect Pi to Wi-Fi / Ethernet |
 | Re-flash from signed download when upgrading | Skip signature verify on updates |
 
