@@ -159,8 +159,9 @@ Pro (3.5 inch touch screen). Choose ship-to country, then pay with card or BSV.
     <p class="piwalletsv-product-price">$39.00</p>
     <p class="piwalletsv-store-stock" data-store-stock="pro-case" hidden></p>
     <p>
-      Printed PiWalletSV Pro case — tub, lid, and all necessary screws.
-      For builders who already have a Pi 3 Model B and the 3.5&nbsp;inch LCD (F).
+      One-piece printed PiWalletSV Pro case and all necessary screws. The screen
+      is the lid. For builders who already have a Pi 3 Model B and the
+      3.5&nbsp;inch LCD (F).
     </p>
     <div class="piwalletsv-store-actions">
       <button type="button" class="md-button md-button--primary" data-store-checkout="stripe" data-sku="pro-case">
