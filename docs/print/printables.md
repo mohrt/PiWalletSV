@@ -11,10 +11,6 @@ keep both with their seed backup paperwork.
     - **Margins:** None or Minimum
     - **Background graphics:** On (optional gold/green accent bars)
 
-    Before a production batch, update **Firmware** and **Image ID** on page 1
-    in [`kit-insert.html`](https://github.com/mohrt/PiWalletSV/blob/main/docs/print/kit-insert.html)
-    or [`kit-insert-pro.html`](https://github.com/mohrt/PiWalletSV/blob/main/docs/print/kit-insert-pro.html).
-
 Extended checklist (verify SD, upgrade path): [kit-insert.md](kit-insert.md).
 
 ## Seed phrase backup sheet

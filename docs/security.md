@@ -216,11 +216,9 @@ Before you fund the device:
 
 - **Re-flash a verified image** (recommended) — download, GPG-verify,
   checksum, and flash the card yourself. Easiest real assurance.
-- **Light checks** (optional) — Image ID on the **kit insert** vs the
-  matching [GitHub release](https://github.com/mohrt/PiWalletSV/releases)
-  (paperwork only). Accepting the tested card as shipped
-  relies on the factory and delivery chain; there is no on-device
-  verification of the full card.
+- **Accept the tested card as shipped** (weaker) — this relies on the
+  factory and delivery chain; there is no on-device verification of the
+  full card.
 
 Full steps: [User manual § Verify your SD card on arrival](user-manual.md#verify-sd-card-on-arrival).
 

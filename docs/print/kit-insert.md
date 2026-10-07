@@ -6,8 +6,6 @@
 
   Print: US Letter or A4, black & white, double-sided recommended.
   Generate PDF: see README.md in this folder.
-
-  Factory: fill in FIRMWARE_VERSION and IMAGE_ID before print if known.
 -->
 
 <div style="page-break-after: always;"></div>
@@ -22,8 +20,6 @@
 | **Companion app** | https://app.piwalletsv.com |
 | **Downloads & verify** | https://github.com/mohrt/PiWalletSV/releases |
 | **Full manual (online)** | https://piwalletsv.com/user-manual/ |
-| **Firmware version** | _(fill before print)_ |
-| **Image ID (batch)** | _(fill before print)_ |
 
 ---
 
@@ -145,16 +141,6 @@ first use. A broken seal is a reason to prefer **Option A**.
 ### Option B — Light checks (optional, weaker)
 
 Use only if you skip re-flash for now.
-
-**Paperwork (no boot):**
-
-1. Compare **Image ID** and **Firmware version** printed at the top
-   of this card to the matching release at
-   **https://github.com/mohrt/PiWalletSV/releases**.
-2. **Match** → paperwork matches that batch. **Mismatch** → do not
-   use; re-flash (Option A).
-
-This does **not** prove the microSD was flashed correctly.
 
 **Hash the card on your computer (forensic record only):**
 

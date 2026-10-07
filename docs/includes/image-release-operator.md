@@ -297,7 +297,7 @@ For each kit microSD (after the GitHub release is live):
 1. Flash `piwalletsv-0.1.0-r3-pi0-beta.img.xz` with Raspberry Pi Imager (**Use custom**)
 2. Optional spot-check: boot once, run smoke test, then re-flash if you booted
 3. Ship with **SD adapter** (customer uses **their own** USB reader to re-flash)
-4. Print kit insert with **Firmware version** + **Image ID** matching the release
+4. Print the matching kit insert (Zero or Pro) from [Printables](../print/printables.md)
 
 Tell every full-kit buyer: **re-flash from GitHub before funding** —
 see [Verify your SD card](../user-manual.md#verify-sd-card-on-arrival).

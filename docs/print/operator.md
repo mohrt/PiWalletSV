@@ -21,9 +21,6 @@ Customers should keep it with their seed backup paperwork.
 6. **Sides:** **Two-sided** (flip on long edge) — page 1 is the welcome cover, page 2 is quick reference.
 7. **Color or B&W:** Both work; color adds subtle accent tints on pills and callouts.
 
-Before a production batch, edit the **Firmware** and **Image ID** fields at the
-bottom of page 1 in `kit-insert.html` (and the matching lines in `kit-insert.md`).
-
 ## Generate PDF from Markdown (optional)
 
 With [Pandoc](https://pandoc.org/) installed:
