@@ -15,7 +15,9 @@
 .idea
 .DS_Store
 
-# Python env & build artifacts
+# Python env & build artifacts.
+# .venv / venv / env are not synced from the Mac, and prune/verify leave a
+# Pi-built environment in place so dev sync does not force a reinstall.
 .venv
 venv
 env

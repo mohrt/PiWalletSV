@@ -60,6 +60,25 @@ def test_pi_payload_forbidden_dirs_not_synced(tmp_path: Path, forbidden: str) ->
     assert not (payload / forbidden).exists(), f"{forbidden}/ must not be in Pi payload"
 
 
+def test_pi_payload_prune_keeps_a_pi_venv(tmp_path: Path) -> None:
+    payload = tmp_path / "payload"
+    _rsync_payload_allowlist(payload)
+    venv = payload / ".venv"
+    venv.mkdir()
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+
+    subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts" / "prune-pi-payload.sh"), str(payload)],
+        check=True,
+        cwd=REPO_ROOT,
+    )
+    subprocess.run(
+        ["bash", str(REPO_ROOT / "scripts" / "verify-pi-payload.sh"), str(payload)],
+        check=True,
+    )
+    assert (venv / "pyvenv.cfg").is_file()
+
+
 def test_pi_payload_prune_removes_git_clone_bulk(tmp_path: Path) -> None:
     """Simulate git clone (full tree) then prune — production fallback path."""
     payload = tmp_path / "payload"

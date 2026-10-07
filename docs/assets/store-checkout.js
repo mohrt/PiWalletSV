@@ -98,6 +98,12 @@
   }
 
   function applyStockUi() {
+    // A listing stays hidden until this store's catalog sells that SKU, so a
+    // product added to dev first never shows a dead checkout on prod.
+    document.querySelectorAll("[data-store-listing]").forEach(function (el) {
+      el.hidden = !stockBySku[el.getAttribute("data-store-listing")];
+    });
+
     document.querySelectorAll("[data-store-stock]").forEach(function (el) {
       const sku = el.getAttribute("data-store-stock");
       const info = stockBySku[sku];

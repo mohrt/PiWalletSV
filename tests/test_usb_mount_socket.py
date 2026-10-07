@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from piwallet.backup import usb_mount_socket as sock
+from piwallet.backup.usb import UsbMountError, UsbVolume, ensure_mounted, unmount
 
 
 def test_handle_mount_success() -> None:
@@ -40,6 +41,37 @@ def test_mount_device_uses_socket_response(tmp_path: Path) -> None:
             with patch.object(sock, "_is_mounted", return_value=True):
                 path = sock.mount_device("/dev/sda1")
     assert path == sock.DEFAULT_MOUNT_POINT
+
+
+def test_sudo_mount_is_rejected_when_the_stick_is_not_mounted(monkeypatch) -> None:
+    def _down(device: str) -> Path:
+        raise UsbMountError("USB mount service not running.")
+
+    monkeypatch.setattr("piwallet.backup.usb.mount_device", _down)
+    monkeypatch.setattr(
+        "piwallet.backup.usb._sudo_helper",
+        lambda action, device=None: MagicMock(returncode=0, stdout="", stderr=""),
+    )
+    monkeypatch.setattr("piwallet.backup.usb._is_mounted", lambda device, mount_point: False)
+    volume = UsbVolume("/dev/sdb2", "14.3G", "", "exfat", None)
+    with pytest.raises(UsbMountError, match="did not mount"):
+        ensure_mounted(volume, sock.DEFAULT_MOUNT_POINT)
+
+
+def test_unmount_uses_sudo_when_the_socket_is_down(monkeypatch) -> None:
+    def _down() -> None:
+        raise UsbMountError("USB mount service not running.")
+
+    monkeypatch.setattr("piwallet.backup.usb.unmount_stick", _down)
+    calls: list[str] = []
+
+    def _helper(action: str, device: str | None = None) -> MagicMock:
+        calls.append(action)
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("piwallet.backup.usb._sudo_helper", _helper)
+    unmount(sock.DEFAULT_MOUNT_POINT)
+    assert calls == ["unmount"]
 
 
 def test_mount_device_socket_missing() -> None:

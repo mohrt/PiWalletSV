@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 
 from PIL import Image
 
-from piwallet.camera_lcd import rgb888_thumbnail, rotate_rgb888
+from piwallet.camera_lcd import PIWALLET_CAMERA_ROTATION_DEG, rgb888_thumbnail, rotate_rgb888
 from piwallet.qr.camera_scan import _import_camera_stack, _parse_size
 
 
@@ -26,6 +26,7 @@ def start_camera_preview_worker(
     *,
     size: str = "640x480",
     interval_s: float = 0.15,
+    rotation_degrees: int = PIWALLET_CAMERA_ROTATION_DEG,
 ) -> None:
     """Spawn a daemon thread that feeds ``state.latest_thumb`` until cancelled."""
 
@@ -46,7 +47,7 @@ def start_camera_preview_worker(
                 with state.lock:
                     if state.cancel_requested:
                         break
-                frame = rotate_rgb888(cam.capture_array("main"))
+                frame = rotate_rgb888(cam.capture_array("main"), rotation_degrees)
                 thumb = rgb888_thumbnail(frame, max_edge=208)
                 with state.lock:
                     state.latest_thumb = thumb

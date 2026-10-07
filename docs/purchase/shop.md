@@ -1,7 +1,7 @@
 # Shop
 
-Limited round-one beta kits and printed cases. Choose ship-to country, then pay with
-card or BSV.
+Limited beta kits and printed cases for the Zero (joystick, 1.3 inch screen) and the
+Pro (3.5 inch touch screen). Choose ship-to country, then pay with card or BSV.
 
 !!! warning "Before you buy"
     **Beta** software, **no warranty**. Restocking fees apply on change-of-mind
@@ -44,7 +44,7 @@ card or BSV.
   </select>
 </label>
 
-## Full kit
+## Zero kit
 
 <div class="piwalletsv-product">
   <div class="piwalletsv-product-media">
@@ -77,7 +77,7 @@ card or BSV.
   </div>
 </div>
 
-## Printed case
+## Zero printed case
 
 <div class="piwalletsv-product">
   <div class="piwalletsv-product-media">
@@ -108,6 +108,63 @@ card or BSV.
     </p>
   </div>
 </div>
+
+<section data-store-listing="pro-kit" hidden>
+<h2 id="pro-kit">Pro kit</h2>
+<div class="piwalletsv-product">
+  <div class="piwalletsv-product-media">
+    <div class="piwalletsv-product-photo-placeholder">Photo coming soon</div>
+  </div>
+  <div class="piwalletsv-product-body">
+    <p class="piwalletsv-product-price">$179.00</p>
+    <p class="piwalletsv-store-stock" data-store-stock="pro-kit" hidden></p>
+    <p>
+      Raspberry Pi 3 Model B, Waveshare 3.5&nbsp;inch capacitive touch screen,
+      OV5647 camera, factory-flashed microSD + adapter, 5&nbsp;V power supply,
+      printed Pro case, and kit insert.
+    </p>
+    <div class="piwalletsv-store-actions">
+      <button type="button" class="md-button md-button--primary" data-store-checkout="stripe" data-sku="pro-kit">
+        Buy with card
+      </button>
+      <button type="button" class="md-button md-button--primary" data-store-checkout="bsv" data-sku="pro-kit">
+        Buy with BSV
+      </button>
+    </div>
+    <p class="piwalletsv-store-follow" data-store-follow="pro-kit" hidden>
+      Follow <a href="https://x.com/PiWalletSV">@PiWalletSV on X</a> for restock updates.
+    </p>
+  </div>
+</div>
+</section>
+
+<section data-store-listing="pro-case" hidden>
+<h2 id="pro-printed-case">Pro printed case</h2>
+<div class="piwalletsv-product">
+  <div class="piwalletsv-product-media">
+    <div class="piwalletsv-product-photo-placeholder">Photo coming soon</div>
+  </div>
+  <div class="piwalletsv-product-body">
+    <p class="piwalletsv-product-price">$39.00</p>
+    <p class="piwalletsv-store-stock" data-store-stock="pro-case" hidden></p>
+    <p>
+      Printed PiWalletSV Pro case — tub, lid, and all necessary screws.
+      For builders who already have a Pi 3 Model B and the 3.5&nbsp;inch LCD (F).
+    </p>
+    <div class="piwalletsv-store-actions">
+      <button type="button" class="md-button md-button--primary" data-store-checkout="stripe" data-sku="pro-case">
+        Buy with card
+      </button>
+      <button type="button" class="md-button md-button--primary" data-store-checkout="bsv" data-sku="pro-case">
+        Buy with BSV
+      </button>
+    </div>
+    <p class="piwalletsv-store-follow" data-store-follow="pro-case" hidden>
+      Follow <a href="https://x.com/PiWalletSV">@PiWalletSV on X</a> for restock updates.
+    </p>
+  </div>
+</div>
+</section>
 
 ---
 

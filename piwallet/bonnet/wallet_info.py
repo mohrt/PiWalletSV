@@ -130,7 +130,7 @@ class WalletInfoScreen:
     def _format_network(net: str) -> str:
         """Render the wallet's network in a way the operator can act on."""
         if net == "test":
-            return "TESTNET"
+            return "testnet"
         if net == "main":
             return "mainnet"
         # Future-proof: show whatever is stored if a future schema

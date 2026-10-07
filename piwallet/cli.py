@@ -153,10 +153,7 @@ def vault_list(ctx: click.Context) -> None:
         return
     v = Vault(path)
     for w in v.list_wallets():
-        # Render network as TESTNET in caps so it visually pops in a
-        # mixed-network listing; mainnet stays lowercase to match how
-        # we render it on the bonnet's wallet-info screen.
-        net_label = "TESTNET" if w.network == "test" else "mainnet"
+        net_label = "testnet" if w.network == "test" else "mainnet"
         click.echo(
             f"{w.id}\t{w.fingerprint.hex()}\t{w.label}\t"
             f"{w.derivation_path}\t{net_label}\t"
@@ -203,7 +200,7 @@ def vault_recover(ctx: click.Context, force: bool) -> None:
         else:
             click.echo(f"Vault appears healthy: {len(wallets)} wallet(s).")
             for w in wallets:
-                net_label = "TESTNET" if w.network == "test" else "mainnet"
+                net_label = "testnet" if w.network == "test" else "mainnet"
                 click.echo(
                     f"  {w.id}  {w.fingerprint.hex()}  {w.label}  "
                     f"{w.derivation_path}  {net_label}"
@@ -1229,6 +1226,92 @@ def bonnet_cmd(
         target_fps=fps,
     )
     sys.exit(code)
+
+
+@main.command("touch", help="Run the touch icon shell (no desktop, no joystick).")
+@click.option(
+    "--device",
+    "device_id",
+    type=click.Choice(["pi3-ws35", "pi3-ws35f"]),
+    default="pi3-ws35f",
+    show_default=True,
+)
+@click.option(
+    "--display",
+    type=click.Choice(["framebuffer", "headless"]),
+    default=None,
+    help="Override the device display. Default follows the device config.",
+)
+@click.option("--fb-device", default=None, help="Framebuffer path. Default follows the device config.")
+@click.option("--touch-device", default=None, help="evdev node. Default: the touchscreen.")
+@click.option("--fps", type=click.IntRange(1, 120), default=60, show_default=True)
+@click.option("--bringup", is_flag=True, help="Paint the held-QR hardware check instead of the icon shell.")
+def touch_cmd(
+    device_id: str,
+    display: str | None,
+    fb_device: str | None,
+    touch_device: str | None,
+    fps: int,
+    bringup: bool,
+) -> None:
+    """Icon grid and on-screen keyboard. Ctrl-C to stop."""
+    from piwallet.core.paths import default_vault_path
+    from piwallet.core.vault import Vault
+    from piwallet.device import framebuffer_for_panel, get_device, hardware_rows
+    from piwallet.platform.pi_serial import read_pi_model
+    from piwallet.touch.bringup import run_touch_bringup
+    from piwallet.touch.input import open_touch
+    from piwallet.touch.shell import TouchRestart, relaunch_process, run_touch_shell
+    from piwallet.ui.display import open_display
+
+    profile = get_device(device_id)
+    disp_name = display or profile.display
+    if fb_device:
+        fb_path = fb_device
+    elif profile.display == "framebuffer":
+        fb_path = framebuffer_for_panel(profile.fb_device or "/dev/fb1")
+    else:
+        fb_path = profile.fb_device or "/dev/fb1"
+    disp = open_display(disp_name, fb_device=fb_path, width=profile.width, height=profile.height)
+    if disp_name == "headless":
+        click.echo("headless touch UI has no pointer; pass a real panel", err=True)
+        sys.exit(1)
+    pointer = open_touch(
+        touch_device,
+        profile.width,
+        profile.height,
+        swap_axes=profile.swap_axes,
+        invert_x=profile.invert_x,
+        invert_y=profile.invert_y,
+    )
+    if bringup:
+        runner = run_touch_bringup
+        runner_kwargs: dict = {"target_fps": fps}
+    else:
+        vault_path = default_vault_path()
+        vault_path.parent.mkdir(parents=True, exist_ok=True)
+        runner = run_touch_shell
+        rotation = 0 if profile.camera_rotation_deg is None else profile.camera_rotation_deg
+        runner_kwargs = {
+            "target_fps": fps,
+            "vault": Vault(vault_path),
+            "camera_rotation": rotation,
+            "hardware": hardware_rows(profile, read_pi_model()),
+        }
+    relaunch = False
+    try:
+        runner(disp, pointer, **runner_kwargs)
+    except TouchRestart:
+        relaunch = True
+    except KeyboardInterrupt:
+        pass
+    finally:
+        pointer.close()
+        close = getattr(disp, "close", None)
+        if close is not None:
+            close()
+    if relaunch:
+        relaunch_process()
 
 
 if __name__ == "__main__":

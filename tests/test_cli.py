@@ -544,9 +544,8 @@ def test_vault_list_renders_network_column(tmp_path: Path) -> None:
     test_line = next(line for line in res.output.splitlines() if "test-w" in line)
     # Tab-separated columns: id, fp, label, hd_path, network, words, created_at.
     assert "\tmainnet\t" in main_line
-    assert "\tTESTNET\t" in test_line
-    # Mainnet should not get the loud uppercase label and vice-versa.
-    assert "\tTESTNET\t" not in main_line
+    assert "\ttestnet\t" in test_line
+    assert "\ttestnet\t" not in main_line
     assert "\tmainnet\t" not in test_line
 
 

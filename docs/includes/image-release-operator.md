@@ -148,14 +148,15 @@ the all-in-one script (capture → PiShrink → `xz` → `SHA256SUMS`):
 
 ### Board slugs (filename)
 
-Board slugs identify the **processor tier**, not Wi‑Fi vs non‑W.
+Board slugs identify the **processor tier**, except `pro-pi3`, which is the Pro product on a Pi 3 Model B.
 
 | `--board` | Hardware |
 |-----------|----------|
 | `pi0` | Pi Zero v1.3, Pi Zero W, Pi Zero WH — **round1 kits** |
-| `pi02w` | Pi Zero 2 W, Pi 3 Model B *(future)* |
+| `pi02w` | Pi Zero 2 W *(future)* |
 | `pi2` | Pi 2 Model B *(future)* |
 | `pi4` | Pi 4 Model B, Pi 400 *(future)* |
+| `pro-pi3` | Pro on Pi 3 Model B + Waveshare 3.5 inch LCD (F) |
 
 Internal channel (`--image-channel round1-zero-w`) is separate from the public
 board slug baked into the filename and `releases.json` `board` field.
@@ -173,6 +174,59 @@ builds apart.
 | `alpha` | `piwalletsv-0.1.0-r3-pi0-alpha.img.xz` | Never — local QA only |
 | `beta` | `piwalletsv-0.1.0-r3-pi0-beta.img.xz` | Pre-release / community beta |
 | `release` | `piwalletsv-1.0.0-pi0.img.xz` | GA — no maturity suffix |
+
+Pro beta filename: `piwalletsv-0.1.0-r1-pro-pi3-beta.img.xz`.
+
+## Pro image (Pi 3 Model B + LCD F)
+
+Use a **fresh** microSD card. Do not provision the dev Pi, and do not run this path without `--product pro`.
+
+- **OS:** Raspberry Pi OS Lite **64-bit** (Trixie). Imager: hostname, user, Wi-Fi, SSH key.
+- **Panel:** Waveshare 3.5 inch LCD (F). The provisioner writes `st7796s.bin` and the `mipi-dbi-spi` + `goodix` lines. It leaves `dtoverlay=vc4-kms-v3d` in place.
+- **Service:** `piwallet-touch.service` runs `piwallet touch --device pi3-ws35f`. The boot helper `piwallet-panel-on` loads the panel driver, turns the backlight on, and starts scanout. HDMI tty1 stays a login console. Check the LCD with the HDMI cable unplugged.
+
+Builder pass (SSH and radios stay up so you can smoke the card):
+
+```bash
+./scripts/sync-to-pi.sh pisv@HOST
+```
+
+On the Pi, from `~/PiWallet` (no `--bootstrap`):
+
+```bash
+sudo bash deploy/provision-pi.sh \
+  --product pro \
+  --src "$(pwd)" \
+  --release-version 0.1.0-r1 \
+  --image-channel pro-pi3 \
+  --keep-ssh --keep-radios
+sudo reboot
+```
+
+Unplug HDMI before that reboot. The LCD should show the splash, then the disclaimer. Plug the monitor back in only if the LCD stays dark. `scripts/factory-smoke-test.sh` is the Zero SPI/joystick check. Do not use it as the gate for this card.
+
+Seal a **re-flashed** card from the HDMI console (not over SSH). Omit `--keep-ssh` and `--keep-radios`, and pass `--local`:
+
+```bash
+sudo bash ~/PiWallet/deploy/provision-pi.sh \
+  --product pro \
+  --src ~/PiWallet \
+  --local \
+  --release-version 0.1.0-r1 \
+  --image-channel pro-pi3
+sudo reboot
+```
+
+Unplug HDMI before that reboot too. Power off once the disclaimer is on the panel. On the Mac:
+
+```bash
+./scripts/capture-sd-image.sh \
+  --version 0.1.0-r1 --board pro-pi3 --maturity beta diskN --sign
+```
+
+The Mac's built-in SD slot is listed as an internal disk, so `diskutil list external` does not show it. Use `diskutil list` and pick the 32 GB disk with a `bootfs` partition.
+
+Publish under tag `v0.1.0-r1-pro-pi3`. `v0.1.0-r1` is the first Zero round.
 
 Alpha builds skip `releases/SHA256SUMS` and `releases.json` updates.
 
@@ -203,10 +257,10 @@ only — fine for 8 GB cards, no extra reboot).
 
 | Done at provision (before `dd`) | Skipped on buyer first boot |
 |--------------------------------|-----------------------------|
-| Radio package purge inline (tty2 / `--local`) | No `apt purge` wait |
+| Radio package purge inline (local console / `--local`) | No `apt purge` wait |
 | cloud-init units masked | No cloud-init timeouts |
 | Wi-Fi/BT firmware disabled + units masked | RF already off |
-| Bonnet app + venv in `/opt/piwallet` | No install step |
+| App + venv in `/opt/piwallet` | No install step |
 
 If provision ran over SSH without `--local`, ``radio-purge.pending`` may still
 be in the image → first boot runs ``apt purge`` (60–120 s, no reboot).

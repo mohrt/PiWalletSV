@@ -6,7 +6,7 @@
 Description=PiWalletSV USB mount socket (root)
 Documentation=https://piwalletsv.com/operate/
 After=local-fs.target
-Before=piwallet-bonnet.service
+Before=piwallet-bonnet.service piwallet-touch.service
 
 [Service]
 Type=simple

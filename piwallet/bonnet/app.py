@@ -145,20 +145,12 @@ log = logging.getLogger(__name__)
 def _make_verify_fn(vault: Vault) -> VerifyFn:
     """Build a PIN-verify callback closed over ``vault``.
 
-    The strategy is to attempt the cheapest PIN-gated operation we
-    have, which is wallet xpub recovery. For an *empty* vault we can't
-    actually verify the PIN (nothing is encrypted under it yet); in
-    that case any well-formed PIN is accepted - this matches the CLI's
-    behaviour and is safe because an empty vault has nothing to lose.
+    The PIN is checked against the vault itself, whether or not any
+    wallet has been added yet.
     """
     def verify(pin: str) -> tuple[str, int | None]:
-        wallets = vault.list_wallets()
-        if not wallets:
-            # Empty vault: accept any well-formed PIN.
-            return ("ok", None)
-        first_id = wallets[0].id
         try:
-            vault.get_account_xpub(pin, first_id)
+            vault.check_pin(pin)
         except VaultWipedError:
             return ("wiped", None)
         except WrongPinError as exc:

@@ -119,7 +119,8 @@ FILTER+=(--exclude '*')
 
 # --delete keeps remote in sync with transferred files; do not use --delete-excluded —
 # root-owned __pycache__ on the Pi (from sudo provision) cannot be unlinked by pisv.
-RSYNC_ARGS=(-a --delete "${FILTER[@]}" "${SRC}/" "${DEST}")
+# -v prints each file rsync copies or deletes.
+RSYNC_ARGS=(-a -v --delete "${FILTER[@]}" "${SRC}/" "${DEST}")
 if [[ -n "${RSYNC_RSH:-}" ]]; then
     rsync -e "$RSYNC_RSH" "${RSYNC_ARGS[@]}"
 else

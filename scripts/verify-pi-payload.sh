@@ -21,6 +21,9 @@ REQUIRED=(
     deploy/purge-radio-packages.sh
     deploy/systemd/piwallet-purge-radios.service
     deploy/systemd/piwallet-bonnet.service
+    deploy/systemd/piwallet-touch.service
+    deploy/firmware/st7796s.bin
+    deploy/piwallet-panel-on
     piwallet/__init__.py
     scripts/install-piwallet-deps.sh
     scripts/setup-bonnet-hardware.sh
@@ -59,6 +62,12 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         fi
         continue
     fi
+
+    # A venv built on the Pi is not part of the synced payload. rsync
+    # still refuses to copy one from the workstation.
+    case "$line" in
+        .venv|venv|env) continue ;;
+    esac
 
     if [[ -e "$ROOT/$line" ]]; then
         fail "forbidden path present: $line"

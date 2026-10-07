@@ -120,7 +120,7 @@ def test_format_network_renders_main_and_test() -> None:
     """Network label is operator-readable; 'test' shouts in caps so it
     can't be confused with a real-money wallet at a glance."""
     assert WalletInfoScreen._format_network("main") == "mainnet"
-    assert WalletInfoScreen._format_network("test") == "TESTNET"
+    assert WalletInfoScreen._format_network("test") == "testnet"
 
 
 def test_format_network_passes_unknown_through() -> None:

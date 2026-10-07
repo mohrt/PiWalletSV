@@ -18,13 +18,17 @@ glass_y = 61.00; // measured; wiki drawing is 61.00 ± 0.20
 glass_r = 4.0;
 
 // Border outside the glass. The side wall is rim minus the seat gap.
-rim = 1.5;
+// 1.5 flexed when the long sides were squeezed.
+rim = 2.5;
 // Extra pocket around the glass so it can drop in.
 seat_gap = 0.3;
 // Lip overlaps the black bezel. Active-area margin is 5.82 mm.
 lip_overlap = 1.2;
 // Measured glass thickness. The screen drops this far into the top.
 screen_t = 0.8;
+// Rim stands this far above the glass face so a squeeze does not
+// pop the glass over the edge.
+lip_rise = 0.5;
 // Flat shelf under the glass, then a 45° print slope.
 lip_land = 1.0;
 
@@ -103,8 +107,9 @@ head_h = 1.6;
 thread_in = 2.0;
 mount_od = 8.0;
 screw_head_d = 3.8;
-// Wider than the screw so a 0.4 mm nozzle does not leave a skin.
-screw_bore = 3.8;
+// Threads measure 2.4. Holes print about 0.2 small: 2.5 still had to be
+// screwed in. At 3.8 (the head width) the head pulled through the boss.
+screw_bore = 2.7;
 screw_cbore_d = 5.2;
 
 // Camera hold — same numbers as the Zero tub.
@@ -121,15 +126,6 @@ lens_hole_dy = 0.8;
 lens_cone_h = 3.0;
 lens_cone_ang = 60;
 
-// Ribs under the lip stiffen the long walls. Each tapers from the
-// shelf opening down to the wall, so the stack can still tilt in.
-truss_t = 1.6;
-truss_h = 5.0;
-// None on the microSD end: the display ribbon runs along that wall.
-truss_gpio_x = [12, 24, 36, 48, 60, 72, 84];
-truss_port_x = [12, 24, 36, 48, 60, 72, 84];
-truss_end_y = [14, 32, 50];
-
 $fn = 48;
 
 // =====================================================================
@@ -140,9 +136,10 @@ case_x = glass_x + 2 * rim;
 case_y = glass_y + 2 * rim;
 outer_r = glass_r + rim;
 
-// Screen face is flush with the top. The 0.8 mm well is cut down from there.
+// Screen face is at tub_top. The rim stands lip_rise above it.
 cavity_h = stack_h + depth_slack;
 tub_top = floor_t + cavity_h;
+case_top = tub_top + lip_rise;
 // 45° underside spans the seat gap plus the lip overlap.
 lip_chamfer = seat_gap + lip_overlap;
 seat_z = tub_top - screen_t;
@@ -174,7 +171,10 @@ jack_fit = 0.4;
 shell_x = 87.0;
 // Room past the shell faces so the stack can slip in.
 usb_wall_out = 1.0;
-wall_t = rim - seat_gap;
+// Wall at the jack faces. Plugs have to reach the jacks through it.
+wall_t = 1.2;
+// Wall around the glass pocket.
+lip_wall_t = rim - seat_gap;
 
 // Screen face is flush with the top. USB bottoms are stack_h back from that face.
 usb_bottom_z = tub_top - stack_h;
@@ -201,7 +201,7 @@ port_slope_z = min(
 lens_x = rim + glass_x / 2;
 lens_y = rim + glass_y / 2;
 
-echo(case_x=case_x, case_y=case_y, tub_top=tub_top);
+echo(case_x=case_x, case_y=case_y, tub_top=tub_top, case_top=case_top);
 echo(wall_t=wall_t, mount_reach=mount_reach, screw_cbore_h=screw_cbore_h);
 echo(usb_face=usb_face, port_face=port_face);
 echo(usb_slope_z=usb_slope_z, port_slope_z=port_slope_z);
@@ -255,6 +255,8 @@ module foot_bores() {
     for (hy = [hole_inset, hole_inset + hole_pitch_y]) {
       translate([pi_x0 + hx, pi_y0 + hy, -0.1])
         cylinder(h=floor_t + mount_reach + 0.4, d=screw_bore);
+      // Head recess with a flat ceiling for the flat underside of the pan
+      // head. Any bridge skin over the pilot is pierced by the screw.
       translate([pi_x0 + hx, pi_y0 + hy, -0.1])
         cylinder(h=screw_cbore_h + 0.1, d=screw_cbore_d);
       // Open the first layer so it does not pinch shut and leave lint.
@@ -338,7 +340,7 @@ function bevel_cut_profile(edge, face, slope_z) = [
 ];
 
 // Vertical wall at the USB shell face, with slopes out to the floor
-// edge and to the lip.
+// edge and to the lip. The upper slope thickens to the lip wall.
 module usb_end_wall() {
   intersection() {
     union() {
@@ -347,8 +349,8 @@ module usb_end_wall() {
       hull() {
         translate([usb_face - wall_t, 0, component_z - 0.2])
           cube([wall_t, case_y, 0.2]);
-        translate([case_x - wall_t, 0, seat_z - 0.2])
-          cube([wall_t, case_y, 0.2]);
+        translate([case_x - lip_wall_t, 0, seat_z - 0.2])
+          cube([lip_wall_t, case_y, 0.2]);
       }
       hull() {
         translate([usb_face - wall_t, 0, usb_slope_z - 0.2])
@@ -357,7 +359,7 @@ module usb_end_wall() {
           cube([case_x - usb_face + wall_t, case_y, 0.2]);
       }
     }
-    rounded_box(case_x, case_y, tub_top, outer_r);
+    rounded_box(case_x, case_y, case_top, outer_r);
   }
 }
 
@@ -370,6 +372,7 @@ module usb_bevel_cut() {
 }
 
 // Power edge. The wall rests on the HDMI and power shell faces.
+// The upper slope thickens to the lip wall.
 module port_edge_wall() {
   intersection() {
     union() {
@@ -378,8 +381,8 @@ module port_edge_wall() {
       hull() {
         translate([0, port_face - wall_t, component_z - 0.2])
           cube([case_x, wall_t, 0.2]);
-        translate([0, case_y - wall_t, seat_z - 0.2])
-          cube([case_x, wall_t, 0.2]);
+        translate([0, case_y - lip_wall_t, seat_z - 0.2])
+          cube([case_x, lip_wall_t, 0.2]);
       }
       hull() {
         translate([0, port_face - wall_t, port_slope_z - 0.2])
@@ -388,7 +391,7 @@ module port_edge_wall() {
           cube([case_x, case_y - port_face + wall_t, 0.2]);
       }
     }
-    rounded_box(case_x, case_y, tub_top, outer_r);
+    rounded_box(case_x, case_y, case_top, outer_r);
   }
 }
 
@@ -399,38 +402,11 @@ module port_bevel_cut() {
         polygon(bevel_cut_profile(case_y, port_face, port_slope_z));
 }
 
-// One rib, with the wall face at x = 0 and the cavity toward +x.
-// The top meets the shelf underside; the bottom is a line on the wall.
-module truss(depth) {
-  top = seat_z - lip_land;
-  hull() {
-    translate([-0.2, -truss_t / 2, top - truss_h])
-      cube([0.2, truss_t, truss_h]);
-    translate([-0.2, -truss_t / 2, top - 0.01])
-      cube([depth + 0.2, truss_t, 0.01]);
-  }
-}
-
-module lip_trusses() {
-  for (x = truss_gpio_x)
-    translate([x, pocket_y0, 0])
-      rotate([0, 0, 90])
-        truss(lip_chamfer);
-  for (x = truss_port_x)
-    translate([x, pocket_y0 + pocket_y, 0])
-      rotate([0, 0, -90])
-        truss(lip_chamfer);
-  for (y = truss_end_y)
-    translate([pocket_x0 + pocket_x, y, 0])
-      rotate([0, 0, 180])
-        truss(lip_chamfer);
-}
-
 module tub() {
   difference() {
     union() {
       difference() {
-        rounded_box(case_x, case_y, tub_top, outer_r);
+        rounded_box(case_x, case_y, case_top, outer_r);
 
         // Main cavity, up to the underside of the lip.
         placed_box(pocket_x0, pocket_y0, pocket_x, pocket_y,
@@ -448,9 +424,10 @@ module tub() {
         placed_box(open_x0, open_y0, open_x, open_y,
           seat_z - lip_land, lip_land + 0.02, open_r);
 
-        // 0.8 mm well the screen drops into. Slightly larger than the glass.
+        // Well the screen drops into, plus the raised rim. Slightly
+        // larger than the glass.
         placed_box(pocket_x0, pocket_y0, pocket_x, pocket_y,
-          seat_z, screen_t + 0.1, pocket_r);
+          seat_z, screen_t + lip_rise + 0.1, pocket_r);
 
         translate([lens_x, lens_y + lens_hole_dy, -1])
           cylinder(h=floor_t + 2, d=lens_d);
@@ -463,7 +440,6 @@ module tub() {
       }
       usb_end_wall();
       port_edge_wall();
-      lip_trusses();
       foot_bosses();
       camera_posts();
     }

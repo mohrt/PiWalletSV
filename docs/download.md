@@ -25,9 +25,10 @@ Each release filename includes a **board slug** for the Raspberry Pi model
 | Board slug | Raspberry Pi hardware |
 |------------|------------------------|
 | **pi0** | Pi Zero v1.3, Pi Zero W, Pi Zero WH |
-| **pi02w** | Pi Zero 2 W, Pi 3 Model B *(future)* |
+| **pi02w** | Pi Zero 2 W *(future)* |
 | **pi2** | Pi 2 Model B *(future)* |
 | **pi4** | Pi 4 Model B, Pi 400 *(future)* |
+| **pro-pi3** | PiWalletSV Pro: Pi 3 Model B + Waveshare 3.5 inch LCD (F) |
 
 For round‑1 kits use **`pi0`**. Exact filenames and tags are on the
 GitHub release page for that version.

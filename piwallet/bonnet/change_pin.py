@@ -82,23 +82,13 @@ def _show_message(
 def _make_verify_fn(vault: Vault):
     """Build a :class:`UnlockScreen`-compatible verify callback.
 
-    Verifies the candidate PIN by attempting a benign read
-    (``get_account_xpub``) on the first wallet, or — for an empty
-    vault — by trusting the format check inside
-    :meth:`Vault.change_pin`. The attempt counter / wipe-on-N
-    contract is honoured the same way an ordinary unlock honours it.
+    The PIN is checked against the vault itself, including when no
+    wallet has been added yet.
     """
 
     def verify(pin: str) -> VerifyResult:
-        wallets = vault.list_wallets()
-        if not wallets:
-            # Empty vault: there's no ciphertext to verify against.
-            # We accept the candidate and let change_pin rotate the
-            # salt. This mirrors the existing remove_wallet /
-            # rename_wallet behaviour on an empty vault.
-            return ("ok", None)
         try:
-            vault.get_account_xpub(pin, wallets[0].id)
+            vault.check_pin(pin)
         except WrongPinError as exc:
             return ("wrong", exc.attempts_remaining)
         except VaultWipedError:
