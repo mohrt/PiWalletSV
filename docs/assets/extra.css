@@ -82,6 +82,16 @@
   object-position: center top;
 }
 
+.pwsv-photo-strip--portrait {
+  margin-top: -1.35rem;
+}
+
+.pwsv-photo-strip--portrait img {
+  height: auto;
+  aspect-ratio: 3 / 4;
+  object-position: center;
+}
+
 @media (max-width: 900px) {
   .pwsv-photo-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -96,6 +106,10 @@
 
   .pwsv-photo-strip img {
     height: 8.5rem;
+  }
+
+  .pwsv-photo-strip--portrait img {
+    height: auto;
   }
 }
 

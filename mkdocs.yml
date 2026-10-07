@@ -126,7 +126,7 @@ hooks:
   - mkdocs_hooks/piwallet_pay.py
 
 extra_css:
-  - assets/extra.css?v=ship-prompt
+  - assets/extra.css?v=pro-photos
 
 extra_javascript:
   - assets/env-links.js

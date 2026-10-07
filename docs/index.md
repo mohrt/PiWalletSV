@@ -31,6 +31,13 @@ phone or laptop talks to the chain; the Pi just signs.
   <img src="assets/home/companion-wallets.png" alt="PiWalletSV companion app wallet list" width="336" height="680" loading="lazy">
 </div>
 
+<div class="pwsv-photo-strip pwsv-photo-strip--portrait" markdown="0">
+  <img src="assets/home/piwalletpro-splash.jpeg" alt="PiWalletSV Pro touch screen showing the boot logo" width="480" height="640" loading="lazy">
+  <img src="assets/home/piwalletpro-pin-login.jpeg" alt="PiWalletSV Pro PIN keypad" width="480" height="640" loading="lazy">
+  <img src="assets/home/piwalletpro-wallet-list.jpeg" alt="PiWalletSV Pro wallet list" width="480" height="640" loading="lazy">
+  <img src="assets/home/piwalletpro-qr.jpeg" alt="PiWalletSV Pro showing a receive address as a QR code" width="480" height="640" loading="lazy">
+</div>
+
 ## Why do I need this?
 
 <div class="grid cards" markdown>
