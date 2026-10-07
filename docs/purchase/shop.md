@@ -113,7 +113,12 @@ Pro (3.5 inch touch screen). Choose ship-to country, then pay with card or BSV.
 <h2 id="pro-kit">Pro kit</h2>
 <div class="piwalletsv-product">
   <div class="piwalletsv-product-media">
-    <div class="piwalletsv-product-photo-placeholder">Photo coming soon</div>
+    <img class="piwalletsv-product-photo"
+         src="/assets/products/pro-kit.jpg"
+         alt="Assembled PiWalletSV Pro with camera module, USB cable, and power adapter"
+         width="1024"
+         height="768"
+         loading="lazy" />
   </div>
   <div class="piwalletsv-product-body">
     <p class="piwalletsv-product-price">$179.00</p>
@@ -142,7 +147,12 @@ Pro (3.5 inch touch screen). Choose ship-to country, then pay with card or BSV.
 <h2 id="pro-printed-case">Pro printed case</h2>
 <div class="piwalletsv-product">
   <div class="piwalletsv-product-media">
-    <div class="piwalletsv-product-photo-placeholder">Photo coming soon</div>
+    <img class="piwalletsv-product-photo"
+         src="/assets/products/pro-case.jpg"
+         alt="PiWalletSV Pro printed case"
+         width="1024"
+         height="768"
+         loading="lazy" />
   </div>
   <div class="piwalletsv-product-body">
     <p class="piwalletsv-product-price">$39.00</p>
