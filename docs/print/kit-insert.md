@@ -10,9 +10,14 @@
 
 <div style="page-break-after: always;"></div>
 
-# PiWalletSV — Quick Start & Security Checklist
+# PiWalletSV Zero — Quick Start & Security Checklist
 
 **Air-gapped Bitcoin SV (BSV) cold wallet**
+
+This checklist is for the **Zero** kit (Pi Zero W, joystick, 1.3 inch
+screen). For the **Pro** kit (Pi 3 Model B, touch screen), use the
+[Pro kit insert](kit-insert-pro.html) and the
+[User manual](../user-manual.md), which covers both.
 
 | | |
 |---|---|

@@ -7,11 +7,19 @@ download and flash from
 
 ## Target
 
-- **Hardware:** Raspberry Pi **Zero W / Zero WH** + Adafruit **4506** bonnet + **OV5647**
-- **OS base:** Raspberry Pi OS **Lite 32-bit** (Bookworm or Trixie)
+| | Zero | Pro |
+|--|------|-----|
+| **Hardware** | Raspberry Pi **Zero W / Zero WH** + Adafruit **4506** bonnet + **OV5647** | Raspberry Pi **3 Model B** + Waveshare **3.5 inch LCD (F)** + **OV5647** |
+| **OS base** | Raspberry Pi OS **Lite 32-bit** (Bookworm or Trixie) | Raspberry Pi OS **Lite 64-bit** (Trixie) |
+| **Provisioner** | `provision-pi.sh` (default `--product zero`) | `provision-pi.sh --product pro` |
+| **Board slug** | `pi0` | `pro-pi3` |
+| **Version tag** | `0.1.0-r3` → `v0.1.0-r3` | `0.1.0-r1` → `v0.1.0-r1-pro-pi3` |
+
 - **Provisioner:** [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
 - **Published image:** ≤ 8 GiB uncompressed (fits 8 GB microSD; burns to larger cards too)
-- **Version tag:** `0.1.0-r3` → Git tag `v0.1.0-r3`
+
+Sections 1 and 2 below walk through the Zero. The Pro uses the same
+steps with `--product pro`; see [Pro image](#pro-image-pi-3-model-b-lcd-f).
 
 ## Payload rules (dev and production)
 
@@ -113,7 +121,7 @@ sudo bash ~/PiWallet/deploy/provision-pi.sh \
  --release-version 0.1.0-r3 \
  --image-channel round1-zero-w
 sudo reboot
-# Bonnet shows disclaimer on tty1; no SSH; radios off.
+# Zero: bonnet shows disclaimer on tty1; no SSH; radios off.
 # --local forces inline radio purge even if SSH_CONNECTION is inherited on tty2.
 ```
 
@@ -122,7 +130,7 @@ over SSH can hang). Re-flash a **fresh** SD if you previously ran a
 builder provision with `--keep-ssh --keep-radios` (§1c).
 
 Note **Image ID** from `/etc/piwalletsv-release` (or
-`/opt/piwallet/RELEASE.json`) for kit insert printing.
+`/opt/piwallet/RELEASE.json`) for `releases/releases.json`.
 
 ## 2. Capture, shrink, compress, and checksum (workstation)
 
@@ -294,9 +302,12 @@ Release pages; they do not republish asset lists.
 
 For each kit microSD (after the GitHub release is live):
 
-1. Flash `piwalletsv-0.1.0-r3-pi0-beta.img.xz` with Raspberry Pi Imager (**Use custom**)
+1. Flash the matching image with Raspberry Pi Imager (**Use custom**):
+   `piwalletsv-0.1.0-r3-pi0-beta.img.xz` (Zero) or
+   `piwalletsv-0.1.0-r1-pro-pi3-beta.img.xz` (Pro)
 2. Optional spot-check: boot once, run smoke test, then re-flash if you booted
-3. Ship with **SD adapter** (customer uses **their own** USB reader to re-flash)
+3. Zero: ship with an **SD adapter**. Pro: ship with the card installed in the
+   Pi. Either way the customer uses **their own** USB reader to re-flash.
 4. Print the matching kit insert (Zero or Pro) from [Printables](../print/printables.md)
 
 Tell every full-kit buyer: **re-flash from GitHub before funding** —

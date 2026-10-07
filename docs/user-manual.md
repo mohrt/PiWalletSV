@@ -1,11 +1,18 @@
 # User manual
 
 This chapter is the user-facing journey: from "I have an unflashed
-SD card" to "I just signed and broadcast a transaction." It assumes
-you've already done the hardware bring-up in
-[Getting started](getting-started.md). Each step can be driven from
-the **bonnet** UI on the Pi; the equivalent **CLI** commands (and the
-companion web app on the phone) are shown alongside where useful.
+SD card" to "I just signed and broadcast a transaction." It covers both
+devices:
+
+- **Zero** — Raspberry Pi Zero W with the 1.3 inch screen, joystick, and
+  **A** / **B** buttons.
+- **Pro** — Raspberry Pi 3 Model B with the 3.5 inch touch screen.
+
+Where the two differ, steps are shown in **Zero** and **Pro** tabs; pick
+one and every tab on the page follows. The equivalent **CLI** commands
+(and the companion web app on the phone) are shown alongside where
+useful. Building your own? Start with
+[Flash and first run](build-image.md).
 
 !!! warning "Beta software"
     PiWalletSV software is **beta**. It is fully functional with **no currently
@@ -20,21 +27,19 @@ Full-kit cards were booted for factory diagnostics, so they will not
 byte-match the pristine release image. Establish trust **before** you
 create a wallet or receive funds.
 
-A printable checklist ships in the kit:
-[`docs/print/kit-insert.md`](print/kit-insert.md).
+Each kit ships with a printed insert (see [Printables](print/printables.md)).
 
 --8<-- "docs/includes/verify-sd-card.md"
 
 ## 1. First boot
 
 On a **freshly flashed** SD card, the Pi reboots **once** while the image
-expands to the card size. The panel may stay dark for a couple of minutes
-before the logo splash appears. After that one-time expand reboot, every
-boot is single-stage.
+expands to the card size. The panel may stay dark until the logo splash
+appears — a couple of minutes on the Zero, well under a minute on the
+Pro. After that one-time expand reboot, every boot is single-stage.
 
-When you first boot the Pi with PiWalletSV installed, the bonnet shows
-the **PiWalletSV logo** briefly, then walks you through a three-page
-disclaimer:
+When you first boot the Pi with PiWalletSV installed, the screen shows
+the **PiWalletSV logo** briefly, then the disclaimer:
 
 1. **Beta software.** Fully functional with no currently known issues;
    bugs will be fixed and released; notices via [@PiWalletSV on X](https://x.com/PiWalletSV).
@@ -44,10 +49,36 @@ disclaimer:
 3. **No liability.** A confirmation that operating this device is
    on your own responsibility.
 
-You hold the **A** button on the third page to confirm.
+=== "Zero"
 
-Hold **B** for five seconds on the boot logo to open
-[factory diagnostics](#factory-diagnostics) instead of continuing setup.
+    The disclaimer is three pages. Hold the **A** button on the third page
+    to confirm.
+
+    Hold **B** for five seconds on the boot logo to open
+    [factory diagnostics](#factory-diagnostics) instead of continuing setup.
+
+=== "Pro"
+
+    The disclaimer fits on one screen. Press and hold **Hold to accept**
+    to confirm.
+
+    Hold a finger on the boot logo for five seconds to open
+    [factory diagnostics](#factory-diagnostics) instead of continuing setup.
+
+Next you set the **vault PIN**, which encrypts the wallets stored on the
+SD card:
+
+=== "Zero"
+
+    **First setup** offers **New vault (set PIN)** — **6–16** letters/digits,
+    entered with the joystick (**A** confirms, **B** backspaces) — or
+    **Restore from USB** ([§12](#usb-backup)).
+
+=== "Pro"
+
+    **Create PIN**: type **6 digits** on the keypad and tap **OK**, then
+    enter them again to confirm. To restore a USB backup, create a PIN
+    first, then use **Settings → Maintenance → USB backup** ([§12](#usb-backup)).
 
 ## 2. Create your first wallet
 
@@ -78,17 +109,28 @@ of receive / change branches.
     PIN-derived KEK, and discarded. The encrypted xprv plus its
     fingerprint, label, and BIP44 path are what get persisted.
 
-=== "Bonnet"
+=== "Zero"
 
-    The bonnet provides:
+    From the wallet list:
 
-    - A "**New wallet**" menu that generates a fresh mnemonic and shows
-      each word on screen so you can write it down on paper.
-    - A "**Restore wallet**" menu that lets you enter an existing mnemonic
-      via the joystick + A/B with BIP39 prefix autocomplete.
+    - "**+ New wallet**" generates a fresh mnemonic and shows each word
+      on screen so you can write it down on paper.
+    - "**+ Restore wallet**" lets you enter an existing mnemonic via the
+      joystick + A/B with BIP39 prefix autocomplete.
+
+=== "Pro"
+
+    From the home screen:
+
+    - **Add** generates a fresh mnemonic. Choose the word count, network,
+      and path, then the randomness source (random, photo, or dice). The
+      words are shown a page at a time so you can write them down, then
+      you confirm them by picking the right word from a shuffled set.
+    - **Restore** lets you type an existing mnemonic on the on-screen
+      keyboard, with BIP39 suggestions as you type.
 
 The "label" is purely for display — it's what shows up on the
-bonnet selector and in the companion's wallet list. Pick something
+device's wallet list and in the companion's wallet list. Pick something
 that distinguishes wallets to you ("savings", "lightning float",
 etc.); the label is included in the `xpub_export` envelope but is
 not authoritative metadata.
@@ -137,11 +179,17 @@ companion so the companion can watch the wallet (discover UTXOs,
 display the next receive address, build proposals). No private
 material crosses the gap.
 
-=== "Bonnet"
+=== "Zero"
 
-    Select **Pair → Show pairing QR** on the bonnet. The screen
+    Select the wallet in the list, then **Show xpub (QR)**. The screen
     animates the multipart QR. The companion's **Scan** page reads
     it.
+
+=== "Pro"
+
+    Tap the wallet, then **Show xpub (QR)**. The larger screen usually
+    fits the whole xpub in a single QR code. The companion's **Scan**
+    page reads it.
 
 === "Terminal QR"
 
@@ -276,11 +324,11 @@ The card now shows:
 Take the Pi to wherever the companion's screen is. Point the camera
 at the QR canvas.
 
-=== "Bonnet"
+=== "Zero"
 
     From the wallet manage menu (the screen you reach by selecting
     a wallet from the list), pick **"Sign transaction"**. The
-    bonnet opens a live camera preview with a status line beneath
+    device opens a live camera preview with a status line beneath
     it:
 
     - **Aiming...** — the camera is settling and no `PW1|`
@@ -291,7 +339,7 @@ at the QR canvas.
     Press **B** at any time to abort the scan and return to the wallet
     manage menu.
 
-    Once assembly completes, the bonnet shows a **Verifying SPV**
+    Once assembly completes, the device shows a **Verifying SPV**
     screen with a progress bar and a live status line as each input's
     BEEF path, Merkle proof, and block anchor are checked. On success
     it advances automatically to the **review** screen, which includes
@@ -319,6 +367,26 @@ at the QR canvas.
     as `PW1|` multipart QR frames at the same density used for
     pairing. Press **A** or **B** when the companion confirms it
     has the full set.
+
+=== "Pro"
+
+    Tap the wallet, then **Sign transaction**. The screen shows
+    **Scan to sign** with a live camera preview and a status line
+    that counts frames (**frame N / M**) as they arrive. Tap
+    **Cancel** at any time to return to the wallet menu.
+
+    Once every frame is in, the screen leaves the preview on its own
+    and shows **Verifying** with an **SPV N / M** progress bar while
+    each input's BEEF path, Merkle proof, and block anchor are checked.
+    This is the Pi's **second SPV gate**, the same check as on the Zero:
+    signing only proceeds if every input passes. If verification fails,
+    the reason is shown and **Cancel** returns to the wallet menu.
+
+    On success the review screen shows **To** (the full destination
+    address) and the amounts. Check **To** against the companion, then
+    tap **Sign**. The Pi signs and shows the `signed_tx` envelope as
+    QR frames (**Signed N / M**) for the companion to scan. Tap
+    **Back** when the companion has the full set.
 
 === "CLI"
 
@@ -392,12 +460,20 @@ tool works — for example
 [iancoleman.io/bip39](https://iancoleman.io/bip39/),
 [satofinder.com](https://satofinder.com), or ElectrumSV.
 
-=== "Bonnet"
+=== "Zero"
 
-    Select **Restore wallet** on the bonnet's main menu. The
+    Select **+ Restore wallet** on the wallet list. The
     joystick word-entry UI lets you type each word with prefix
     autocomplete. Both 12 and 24-word mnemonics are supported.
     The checksum is verified before the account is derived.
+
+=== "Pro"
+
+    Tap **Restore** on the home screen. Choose the word count,
+    network, and path, then type each word on the on-screen keyboard;
+    matching BIP39 words appear as you type. Both 12 and 24-word
+    mnemonics are supported. The checksum is verified before the
+    account is derived.
 
 === "CLI"
 
@@ -420,7 +496,8 @@ metadata and is rebuildable from the chain.
 
 ## 10. Wipe a wallet / wipe the vault
 
-If you want to retire a wallet:
+If you want to retire a wallet, open it on the device and choose
+**Erase from Pi**, or use the CLI:
 
 ```bash
 piwallet vault list                      # find the wallet id
@@ -433,7 +510,7 @@ To wipe the vault entirely, delete the vault file:
 rm ~/.piwallet/vault.bin
 ```
 
-Or use **Settings → Maintenance → Factory reset** on the bonnet to securely overwrite
+Or use **Settings → Maintenance → Factory reset** on the device to securely overwrite
 the vault and clear settings and disclaimer state before handing the
 device to someone else — see [§15 Settings](#settings).
 
@@ -493,12 +570,23 @@ re-install from the site); only the Pi device follows the steps below.
 
 On the **current** firmware, before you re-flash:
 
-1. Insert a **FAT32 or exFAT** USB stick into the Pi's **data** micro-USB
-   port (the one closer to the SD slot; power stays on **PWR IN**).
-2. **Press B** → **Settings** → **Maintenance** → **USB backup** → **Backup to USB**.
-3. Pick the drive from the list, confirm your **PIN**, and wait for
-   *Backup saved*. Press **A** or **B** to dismiss, then **B** to
-   return to Settings.
+=== "Zero"
+
+    1. Insert a **FAT32 or exFAT** USB stick into the Pi's **data** micro-USB
+       port (the one closer to the SD slot) with your OTG adapter; power stays
+       on **PWR IN**.
+    2. **Press B** → **Settings** → **Maintenance** → **USB backup** → **Backup to USB**.
+    3. Pick the drive from the list, confirm your **PIN**, and wait for
+       *Backup saved*. Press **A** or **B** to dismiss, then **B** to
+       return to Settings.
+
+=== "Pro"
+
+    1. Insert a **FAT32 or exFAT** USB stick into any of the Pi's four USB
+       ports (no adapter needed).
+    2. Tap **Settings** → **Maintenance** → **USB backup** → **Backup to USB**.
+    3. Pick the drive from the list, confirm your **PIN**, and wait for
+       *Backup saved*. Tap **Back** to return to Settings.
 
 Backups are stored under `PiWalletSV/backups/<timestamp>/` on the stick
 (`vault.bin`, optional `settings.json`, and a manifest). **`terms.json`
@@ -510,7 +598,7 @@ your PIN can sign.
 #### Path B — Mnemonic (always works)
 
 If you have the 12- or 24-word seed written down, you do **not** need
-a USB or SD backup. After re-flash, restore via the bonnet ([§9](#9-restore-from-mnemonic)).
+a USB or SD backup. After re-flash, restore on the device ([§9](#9-restore-from-mnemonic)).
 
 #### Path C — Copy `vault.bin` off the SD card (fallback)
 
@@ -575,24 +663,41 @@ Pick **one** path below. Import **replaces all wallets** on the device
 
 #### Path A — Restore from USB (recommended after Step 1 Path A)
 
-1. Power on the flashed Pi, accept the **disclaimer** (always shown
-   after a firmware upgrade).
-2. On **First setup**, choose **Restore from USB** (or, if you already
-   have a vault, **press B** → **Settings** → **Maintenance** → **USB backup** →
-   **Restore from USB**).
-3. Insert the backup stick, pick the drive, then pick the backup
-   timestamp.
-4. Review the wallet list — existing wallets on the device (if any)
-   are shown as **will be erased**. Confirm twice if replacing a vault.
-5. Toggle **Import settings** with **RIGHT** if you want brightness /
-   sleep timer restored (optional).
-6. Enter the **backup vault PIN** and unlock.
+=== "Zero"
+
+    1. Power on the flashed Pi, accept the **disclaimer** (always shown
+       after a firmware upgrade).
+    2. On **First setup**, choose **Restore from USB** (or, if you already
+       have a vault, **press B** → **Settings** → **Maintenance** → **USB backup** →
+       **Restore from USB**).
+    3. Insert the backup stick, pick the drive, then pick the backup
+       timestamp.
+    4. Review the wallet list — existing wallets on the device (if any)
+       are shown as **will be erased**. Confirm twice if replacing a vault.
+    5. Toggle **Import settings** with **RIGHT** if you want brightness /
+       sleep timer restored (optional).
+    6. Enter the **backup vault PIN** and unlock.
+
+=== "Pro"
+
+    1. Power on the flashed Pi, accept the **disclaimer** (always shown
+       after a firmware upgrade), and create a temporary **PIN**. The
+       restore replaces this new, empty vault.
+    2. Tap **Settings** → **Maintenance** → **USB backup** → **Restore from USB**.
+    3. Insert the backup stick, pick the drive, then pick the backup
+       timestamp.
+    4. Enter the **current PIN** (the temporary one), then the **backup
+       vault PIN**. Display settings in the backup are restored with the
+       vault.
+
+    From then on, unlock with the **backup's** PIN, not the temporary one.
 
 #### Path B — Restore from mnemonic
 
-1. Accept the disclaimer and choose **New vault (set PIN)** on first
-   setup, **or** use an empty vault from first-boot PIN setup.
-2. On the wallet list, choose **Restore wallet** and enter your seed
+1. Accept the disclaimer and set a new PIN (on the Zero, choose
+   **New vault (set PIN)** on first setup).
+2. Choose **Restore wallet** (Zero: **+ Restore wallet** on the wallet
+   list; Pro: **Restore** on the home screen) and enter your seed
    ([§9](#9-restore-from-mnemonic)).
 
 Your xpub and fingerprint match the old device, so the companion
@@ -623,7 +728,7 @@ Use this only if you copied `vault.bin` in Step 1 and remember the
    If you cannot set ownership correctly from your host OS, use
    **Path B** (mnemonic restore) instead.
 3. **Power on** the Pi. If `vault.bin` is present and valid, the
-   bonnet skips "choose a PIN" and goes straight to **PIN unlock**.
+   device skips "choose a PIN" and goes straight to **PIN unlock**.
 4. Enter your **original PIN** — not a new one from a aborted setup.
 
 If you already completed first-boot PIN setup on an empty vault, you
@@ -636,8 +741,8 @@ again, replace `vault.bin` with your backup, and boot once more.
 Treat the upgraded device like a new install until you have evidence
 it is still sealed:
 
-1. **Press B** → **Settings** → **Maintenance** → **Airgap status** → **A**. Every row
-   should read `OK` and the header should say **Air-gapped**. See
+1. Open **Settings** → **Maintenance** → **Airgap status**. Every row
+   should read **Disabled** and the header should say **Air-gapped**. See
    [§14 Airgap status](#airgap-status) if anything shows `!!`.
 2. Run a **testnet** send round-trip ([Flash and first run § Step 9](build-image.md#step-9-sign-your-first-transaction))
    before returning to mainnet amounts.
@@ -690,18 +795,20 @@ For shell access on a development Pi (or scripted backups), see
 The sealed image keeps a second virtual terminal on tty2 for local
 troubleshooting — it is never accessible over the network. To use it:
 
-1. Plug a USB keyboard and micro-HDMI cable into the Pi.
+1. Plug a USB keyboard and an HDMI cable into the Pi (micro-HDMI on the
+   Zero, full-size HDMI on the Pro).
 2. Power on (or reboot) the device.
-3. Once the bonnet shows the boot splash or disclaimer, press
+3. Once the screen shows the boot splash or disclaimer, press
    **Ctrl + Alt + F2** on the keyboard. The HDMI output switches to tty2
    and shows a login prompt.
 4. Log in as `pisv` — default password is `pisv`.
-5. To return to tty1 (bonnet display output) press **Ctrl + Alt + F1**.
+5. To return to tty1 press **Ctrl + Alt + F1**.
 
 This console has no network access and is intended for reading logs
-(`sudo journalctl -u piwallet-bonnet -f`), running the factory smoke
-test, or other local diagnostics. It does not interfere with the bonnet
-UI running on tty1.
+(`sudo journalctl -u piwallet-bonnet -f` on the Zero,
+`sudo journalctl -u piwallet-touch -f` on the Pro), running the factory
+smoke test, or other local diagnostics. It does not interfere with the
+signer UI on the device's own screen.
 
 ---
 
@@ -719,12 +826,12 @@ but Balance shows a non-zero total.**
 
 - Confirm `rpicam-hello` shows live preview. If not, the CSI cable
   is the usual culprit — re-seat both ends.
-- The kit **OV5647** is fixed-focus (~30 cm / ~1 ft). Hold the bonnet
+- The kit **OV5647** is fixed-focus (~30 cm / ~1 ft). Hold the device
   at that distance from the companion screen.
 - The companion's animation is too fast. Use the **Pause** button to
   hold a frame, then resume. The Pi assembler is happy with frames
   in any order.
-- Ambient light. The bonnet's display reflects glare from
+- Ambient light. The companion's screen reflects glare from
   overhead lights into the camera. Tilt one or the other.
 
 **The Pi's verify step fails with "merkle root mismatch."**
@@ -736,7 +843,7 @@ but Balance shows a non-zero total.**
   is current. A stale snapshot can point at UTXOs that have since
   been spent; their proofs won't recompute against the current
   chain headers.
-- Display the on-bonnet anchor pair on the Pi (height + root) and
+- Display the on-device anchor pair on the Pi (height + root) and
   compare against a public block explorer. If they match the
   explorer but the verify still fails, file a bug.
 
@@ -781,11 +888,17 @@ network path. The **Airgap status** screen in Settings runs live checks
 so you can verify that claim on demand — at first setup, after a
 reflash, or any time before signing something sensitive.
 
-From the wallet list:
+=== "Zero"
 
-1. **Press B** to open Settings.
-2. Joystick down to **&ldquo;Airgap status&rdquo;**.
-3. Press **A**.
+    From the wallet list:
+
+    1. **Press B** to open Settings.
+    2. Select **Maintenance**, then joystick down to **&ldquo;Airgap status&rdquo;**.
+    3. Press **A**.
+
+=== "Pro"
+
+    On the home screen, tap **Settings** → **Maintenance** → **Airgap status**.
 
 --8<-- "docs/includes/airgap-status-reference.md"
 
@@ -795,9 +908,8 @@ full host interface verification), see
 
 ## 15. Settings { #settings }
 
-Global device options live under **Settings** on the bonnet (hub with
-**Preferences** and **Maintenance**). Open it with a short **B** press
-from the wallet list. Press **B** on the hub to return to wallets.
+Global device options live under **Settings** (hub with
+**Preferences** and **Maintenance**).
 
 --8<-- "docs/includes/settings-reference.md"
 
@@ -812,7 +924,7 @@ boot splash without unlocking the vault.
 --8<-- "docs/includes/diagnostics-reference.md"
 
 For day-to-day service restarts from SSH, see
-[Operate § Reading the bonnet log](operate.md#reading-the-bonnet-log).
+[Operate § Reading the signer log](operate.md#reading-the-bonnet-log).
 
 ## Help & support
 

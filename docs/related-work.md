@@ -36,7 +36,7 @@ single change:
 | "Online machine creates unsigned tx, offline signs, online broadcasts."                                              | The exact data flow in [Architecture §3](architecture.md#3-the-data-flow-walked-through).                          |
 | "Watch-only via xpub on the online side."                                                                            | `xpub_export` envelope; companion stores xpub + fingerprint only.                                                  |
 | "Defends against remote compromise / supply-chain / network surveillance; does NOT defend against physical compromise or user error." | Verbatim the threat model in [Security](security.md) and [SPV §8](protocol/spv.md#8-threat-model-summary).         |
-| "Verify before signing — never blindly."                                                                             | Our entire `verify_proposal()` flow + on-bonnet hold-A confirmation.                                               |
+| "Verify before signing — never blindly."                                                                             | Our entire `verify_proposal()` flow + on-device confirmation (hold A on the Zero, tap Sign on the Pro).             |
 
 So the *philosophy* is identical. We're not inventing a new model;
 we're implementing a well-understood one.
@@ -80,7 +80,7 @@ anything.
 - The change output's script is **re-derived** from the wallet's own
   xpub on the Pi; if the bytes don't match, it aborts.
 
-The user still has to read the bonnet, but the human is the *last*
+The user still has to read the device's screen, but the human is the *last*
 check, not the only check. ElectrumSV's air-gapped flow makes the
 human the *first and only* check.
 
@@ -93,7 +93,7 @@ millions of lines of attack surface, all latent.
 
 PiWalletSV runs on a Pi with a minimal image, no Wi-Fi or Bluetooth
 activated in the offline build, and a single Click CLI as the
-surface area. The disclaimer-gated bonnet UI
+surface area. The disclaimer-gated on-device UI
 ([Architecture §7](architecture.md#7-first-load-disclaimer)) is the
 only program a normal user ever sees. The TCB is dramatically
 smaller and reproducible.

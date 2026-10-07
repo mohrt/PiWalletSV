@@ -9,11 +9,15 @@ PiWalletSV image from
 
 If you'd rather build the image yourself from source, see
 [Build &amp; deploy](build.md). Both paths produce a sealed appliance
-that boots straight into the bonnet UI; this page is shorter because
-the prebuilt image has already done the provisioning step for you —
-including the USB backup mount daemon, FAT/exFAT tools, and bonnet
-`ReadWritePaths` for `/mnt/piwallet-usb`
+that boots straight into the signer UI on the device's screen; this page
+is shorter because the prebuilt image has already done the provisioning
+step for you — including the USB backup mount daemon, FAT/exFAT tools,
+and the signer service's `ReadWritePaths` for `/mnt/piwallet-usb`
 ([Operate § USB vault backup](operate.md#usb-vault-backup)).
+
+The steps cover both devices. Where the **Zero** (joystick and buttons)
+and the **Pro** (touch screen) differ, pick your device's tab; every tab
+on the page follows.
 
 !!! warning "Beta software"
 
@@ -27,13 +31,25 @@ including the USB backup mount daemon, FAT/exFAT tools, and bonnet
 - A downloaded image (`.img.xz`) and its `.asc` signature, both from
   [GitHub Releases](https://github.com/mohrt/PiWalletSV/releases).
 - A **microSD card**, 8&nbsp;GB or larger.
-- A **Raspberry Pi Zero W or Zero WH** with the Adafruit 1.3&quot; 240×240 TFT
-  bonnet ([product 4506](https://www.adafruit.com/product/4506)) and an
-  **ArduCam OV5647** camera module (32-bit Raspberry Pi OS Lite image).
-- A **5&nbsp;V power supply** with a micro-USB plug for the bonnet's
-  PWR-IN port.
 - A computer with `gpg`, `xz`, and either Raspberry Pi Imager or the
   ability to run `dd` (Linux/macOS) or balenaEtcher (cross-platform).
+
+=== "Zero"
+
+    - A **Raspberry Pi Zero W or Zero WH** with the Adafruit 1.3&quot; 240×240 TFT
+      bonnet ([product 4506](https://www.adafruit.com/product/4506)) and an
+      **ArduCam OV5647** camera module.
+    - A **5&nbsp;V power supply** with a micro-USB plug for the bonnet's
+      PWR-IN port.
+    - The **`pi0`** image (32-bit).
+
+=== "Pro"
+
+    - A **Raspberry Pi 3 Model B** with the **Waveshare 3.5 inch LCD (F)**
+      (320×480 capacitive touch) and an **ArduCam OV5647** camera module.
+    - A **5&nbsp;V, 2.5&nbsp;A power supply** with a micro-USB plug for the
+      Pi's power port.
+    - The **`pro-pi3`** image (64-bit).
 
 ## Step 1 &mdash; Verify the download { #step-1-verify-the-download }
 
@@ -80,7 +96,8 @@ automatically so you don't need to unzip first.
     1. Download and install Raspberry Pi Imager from
        [raspberrypi.com/software](https://www.raspberrypi.com/software/).
     2. Launch Imager. Under **Raspberry Pi Device** choose
-       *No filtering* (or pick *Raspberry Pi Zero W*).
+       *No filtering* (or pick your board: *Raspberry Pi Zero W* or
+       *Raspberry Pi 3*).
     3. Under **Operating System** click
        **&ldquo;Use custom&rdquo;** and select the verified `.img.xz` file.
        Imager decompresses it for you — you do not need 7-Zip or
@@ -202,88 +219,135 @@ automatically so you don't need to unzip first.
 
 ## Step 3 &mdash; Assemble the hardware
 
-1. Insert the flashed SD card into the Pi Zero / Zero&nbsp;W.
-2. Plug the bonnet onto the Pi's GPIO header. The bonnet's PWR-IN
-   micro-USB port is the one **farther from the SD slot**; that's
-   where you'll connect power.
-3. Connect the Pi Camera ribbon to the Pi's CSI port (small flex
-   cable connector under the bonnet, near the SD slot edge).
-4. Plug the 5&nbsp;V power supply into the bonnet's PWR-IN.
+=== "Zero"
+
+    1. Insert the flashed SD card into the Pi Zero / Zero&nbsp;W.
+    2. Plug the bonnet onto the Pi's GPIO header. The bonnet's PWR-IN
+       micro-USB port is the one **farther from the SD slot**; that's
+       where you'll connect power.
+    3. Connect the Pi Camera ribbon to the Pi's CSI port (small flex
+       cable connector under the bonnet, near the SD slot edge).
+    4. Plug the 5&nbsp;V power supply into the bonnet's PWR-IN.
+
+=== "Pro"
+
+    1. Insert the flashed SD card into the Pi 3's slot (underneath, at the
+       end opposite the USB ports).
+    2. Connect the camera ribbon to the Pi's CSI port (between the HDMI
+       and audio jacks): latch open, insert, latch closed.
+    3. Seat the screen on the Pi's 40-pin GPIO header, straight and fully
+       down.
+    4. Plug the 5&nbsp;V power supply into the Pi's **micro-USB** power
+       port (long edge, next to HDMI).
 
 The **first boot after flashing** takes longer than normal because the image
-**expands the root partition to your SD card size**, then reboots once. Expect
-roughly **2–3 minutes total** on a Pi Zero W before the disclaimer (about
-**1–2 minutes longer** than everyday boots).
+**expands the root partition to your SD card size**, then reboots once.
 
-| Phase | What you see |
-|-------|----------------|
-| Power on → ~60–90 s | Panel may stay dark while the Pi boots |
-| First boot | Automatic reboot when SD expansion finishes |
-| Second boot | Logo splash → disclaimer (~1 minute after power-on) |
+=== "Zero"
 
-Every boot after that is a **single** boot (~1 minute to splash). The panel
-may stay dark until the logo appears — that is normal on Pi Zero W.
+    Expect roughly **2–3 minutes total** on a Pi Zero W before the disclaimer
+    (about **1–2 minutes longer** than everyday boots).
+
+    | Phase | What you see |
+    |-------|----------------|
+    | Power on → ~60–90 s | Panel may stay dark while the Pi boots |
+    | First boot | Automatic reboot when SD expansion finishes |
+    | Second boot | Logo splash → disclaimer (~1 minute after power-on) |
+
+    Every boot after that is a **single** boot (~1 minute to splash). The panel
+    may stay dark until the logo appears — that is normal on Pi Zero W.
+
+=== "Pro"
+
+    The first boot takes a little longer because of the expand reboot.
+    Every boot after that reaches the logo in **under 30 seconds**. The
+    panel may stay dark until the logo appears.
 
 If the panel stays blank for more than **3–5 minutes** after the second boot,
 check HDMI tty2 or re-flash.
 
 ## Step 4 &mdash; Accept the disclaimer
 
-The bonnet will show the legal disclaimer the very first time it
-boots. Read it; the beta-software language is not boilerplate. Use
-the joystick to scroll, and press **A** to accept.
+The device will show the legal disclaimer the very first time it
+boots. Read it; the beta-software language is not boilerplate.
+
+- **Zero:** use the joystick to page through, then hold **A** to accept.
+- **Pro:** the disclaimer fits on one screen; press and hold
+  **Hold to accept**.
 
 The acceptance is recorded in `~/.piwallet/terms.json` and you won't
 see this screen again unless the disclaimer version changes.
 
 ## Step 5 &mdash; First setup (vault)
 
-You'll see **First setup** with two choices:
+The PIN protects the encrypted vault on disk.
 
-- **New vault (set PIN)** &mdash; choose and confirm a vault PIN
-  (**6-16** letters/digits; classic 6-digit numeric PINs still work).
-  Use the joystick to cycle characters, **A** to confirm, **B** to
-  backspace. The PIN protects the encrypted vault on disk.
-- **Restore from USB** &mdash; import a backup stick if you're
-  replacing the SD card or upgrading firmware
-  ([User manual § USB backup](user-manual.md#usb-backup)).
+=== "Zero"
 
-If you chose **New vault**, the bonnet drops you on an empty **wallet
-list** after PIN setup.
+    You'll see **First setup** with two choices:
+
+    - **New vault (set PIN)** &mdash; choose and confirm a vault PIN
+      (**6-16** letters/digits; classic 6-digit numeric PINs still work).
+      Use the joystick to cycle characters, **A** to confirm, **B** to
+      backspace.
+    - **Restore from USB** &mdash; import a backup stick if you're
+      replacing the SD card or upgrading firmware
+      ([User manual § USB backup](user-manual.md#usb-backup)).
+
+    If you chose **New vault**, the device drops you on an empty **wallet
+    list** after PIN setup.
+
+=== "Pro"
+
+    **Create PIN**: type **6 digits** on the keypad and tap **OK**, then
+    enter them again to confirm. The device drops you on the home screen
+    with an empty wallet list.
+
+    Replacing the SD card or upgrading firmware? Restore your USB backup
+    from **Settings → Maintenance → USB backup** after creating the PIN
+    ([User manual § USB backup](user-manual.md#usb-backup)).
 
 ## Step 6 &mdash; Create or restore your first wallet
 
-From the **wallet list**, choose:
+From the **wallet list** (Zero) or the **home screen** (Pro), choose:
 
-- **+ New wallet** &mdash; the bonnet generates a fresh BIP39 mnemonic on
-  device. The mnemonic is shown to you a few words at a time so you
-  can write it down on paper. **Write it down**: this is the only
-  way to recover the wallet if the SD card is damaged or wiped.
-- **+ Restore wallet** &mdash; you enter an existing 12- or 24-word BIP39
-  mnemonic via the on-screen word-entry keyboard. The bonnet
-  validates the checksum word so a typo is caught before the wallet
-  is created.
+- **New wallet** (Zero: **+ New wallet**; Pro: **Add**) &mdash; the device
+  generates a fresh BIP39 mnemonic on device. The mnemonic is shown to
+  you a few words at a time so you can write it down on paper.
+  **Write it down**: this is the only way to recover the wallet if the
+  SD card is damaged or wiped.
+- **Restore wallet** (Zero: **+ Restore wallet**; Pro: **Restore**) &mdash;
+  you enter an existing 12- or 24-word BIP39 mnemonic via the on-screen
+  word-entry keyboard. The device validates the checksum word so a typo
+  is caught before the wallet is created.
 
 In either case you'll be asked for a short label (so you can tell
 multiple wallets apart later) and the BIP-44 derivation path. The
-bonnet defaults to the BSV mainnet path (`m/44'/236'/0'`); change
+device defaults to the BSV mainnet path (`m/44'/236'/0'`); change
 this only if you know exactly why.
 
-When this step completes, the bonnet drops you onto the **wallet
-list** screen. The wallet you just created is the one row.
+When this step completes, the device drops you onto the **wallet
+list**. The wallet you just created is the one row.
 
 ## Step 7 &mdash; Verify the air-gap
 
 Before you trust this device with anything sensitive, prove to
-yourself that it's actually quiet on the airwaves. From the wallet
-list:
+yourself that it's actually quiet on the airwaves.
 
-1. **Press B** to open Settings.
-2. Joystick down to **&ldquo;Airgap status&rdquo;**.
-3. Press **A**.
+=== "Zero"
+
+    From the wallet list:
+
+    1. **Press B** to open Settings.
+    2. Select **Maintenance**, then joystick down to **&ldquo;Airgap status&rdquo;**.
+    3. Press **A**.
+
+=== "Pro"
+
+    On the home screen, tap **Settings** → **Maintenance** → **Airgap status**.
 
 You should see a green **&ldquo;Air-gapped&rdquo;** header and three
-summary rows (**Wi-Fi**, **Bluetooth**, **Network**) reading `OK`. The full reference for the header, status glyphs (`OK` /
+summary rows (**Wi-Fi**, **Bluetooth**, **Network**) reading **Disabled**. The full reference for the header, status glyphs (`OK` /
 `!!` / `--`), and each check row lives in the
 [User manual § Airgap status](user-manual.md#airgap-status); it is
 included here for convenience:
@@ -313,18 +377,18 @@ for why. Then:
 
 2. The companion's first-run flow walks you through pairing: it
    shows a button to start a pairing handshake.
-3. On the bonnet, scroll to the wallet on the wallet list and press
-   **A** to open it. From the wallet detail screen, choose
-   **&ldquo;Pair with companion&rdquo;**.
-4. The bonnet shows an animated QR sequence containing your wallet's
-   public extended key (`xpub`). The companion captures the frames
-   with its camera and reconstructs the pairing payload.
+3. On the device, open the wallet from the wallet list (Zero: scroll
+   and press **A**; Pro: tap it) and choose **&ldquo;Show xpub (QR)&rdquo;**.
+4. The device shows a QR sequence containing your wallet's public
+   extended key (`xpub`); the Pro's larger screen usually fits it in a
+   single code. The companion captures the frames with its camera and
+   reconstructs the pairing payload.
 
 The pairing handshake transmits **only the xpub**, never private
 material. Once it completes, the companion can derive addresses, scan
 the chain for your UTXOs, and prepare unsigned transaction proposals
 &mdash; but it cannot move funds without sending those proposals back to
-the bonnet for an explicit human-confirmed signature.
+the device for an explicit human-confirmed signature.
 
 ## Step 9 &mdash; Sign your first transaction
 
@@ -338,11 +402,14 @@ To round-trip the full flow with no risk:
    testnet transaction (back to the faucet, or to any testnet
    address you control).
 4. The companion produces an **unsigned proposal** as an animated QR
-   sequence. Point the bonnet's camera at the screen.
-5. The bonnet reconstructs the proposal, displays the human-readable
-   summary (output addresses, amounts, fee), and asks for the PIN.
-6. Approve. The bonnet signs and produces an animated QR of the
-   **signed transaction** for the companion to capture.
+   sequence. On the device, open the wallet, choose **Sign transaction**,
+   and point the Pi's camera at the screen.
+5. The device reconstructs the proposal, re-checks the SPV proofs, and
+   displays the human-readable summary (destination address, amounts,
+   fee).
+6. Approve (Zero: press **A**; Pro: tap **Sign**). The device signs and
+   produces an animated QR of the **signed transaction** for the
+   companion to capture.
 7. The companion broadcasts the signed transaction to the BSV
    testnet via [WhatsOnChain](https://test.whatsonchain.com/).
 
@@ -356,11 +423,11 @@ Day-to-day, you only do steps 5&ndash;7 from above:
 - Power on; enter PIN.
 - Select wallet from the list.
 - Camera in, scan unsigned proposal.
-- Approve and PIN.
+- Check the summary and approve.
 - Camera out, show signed QR back to the companion.
 
 When you're done, you can simply unplug the device. There's no
-&ldquo;safe shutdown&rdquo; ritual: the bonnet's filesystem is read-only
+&ldquo;safe shutdown&rdquo; ritual: the device's filesystem is read-only
 except for the small `.piwallet/` state directory, and write
 operations there are deliberately atomic.
 
@@ -388,22 +455,29 @@ Brief summary:
 ## Troubleshooting
 
 **Panel stays dark after 60 seconds.**
-Most often the bonnet isn't fully seated on the GPIO header, or the
-camera ribbon is loose. Power off, re-seat both, and try again. If
-the bonnet's tiny green LED never lights, you have a power-supply
-problem (5&nbsp;V/2.5&nbsp;A or better is the minimum).
+Most often the screen board (Zero bonnet or Pro LCD) isn't fully seated
+on the GPIO header, or the camera ribbon is loose. Power off, re-seat
+both, and try again. If the power LED never lights (the bonnet's tiny
+green LED on the Zero, the Pi's red LED on the Pro), you have a
+power-supply problem (5&nbsp;V/2.5&nbsp;A or better is the minimum).
 
-**Joystick or buttons unresponsive.**
+**Zero: joystick or buttons unresponsive.**
 A bonnet revision difference: some early Adafruit batches mount the
 joystick chip on a different I2C address. Contact
 [@PiWalletSV on X](https://x.com/PiWalletSV) or open an issue on
 [GitHub](https://github.com/mohrt/PiWalletSV/issues) with your
 bonnet's silkscreen revision string.
 
+**Pro: screen shows the UI but ignores taps.**
+Power off and re-seat the screen on the GPIO header, straight and fully
+down; the touch controller shares that header. If it still ignores taps,
+contact [@PiWalletSV on X](https://x.com/PiWalletSV) or open an issue on
+[GitHub](https://github.com/mohrt/PiWalletSV/issues).
+
 **Camera doesn't detect QR codes.**
 The kit **ArduCam OV5647** is fixed-focus around 30&nbsp;cm (~1&nbsp;ft).
 If your companion device is closer or farther, the QR sequence will be
-blurry. Hold the bonnet at about that distance while scanning.
+blurry. Hold the device at about that distance while scanning.
 
 **&ldquo;Airgap status&rdquo; shows BREACH.**
 This is the diagnostic working as designed: it found a leak. See
@@ -413,7 +487,7 @@ all-green. The fastest fix is to re-verify the image signature
 (Step&nbsp;1) and re-flash.
 
 For everything else, see [Operate](operate.md) or
-[Help & support](index.md#help--support).
+[Help & support](index.md#help-support).
 
 ## Help & support
 

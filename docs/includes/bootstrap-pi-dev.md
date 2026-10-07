@@ -1,8 +1,14 @@
 # Pi bootstrap (dev / checkpoint)
 
-Canonical bring-up for a **development** or **hardware-checkpoint** Pi.
+Canonical bring-up for a **development** or **hardware-checkpoint** Pi
+Zero with the Adafruit bonnet.
 Production sealed images use `deploy/provision-pi.sh` (same Python install
 and bonnet-hardware helpers).
+
+!!! note "Pro"
+    This script covers the Zero only. For a Pro dev Pi, run
+    `deploy/provision-pi.sh --product pro --keep-ssh --keep-radios`
+    instead — see [Getting started § Bring up the screen](getting-started.md#bring-up-the-screen).
 
 ## What it does
 
@@ -95,6 +101,7 @@ source .venv/bin/activate
 |-------|-----|-------|
 | **Pi Zero / Zero W / Zero WH** (supported) | Pi OS Lite **32-bit** | Round-one OOTB path; coincurve pin required on armv6 |
 | **Pi Zero 2 W** | — | **Not yet supported OOTB** (future `pi02w` / 64-bit) |
+| **Pi 3 Model B** (Pro) | Pi OS Lite **64-bit** | Not this script — use `provision-pi.sh --product pro` |
 | **Laptop** | macOS / Linux | `pip install -e ".[dev]"` only — no bootstrap |
 
 ## Troubleshooting

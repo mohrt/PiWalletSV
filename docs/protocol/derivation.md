@@ -136,7 +136,7 @@ A companion MUST:
    proposal to the right vault entry when more than one wallet is
    stored.
 3. Surface the fingerprint to the user in hex (8 lowercase hex chars,
-   no separator) — this is how PiWalletSV's bonnet UI and companion
+   no separator) — this is how PiWalletSV's on-device UI and companion
    UI both display it.
 
 A signer MUST:

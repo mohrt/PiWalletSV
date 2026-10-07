@@ -51,7 +51,7 @@ phone or laptop talks to the chain; the Pi just signs.
 -   :material-qrcode-scan: __Cold storage you can actually use__
 
     Scan a QR with the camera, confirm the recipient on the Pi's
-    screen, and press a button. Your seed phrase only comes out for
+    screen, and press a button (or tap **Sign** on the Pro). Your seed phrase only comes out for
     first setup or recovery — never to send a transaction.
 
 </div>

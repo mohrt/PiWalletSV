@@ -19,13 +19,13 @@
 *[BSV]: Bitcoin SV — the Bitcoin variant this wallet targets.
 *[CBOR]: Concise Binary Object Representation — RFC 8949 binary encoding used in PiWalletSV envelopes.
 *[ECDSA]: Elliptic Curve Digital Signature Algorithm — the signing scheme used by Bitcoin.
-*[GPIO]: General-Purpose I/O — the Pi's digital pins the bonnet drives.
+*[GPIO]: General-Purpose I/O — the Pi's 40-pin header the screen board plugs into.
 *[OAC]: Origin Access Control — CloudFront feature that locks an S3 origin to a single distribution.
 *[P2PKH]: Pay-to-Public-Key-Hash — the standard "send to an address" Bitcoin script.
 *[PWA]: Progressive Web App — a website you can install to your home screen and run offline.
 *[QR]: Quick Response — the 2D barcode format PiWalletSV uses for air-gap transport.
-*[SPI]: Serial Peripheral Interface — the bus the TFT panel and the joystick controller sit on.
+*[SPI]: Serial Peripheral Interface — the bus the display panel sits on.
 *[SPV]: Simplified Payment Verification — Satoshi's "verify a transaction without a full node" technique.
-*[TFT]: Thin-Film Transistor — the LCD type used by the bonnet.
+*[TFT]: Thin-Film Transistor — the LCD type used by the PiWalletSV screens.
 *[WoC]: WhatsOnChain — the BSV blockchain explorer + REST API the companion uses.
 *[xpub]: Extended public key — the BIP32 public-side key that derives addresses without exposing the seed.

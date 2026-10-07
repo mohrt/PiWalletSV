@@ -46,7 +46,8 @@ piwallet
 ├── firstboot   manage the legal disclaimer state
 ├── diag        on-device diagnostics (airgap, display, GPIO, vault)
 ├── backup      export/import vault backups to USB
-└── bonnet      launch the full on-device UI
+├── bonnet      launch the full on-device UI (Zero)
+└── touch       launch the full on-device UI (Pro)
 ```
 
 ## `piwallet mnemonic`
@@ -177,7 +178,7 @@ fp=<8 hex chars>`. No PIN, no key material is ever printed.
 
 Print one tab-separated line per wallet. **Does NOT require the
 PIN** — the metadata is stored unencrypted because it has no
-spend-relevant secrets and the bonnet wallet-list screen has to
+spend-relevant secrets and the on-device wallet-list screen has to
 read it before the user types a PIN.
 
 ```bash
@@ -261,7 +262,7 @@ piwallet xpub-export --wallet-id <id> -o /tmp/xpub.bin
 
 Prompts for the PIN. Without `-o` the raw bytes go to stdout (binary).
 Pipe through `qr split` to drive a terminal QR loop without the
-bonnet display:
+device display:
 
 ```bash
 piwallet xpub-export --wallet-id <id> | piwallet qr split | qrencode -t UTF8
@@ -309,7 +310,7 @@ piwallet xpub-export --wallet-id <id> | piwallet qr split
 ```
 
 `--chunk-chars <N>` controls the maximum chars per QR (default tuned
-for the bonnet panel). Output is one line per frame, ready to feed a
+for the Zero's panel). Output is one line per frame, ready to feed a
 terminal QR loop.
 
 ### `qr scan-camera`
@@ -317,7 +318,7 @@ terminal QR loop.
 Pi-only. Capture frames from the libcamera stack until a full PW1
 payload is assembled. The sealed image is configured for the kit
 **ArduCam OV5647**; DIY builds need the matching boot overlay — see
-[Supported cameras](build.md#supported-cameras-libcamera).
+[Supported cameras](build.md#7-supported-cameras-libcamera).
 
 ```bash
 piwallet qr scan-camera -o /tmp/blob.bin
@@ -435,17 +436,19 @@ version is accepted, `1` otherwise.
 ### `firstboot run`
 
 Run the on-device disclaimer screen (or `--display headless` for a
-test/CI path). Hold the bonnet's A button to accept; long-B to bail.
+test/CI path). On the Zero, hold the bonnet's A button to accept;
+long-B to bail.
 
 ```bash
-piwallet firstboot run                           # interactive on bonnet
+piwallet firstboot run                           # interactive on the Zero bonnet
 piwallet firstboot run --display headless        # CI/test acceptance
 piwallet firstboot run --force                   # re-run even if accepted
 ```
 
 ## `piwallet bonnet`
 
-Launch the full on-device UI. The systemd unit installs this as
+Launch the full on-device UI on the **Zero** (joystick and buttons). For
+the Pro, see [`piwallet touch`](#piwallet-touch). The systemd unit installs this as
 `ExecStart=`; you'll only run it directly during install or
 debugging.
 
@@ -466,16 +469,38 @@ Options worth knowing:
 
 Exit codes are documented under [Operate § Exit codes](operate.md#exit-codes).
 
+## `piwallet touch` { #piwallet-touch }
+
+Launch the full on-device UI on the **Pro** (touch screen, no joystick).
+`piwallet-touch.service` runs `piwallet touch --device pi3-ws35f`; you'll
+only run it directly during install or debugging. Ctrl-C stops it.
+
+```bash
+piwallet touch                                  # Pro defaults (pi3-ws35f)
+piwallet touch --display headless               # no panel, for tests
+piwallet touch --bringup                        # hardware check instead of the UI
+```
+
+Options worth knowing:
+
+- `--device {pi3-ws35,pi3-ws35f}` — panel profile. `pi3-ws35f` is the
+  Waveshare 3.5 inch LCD (F) the Pro ships with (default).
+- `--display {framebuffer,headless}` — override the device display.
+- `--fb-device`, `--touch-device` — framebuffer path and touch evdev
+  node, if they differ from the device profile.
+- `--fps <n>` — main-loop target. Default 60.
+- `--bringup` — paint the held-QR hardware check instead of the UI.
+
 ## `piwallet backup` { #piwallet-backup }
 
 Export or import encrypted vault backups to a USB stick (FAT32/exFAT)
 under `PiWalletSV/backups/<timestamp>/`. **`terms.json` is never
 included** — disclaimer is re-accepted after a firmware upgrade.
 
-Operator-facing bonnet steps and stick layout:
+Operator-facing on-device steps and stick layout:
 [User manual § USB backup](user-manual.md#usb-backup).
 
-On sealed images, the bonnet mounts sticks via `piwallet-usb-mount.service`
+On sealed images, sticks are mounted by `piwallet-usb-mount.service`
 (see [Operate § USB vault backup](operate.md#usb-vault-backup)). On a
 dev Pi, mount the stick yourself and pass `--stick-root` to the
 commands below.
@@ -527,7 +552,7 @@ Import **replaces** the entire vault. See
 
 ## `piwallet diag airgap`
 
-Verify the Pi has no live radio path. The bonnet **Settings → Maintenance → Airgap
+Verify the Pi has no live radio path. The on-device **Settings → Maintenance → Airgap
 status** screen shows three summary rows; `piwallet diag airgap` lists
 six technical rows on the host. Run from a shell for the full host
 report (including interfaces). See
@@ -550,7 +575,7 @@ the command is usable on a dev laptop without sysfs nodes.
 | `LIBCAMERA_LOG_LEVELS` | libcamera severity (`*:WARN` is the default). |
 | `PICAMERA2_LOG_LEVEL` | Picamera2 console verbosity (numeric). |
 
-The bonnet flow tightens these to safe defaults at process entry; set
+The on-device UI tightens these to safe defaults at process entry; set
 them explicitly to override.
 
 ## Examples
@@ -569,7 +594,7 @@ piwallet xpub-export --vault-path ~/v.bin --wallet-id d2c1... \
   | qrencode -t UTF8     # animated QR in your terminal
 ```
 
-### Sign a proposal end-to-end without the bonnet
+### Sign a proposal end-to-end without the on-device UI
 
 ```bash
 # (Companion built the proposal; you scp'd it across.)
@@ -620,7 +645,7 @@ piwallet sign --hex - --wallet-id d2c1... <<'EOF'
 EOF
 ```
 
-This bridge is the recommended unblock when the in-bonnet sign
+This bridge is the recommended unblock when the on-device sign
 flow is unavailable (e.g. before the camera/UI flow ships, or on
 a Pi where the camera is detached for some reason).
 

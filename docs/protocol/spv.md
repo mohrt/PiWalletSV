@@ -252,7 +252,7 @@ infrastructure):
 | Inflate the input's claimed satoshi value.                   | `i.sats == prior.outputs[i.vout].satoshis` check (§2.5).               |
 | Lie about which derivation index funds an input.             | `derive_address` ↔ prevout-script match (§2.5).                        |
 | Lie about which output is "change".                          | Change re-derivation check (§2.6).                                     |
-| Submit a different tx than the user reviewed.                | All output scripts and amounts are user-visible on bonnet.             |
+| Submit a different tx than the user reviewed.                | All output scripts and amounts are user-visible on the device screen.  |
 
 The signer **cannot** defeat:
 
@@ -261,7 +261,7 @@ The signer **cannot** defeat:
   doesn't exist on the canonical chain. This produces a
   signed-but-unbroadcastable transaction; funds and keys remain
   safe.
-- A user who confirms a transaction without reading the bonnet
+- A user who confirms a transaction without reading the device
   screen.
 - A user who entered a recipient address that was already wrong
   (e.g., the companion got phished into showing the wrong
@@ -270,7 +270,7 @@ The signer **cannot** defeat:
   block the input was confirmed in. Anchors are point-in-time
   snapshots from the explorer; subsequent reorgs are out of scope.
 
-The bonnet UX is therefore the security perimeter the user must
+The on-device UX is therefore the security perimeter the user must
 inspect; the cryptographic checks make sure that whatever the user
 *sees* is what gets signed, with the explicit caveat that "this
 input exists on chain" is a property the user delegates to the

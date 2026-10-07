@@ -10,9 +10,18 @@ If you only want to develop on a laptop, you don't need any of this —
 `pip install -e ".[dev]"` and `pytest` is enough.
 
 !!! note "Supported boards today"
-    Round-one firmware and the OOTB path target **Pi Zero / Zero W /
-    Zero WH** on **32-bit** Raspberry Pi OS Lite (`pi0` image).
-    **Pi Zero 2 W** and **64-bit** images are not yet supported OOTB.
+    - **Zero:** Pi Zero / Zero W / Zero WH on **32-bit** Raspberry Pi OS
+      Lite (`pi0` image). This page walks through the Zero's step-by-step
+      install.
+    - **Pro:** Pi 3 Model B with the Waveshare 3.5 inch LCD (F) on
+      **64-bit** Raspberry Pi OS Lite Trixie (`pro-pi3` image). The Pro is
+      installed in one step with `deploy/provision-pi.sh --product pro`;
+      see [Getting started § Bring up the screen](getting-started.md#bring-up-the-screen)
+      and the [operator notes](https://github.com/mohrt/PiWalletSV/blob/main/docs/includes/image-release-operator.md#pro-image-pi-3-model-b-lcd-f).
+      It runs `piwallet touch --device pi3-ws35f` under
+      `piwallet-touch.service` instead of `piwallet bonnet`.
+
+    **Pi Zero 2 W** is not yet supported OOTB.
 
 ## 1. Decide what you're building
 
@@ -37,8 +46,9 @@ section.
   [Hardware checkpoint #1](hardware/checkpoint-1.md).
 - Avoid Desktop images on a Pi Zero — the X server eats the RAM and
   SD-card lifetime that the signer wants for itself.
-- Do **not** use a 64-bit OS image or a Pi Zero 2 W for the supported
-  path yet; those targets are planned (`pi02w`) but not OOTB.
+- Do **not** use a 64-bit OS image or a Pi Zero 2 W for the Zero path;
+  `pi02w` is planned but not OOTB. (The Pro uses 64-bit; see the note
+  above.)
 
 Flash the SD card with [`rpi-imager`](https://www.raspberrypi.com/software/),
 not `dd`. The imager pre-seeds:
@@ -302,7 +312,8 @@ note any non-backwards-compatible changes per release.
 
 The sealed image is built with
 [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh)
-on **Raspberry Pi OS Lite 32-bit** (Pi Zero W / Zero WH), captured with `dd`,
+on **Raspberry Pi OS Lite** — 32-bit for the Zero (`pi0`), 64-bit with
+`--product pro` for the Pro (`pro-pi3`) — captured with `dd`,
 shrunk with [`scripts/shrink-sd-image.sh`](https://github.com/mohrt/PiWalletSV/blob/main/scripts/shrink-sd-image.sh)
 so it fits **8 GB** microSD cards, then compressed and signed. Signed `.img.xz`
 artifacts are published on **GitHub Releases** — see
@@ -310,7 +321,7 @@ artifacts are published on **GitHub Releases** — see
 https://github.com/mohrt/PiWalletSV/releases directly.
 
 Operator workflow (sync → provision → capture → sign → publish):
-[`docs/includes/image-release-operator.md`](includes/image-release-operator.md).
+[`docs/includes/image-release-operator.md`](https://github.com/mohrt/PiWalletSV/blob/main/docs/includes/image-release-operator.md).
 Dev and production share one payload manifest — never sync `companion/`, `docs/`,
 `tests/`, or local vault state to the Pi.
 
