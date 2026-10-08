@@ -195,7 +195,7 @@ For each release tag:
 8. **For v0.1 and later**: build the sealed SD image with
    [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh),
    capture and sign
-   per [`docs/includes/image-release-operator.md`](includes/image-release-operator.md),
+   per [`docs/includes/image-release-operator.md`](https://github.com/mohrt/PiWalletSV/blob/main/docs/includes/image-release-operator.md),
    and attach artifacts to the GitHub Release. (Full `pi-gen` automation
    is tracked under `phase8-hardening`.)
 

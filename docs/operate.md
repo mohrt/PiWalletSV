@@ -6,24 +6,30 @@ and restore the vault, and how to recover when something doesn't behave.
 
 This chapter assumes the device is installed per [Build & deploy](build.md).
 For the user-facing journey (pairing, sending, receiving) see the
-[User manual](user-manual.md). To interpret the bonnet's airgap
+[User manual](user-manual.md). To interpret the on-screen airgap
 indicators see [User manual § Airgap status](user-manual.md#airgap-status).
 For wire-format troubleshooting see the user manual's
 [Troubleshooting](user-manual.md#troubleshooting)
 section, which is intentionally not duplicated here.
 
+!!! note "Zero and Pro service names"
+    The **Zero** runs `piwallet bonnet` as **`piwallet-bonnet.service`**.
+    The **Pro** runs `piwallet touch --device pi3-ws35f` as
+    **`piwallet-touch.service`**. Commands on this page use
+    `piwallet-bonnet`; on a Pro, substitute `piwallet-touch`.
+
 ## Logs
 
-Everything the bonnet writes goes to the system journal via systemd.
+Everything the signer writes goes to the system journal via systemd.
 There are no rotating files inside `~/.piwallet`; the journald
 drop-in (`deploy/systemd/journald-piwallet.conf.example`) caps the
 journal at 32 MB total with 8 MB per file, which is what makes this
 safe on an SD card.
 
-### Reading the bonnet log
+### Reading the signer log { #reading-the-bonnet-log }
 
 ```bash
-# Last 100 lines, no pager:
+# Last 100 lines, no pager (Pro: -u piwallet-touch):
 journalctl -u piwallet-bonnet -n 100 --no-pager
 
 # Live tail:
@@ -67,11 +73,12 @@ A healthy boot of `piwallet bonnet` writes only a handful of lines:
 - one `INFO` from the vault-unlock screen,
 - nothing per frame.
 
-If you see `WARNING` or `ERROR` lines, those are real — the bonnet
+If you see `WARNING` or `ERROR` lines, those are real — the signer
 deliberately suppresses everything else.
 
 ## Exit codes
 
+This table describes the Zero's `piwallet bonnet`.
 `piwallet bonnet` returns a Unix-style exit code so systemd can
 distinguish "user asked to leave" from "device is unusable until you
 do something." The values match the docstring on `run_bonnet()` in
@@ -123,8 +130,8 @@ example) and emits one line per wallet: `<id> <label>`.
 
 ### USB vault backup { #usb-vault-backup }
 
-The recommended backup path for sealed devices is the bonnet:
-**press B** → **Settings** → **Maintenance** → **USB backup**. Full operator steps,
+The recommended backup path for sealed devices is on the device:
+**Settings** → **Maintenance** → **USB backup**. Full operator steps,
 stick layout, and hot-plug notes are in
 [User manual § USB backup and restore](user-manual.md#usb-backup).
 
@@ -153,7 +160,7 @@ vault PIN unless you pass `--pin`. See [CLI § `piwallet backup`](cli.md#piwalle
 ### Backing up the vault file (manual copy)
 
 Copying `vault.bin` is fine; the file is encrypted at rest. A copy
-on a USB stick is acceptable — the bonnet **USB backup** flow writes
+on a USB stick is acceptable — the on-device **USB backup** flow writes
 a timestamped bundle under `PiWalletSV/backups/` with a manifest for
 easier restore. Keep in mind:
 
@@ -182,19 +189,19 @@ shred -uz ~/.piwallet/vault.bin
 sudo systemctl start piwallet-bonnet
 ```
 
-The bonnet will then report "No vault" (exit code 1) until you run
-`piwallet vault init` again.
+The Zero will then report "No vault" (exit code 1) until you run
+`piwallet vault init` again; the Pro asks for a new PIN on the screen.
 
 ### Factory reset
 
 A "factory reset" wipes the vault, removes disclaimer acceptance, and
 returns the device to first-setup condition.
 
-#### Bonnet (sealed device)
+#### On the device (sealed image)
 
 **Settings → Maintenance → Factory reset** → double confirm → vault **PIN**. The vault
 file is securely overwritten; `settings.json` and `terms.json` are
-removed. The bonnet then shows *Factory reset complete* and loops into disclaimer
+removed. The device then shows *Factory reset complete* and loops into disclaimer
 and new PIN setup. See [User manual § Settings](user-manual.md#settings).
 
 #### CLI (dev Pi or automation)
@@ -218,8 +225,8 @@ zeroed image. There is no other persistent state.
 
 ### Restoring from a mnemonic
 
-Use either the bonnet UI (`+ Restore wallet` from the wallet list)
-or the CLI:
+Use either the on-device UI (Zero: `+ Restore wallet` from the wallet
+list; Pro: **Restore** on the home screen) or the CLI:
 
 ```bash
 echo "various crime subway february cradle runway symptom snap muffin deny first pole" \
@@ -267,7 +274,7 @@ your own copy.
 
 ### Upgrading from a pre-rename dev install
 
-Earlier developer builds stored state under `~/.piwallet-dev/`. The
+Earlier Zero developer builds stored state under `~/.piwallet-dev/`. The
 bonnet's boot loop now performs a one-shot rename to `~/.piwallet/`
 on first start after an update — provided the canonical directory
 doesn't already exist. The rename is logged at `WARNING` level so it
@@ -279,11 +286,11 @@ to the new path; the bonnet's defaults already follow the rename.
 
 The signer doesn't run NTP and doesn't accept network traffic. The
 RTC time after first boot is whatever the OS image (and battery-backed
-RTC, if present — the Pi Zero / Zero W doesn't have one) said.
+RTC, if present — neither the Pi Zero W nor the Pi 3 Model B has one) said.
 
 The verifier doesn't depend on the wall clock for correctness: BEEF
 proofs anchor against block headers that carry their own timestamps,
-and the user-displayed anchor on the bonnet is what the operator
+and the user-displayed anchor on the device is what the operator
 sanity-checks against a public block explorer. So a stale RTC is a
 log-readability issue, not a security issue.
 
@@ -294,9 +301,9 @@ once. Then disable it before unplugging from Wi-Fi.
 
 ## Airgap diagnostic { #airgap-diagnostic }
 
-The bonnet **Settings → Maintenance → Airgap status** screen shows three summary rows
+The on-device **Settings → Maintenance → Airgap status** screen shows three summary rows
 (**Wi-Fi**, **Bluetooth**, **Network**) that roll up the same underlying
-checks as `piwallet diag airgap`. Inside the bonnet app the **Network**
+checks as `piwallet diag airgap`. Inside the signer app the **Network**
 row only sees the app's network sandbox (`PrivateNetwork=yes`). From a
 shell on the Pi you get the full six-row host report — use this
 periodically and whenever the on-screen check looks wrong.
@@ -309,14 +316,15 @@ piwallet diag airgap
 piwallet diag airgap --json
 ```
 
-What each bonnet row and shell row means, and how to read `OK` / `!!` /
+What each on-screen row and shell row means, and how to read `OK` / `!!` /
 `--`, is documented in
 [User manual § Airgap status](user-manual.md#airgap-status).
 
 ## Factory diagnostics { #factory-diagnostics }
 
 Operators and support can open the diagnostics menu from the boot splash
-(hold **B** for ~5 seconds on the logo). Menu items, hardware tests,
+(hold **B** on the Zero, or a finger on the Pro's screen, for ~5 seconds
+on the logo). Menu items, hardware tests,
 and **Restart app** (systemd service restart, not a full Pi reboot) are
 documented in
 [User manual § Factory diagnostics](user-manual.md#factory-diagnostics).
@@ -327,10 +335,10 @@ For wire-format failures (verify mismatch, broadcast txid mismatch,
 etc.) see the [User manual § Troubleshooting](user-manual.md#troubleshooting).
 This section covers operational issues with the deployment itself.
 
-### The bonnet doesn't come up after reboot
+### The signer doesn't come up after reboot
 
 ```bash
-sudo systemctl status piwallet-bonnet
+sudo systemctl status piwallet-bonnet   # Pro: piwallet-touch
 ```
 
 If status is `failed` or `activating (auto-restart)` in a tight loop:
@@ -345,25 +353,39 @@ If status is `failed` or `activating (auto-restart)` in a tight loop:
     - **`Permission denied` on the vault path** — the unit's `User=`
       doesn't match the owner of the vault file. Either chown the
       vault or update the unit.
-    - **`spidev: bufsiz too small`** — the kernel cmdline tweak in
-      [Build § 4](build.md#4-enable-spi-tune-the-kernel-buffer)
+    - **`spidev: bufsiz too small`** (Zero) — the kernel cmdline tweak in
+      [Build § 5](build.md#5-manual-reference-spi-kernel-buffer)
       didn't take. Confirm `cat /sys/module/spidev/parameters/bufsiz`
       is `131072`.
 
 ### The screen is bright but blank / frozen
 
-Almost always an SPI handshake issue:
+=== "Zero"
 
-1. Power-cycle the Pi (cleaner than a soft reboot for SPI state).
-2. Re-seat the bonnet on the GPIO header.
-3. Run the bonnet bring-up demo manually:
-   ```bash
-   python /home/pi/PiWallet/scripts/rgb_display_pillow_bonnet_buttons.py
-   ```
-   If the demo is also blank, the bonnet itself or the `spidev`
-   tuning is the culprit, not the PiWalletSV code.
+    Almost always an SPI handshake issue:
 
-### The bonnet shows the disclaimer every boot
+    1. Power-cycle the Pi (cleaner than a soft reboot for SPI state).
+    2. Re-seat the bonnet on the GPIO header.
+    3. Run the bonnet bring-up demo manually:
+       ```bash
+       python /home/pi/PiWallet/scripts/rgb_display_pillow_bonnet_buttons.py
+       ```
+       If the demo is also blank, the bonnet itself or the `spidev`
+       tuning is the culprit, not the PiWalletSV code.
+
+=== "Pro"
+
+    The Pro panel is a kernel framebuffer driven by `panel-mipi-dbi`:
+
+    1. Power-cycle the Pi and re-seat the screen on the GPIO header.
+    2. Check that the panel framebuffer exists: `ls /dev/fb*` should list
+       the LCD (usually `/dev/fb1`; HDMI keeps `/dev/fb0`).
+    3. If it is missing, confirm `/lib/firmware/st7796s.bin` exists and
+       `/etc/modules-load.d/piwallet-panel.conf` lists `panel-mipi-dbi`,
+       then re-run `provision-pi.sh --product pro`.
+    4. Check the LCD with the HDMI cable unplugged.
+
+### The device shows the disclaimer every boot
 
 `firstboot status` should report `accepted` after a successful
 acceptance. If it doesn't, the `terms.json` file isn't writable:
@@ -383,15 +405,16 @@ that the Pi camera reassembles. If the assembler stalls:
 
 1. Use the companion's **Pause** button to hold a single frame.
 2. Confirm the frame counter on the Pi is advancing — if it is,
-   ambient light or focus is the issue. Tilt the bonnet or move the
+   ambient light or focus is the issue. Tilt the device or move the
    phone.
 3. If the frame counter is frozen at the same number, the assembler
    has decided that frame is full. Use **Reset** on the companion to
    start over.
 
-### "No vault" on every boot after a wipe
+### "No vault" on every boot after a wipe (Zero)
 
-The bonnet refuses to do anything until a vault exists. Run
+The Zero's `piwallet bonnet` refuses to do anything until a vault exists
+(the Pro asks for a new PIN on the screen instead). Run
 `piwallet vault init` from SSH (it's an interactive PIN setup) and
 the next reboot will present the unlock screen. Don't try to run
 `vault init` while `piwallet-bonnet.service` is active — the SPI bus
@@ -415,12 +438,12 @@ memory, never written to disk). The cleaner path is:
 sudo systemctl poweroff
 ```
 
-…which stops `piwallet-bonnet.service` first (so the backlight goes
-off cleanly), then halts.
+…which stops `piwallet-bonnet.service` (Pro: `piwallet-touch.service`)
+first so the backlight goes off cleanly, then halts.
 
 ## What we don't ship (yet)
 
-- A tamper-evidence indicator on the bonnet (planned with phase 8
+- A tamper-evidence indicator on the device (planned with phase 8
   hardening).
 - An on-device update path. Updates today require SSH; the Pi has no
   inbound channel besides the camera and no outbound channel

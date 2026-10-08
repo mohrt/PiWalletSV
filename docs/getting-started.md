@@ -6,17 +6,34 @@ transaction in a CLI smoke test." For the user-facing journey
 
 ## What you need
 
-- A **Raspberry Pi Zero / Zero W / Zero WH** (round-one target). Prefer
-  **Zero W** or **Zero WH** — the W has the wireless module the
-  enclosure design assumes; the H has the pre-soldered header the
-  bonnet plugs into. **Pi Zero 2 W is not yet supported OOTB.**
-- An **Adafruit 1.3" 240×240 TFT bonnet** ([product 4506](https://www.adafruit.com/product/4506)) —
-  ST7789-class panel with a joystick and A/B buttons.
-- An **ArduCam OV5647** camera module (kit camera) plus the ribbon
-  cable adapter for the Pi Zero CSI connector.
+PiWalletSV runs on two devices. Pick your device's tab; every tab on the
+page follows.
+
+=== "Zero"
+
+    - A **Raspberry Pi Zero / Zero W / Zero WH**. Prefer
+      **Zero W** or **Zero WH** — the W has the wireless module the
+      enclosure design assumes; the H has the pre-soldered header the
+      bonnet plugs into. **Pi Zero 2 W is not yet supported OOTB.**
+    - An **Adafruit 1.3" 240×240 TFT bonnet** ([product 4506](https://www.adafruit.com/product/4506)) —
+      ST7789-class panel with a joystick and A/B buttons.
+    - An **ArduCam OV5647** camera module (kit camera) plus the ribbon
+      cable adapter for the Pi Zero CSI connector.
+    - A **5 V power supply** with a micro-USB connector that plugs into
+      the bonnet's **PWR IN** port (the one farthest from the SD slot).
+    - Raspberry Pi OS Lite **32-bit**.
+
+=== "Pro"
+
+    - A **Raspberry Pi 3 Model B**.
+    - A **Waveshare 3.5 inch LCD (F)** — ST7796S panel, 320×480, with a
+      GT911 capacitive touch controller.
+    - An **ArduCam OV5647** camera module (kit camera) and ribbon cable.
+    - A **5 V, 2.5 A power supply** with a micro-USB connector for the
+      Pi's power port.
+    - Raspberry Pi OS Lite **64-bit** (Trixie).
+
 - A **microSD card** (8 GB is enough; 16 GB is more comfortable).
-- A **5 V power supply** with a micro-USB connector that plugs into
-  the bonnet's **PWR IN** port (the one farthest from the SD slot).
 - A **phone, tablet, or laptop** with a camera, to run the
   companion web app. Prefer **Chrome** or **Firefox** on mobile —
   companion wallets are an ephemeral IndexedDB cache. Safari’s ITP can
@@ -24,47 +41,81 @@ transaction in a CLI smoke test." For the user-facing journey
   xpub from the Pi, or migrate via companion **Settings → Export /
   Import** — funds are unaffected.
 
-## Bring up the bonnet
+## Bring up the screen
 
-The bonnet hardware setup is its own multi-step process — SPI
-buffer tuning, the dual-stack Adafruit driver situation, and so on.
-Rather than duplicate it here, read the canonical guide in
-[`GETTING_STARTED.md`](https://github.com/mohrt/PiWalletSV/blob/main/GETTING_STARTED.md)
-at the project root, which walks through:
+=== "Zero"
 
-1. Flashing Raspberry Pi OS Lite (Bookworm) with `raspi-imager`.
-2. Enabling SPI, installing PIL / NumPy, raising the `spidev` kernel
-   buffer to 131072 (the default 4096 is the cause of the
-   classic "good half / garbage half" symptom).
-3. Setting up a Python virtualenv with Blinka and the
-   CircuitPython RGB display driver.
-4. Re-assigning the SPI chip-select pins via
-   `raspi-spi-reassign.py --ce0 disabled --ce1 disabled`.
-5. Running the `scripts/rgb_display_pillow_bonnet_buttons.py` demo
-   to confirm the panel and joystick work.
+    The bonnet hardware setup is its own multi-step process — SPI
+    buffer tuning, the dual-stack Adafruit driver situation, and so on.
+    Rather than duplicate it here, read the canonical guide in
+    [`GETTING_STARTED.md`](https://github.com/mohrt/PiWalletSV/blob/main/GETTING_STARTED.md)
+    at the project root, which walks through:
 
-When the bonnet shows the demo's "Hello World" frame and the
-buttons cycle the picture, the hardware side is ready.
+    1. Flashing Raspberry Pi OS Lite (Bookworm) with `raspi-imager`.
+    2. Enabling SPI, installing PIL / NumPy, raising the `spidev` kernel
+       buffer to 131072 (the default 4096 is the cause of the
+       classic "good half / garbage half" symptom).
+    3. Setting up a Python virtualenv with Blinka and the
+       CircuitPython RGB display driver.
+    4. Re-assigning the SPI chip-select pins via
+       `raspi-spi-reassign.py --ce0 disabled --ce1 disabled`.
+    5. Running the `scripts/rgb_display_pillow_bonnet_buttons.py` demo
+       to confirm the panel and joystick work.
+
+    When the bonnet shows the demo's "Hello World" frame and the
+    buttons cycle the picture, the hardware side is ready.
+
+=== "Pro"
+
+    The Pro panel is a kernel framebuffer, so there is no SPI buffer
+    tuning or Blinka. The provisioner sets it up: it writes the
+    `mipi-dbi-spi` (ST7796S) and `goodix` (touch) lines to
+    `/boot/firmware/config.txt`, installs the `st7796s.bin` panel init
+    firmware, and leaves `dtoverlay=vc4-kms-v3d` in place for the
+    camera. On a fresh 64-bit Raspberry Pi OS Lite card:
+
+    ```bash
+    cd ~/PiWallet
+    sudo bash deploy/provision-pi.sh --product pro --src "$(pwd)" \
+        --keep-ssh --keep-radios
+    sudo reboot
+    ```
+
+    `--keep-ssh --keep-radios` keeps SSH and Wi-Fi for development. Never
+    use them for an image you hand to anyone. After the reboot,
+    `piwallet-touch.service` draws the UI on the LCD; check it with the
+    HDMI cable unplugged. See
+    [Image release (operator)](https://github.com/mohrt/PiWalletSV/blob/main/docs/includes/image-release-operator.md) for
+    the sealed build.
 
 ## Wire up the camera
 
-Add the kit camera overlay to `/boot/firmware/config.txt`:
+=== "Zero"
 
-```bash
-sudo tee -a /boot/firmware/config.txt <<'EOF'
-camera_auto_detect=0
-dtoverlay=ov5647
-EOF
-sudo reboot
-```
+    Add the kit camera overlay to `/boot/firmware/config.txt`:
 
-Install the libcamera stack and QR decoder:
+    ```bash
+    sudo tee -a /boot/firmware/config.txt <<'EOF'
+    camera_auto_detect=0
+    dtoverlay=ov5647
+    EOF
+    sudo reboot
+    ```
 
-```bash
-sudo apt install -y python3-picamera2 libzbar0t64
-source ~/.venvs/piwallet/bin/activate
-pip install pyzbar
-```
+    Install the libcamera stack and QR decoder:
+
+    ```bash
+    sudo apt install -y python3-picamera2 libzbar0t64
+    source ~/.venvs/piwallet/bin/activate
+    pip install pyzbar
+    ```
+
+=== "Pro"
+
+    The provisioner already enables the camera (`camera_auto_detect=1`
+    with `vc4-kms-v3d`) and installs the libcamera stack and QR decoder.
+    Connect the ribbon to the Pi 3's CSI port, between the HDMI and
+    audio jacks.
 
 Smoke test:
 
@@ -80,7 +131,7 @@ camera is ready.
 
 DIY builders using a different libcamera-supported sensor must install
 the matching `dtoverlay` and apt packages — see
-[Supported cameras](build.md#supported-cameras-libcamera) in the build guide.
+[Supported cameras](build.md#7-supported-cameras-libcamera) in the build guide.
 
 ## Install the offline core
 
@@ -95,9 +146,11 @@ pip install -e ".[dev]"
 pytest
 ```
 
-On a **Raspberry Pi** with the bonnet already working, sync the repo
+On a **Pi Zero** with the bonnet already working, sync the repo
 and run the bootstrap script (apt, boot config, venv, pip — including
-the armv6l `coincurve` workaround):
+the armv6l `coincurve` workaround). On the **Pro**, the
+`provision-pi.sh --product pro` run above has already built the venv
+under `/opt/piwallet`.
 
 ```bash
 cd ~/PiWallet
@@ -159,7 +212,7 @@ Every row should be green. If any row is red, the wire stack has
 drifted; check the version of the `companion/` build matches the
 Python repo and rerun the test suites.
 
-For an actual end-to-end signing demo (without the bonnet UI),
+For an actual end-to-end signing demo (without the on-device UI),
 follow the [User manual](user-manual.md). For the deepest test of
 the SPV stack, run the canonical fixture through the CLI:
 

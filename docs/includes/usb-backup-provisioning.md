@@ -7,9 +7,9 @@ backup support automatically (`step_usb_backup`):
 | `/opt/piwallet/bin/usb-mount` | Root helper script (mount/unmount) |
 | `/mnt/piwallet-usb` | Canonical mount point (`uid=pwsv`) |
 | `piwallet-usb-mount.service` | Root Unix socket daemon (`/run/piwallet/usb-mount.sock`) |
-| `piwallet-bonnet.service` | `After=piwallet-usb-mount.service`, `ReadWritePaths=/mnt/piwallet-usb` |
+| `piwallet-bonnet.service` (Zero) or `piwallet-touch.service` (Pro) | `After=piwallet-usb-mount.service`, `ReadWritePaths=/mnt/piwallet-usb` |
 
-The bonnet runs with `NoNewPrivileges=yes`, so it cannot call `sudo`;
+The signer UI runs with `NoNewPrivileges=yes`, so it cannot call `sudo`;
 the mount daemon performs privileged mounts on its behalf.
 
 **Dev installs** that copy only `piwallet-bonnet.service.example` do
@@ -21,6 +21,6 @@ Verify on a provisioned image:
 
 ```bash
 systemctl is-active piwallet-usb-mount    # active
-systemctl is-active piwallet-bonnet       # active
+systemctl is-active piwallet-bonnet       # active (Pro: piwallet-touch)
 ls -la /mnt/piwallet-usb                  # exists, mode 755
 ```

@@ -51,7 +51,8 @@ Given a `data` byte string (typically `gzip(cbor(envelope))`):
    chosen QR version and error-correction level. The reference
    transmitters default to `48` characters per fragment for
    companion→Pi unsigned proposals (sparse Version 4–5 QRs the OV5647
-   can lock). Bonnet→phone pairing / signed-tx still use `100`. The
+   can lock). Pi→phone pairing / signed-tx use `100` on the Zero; the
+   Pro's larger screen uses `400` for the xpub export. The
    assembler doesn't care about chunk size.
 3. Let `n = ceil(len(b) / chunk_size)`. For `i` in `0..n-1`, the i-th
    line is:
@@ -65,7 +66,7 @@ fragment, trailing pipe).
 
 Frames SHOULD be displayed in a rotating animation; the assembler
 collects whichever it can decode, so missed frames are not fatal as
-long as the loop eventually replays them. The Pi bonnet defaults to
+long as the loop eventually replays them. The Pi screen (Zero and Pro) defaults to
 **700 ms per frame** (~1.4 fps); the Pi camera captures and decodes
 roughly every **350 ms** (~2.9 fps). The companion uses the same
 700 ms interval so the Pi camera sees each QR long enough before it
@@ -156,12 +157,13 @@ required but make scanning easier on Pi-class cameras:
 - Render at integer pixel scale on screen so the camera doesn't see
   shimmer.
 - Animate at **700 ms per frame** when the Pi camera is the scanner
-  (matches bonnet ``PairingMultipartQrScreen``). Up to ~6–8 fps is fine
+  (matches the Zero's ``PairingMultipartQrScreen`` and the Pro's touch
+  QR screens). Up to ~6–8 fps is fine
   for phone/laptop webcams on a static mount; slower on hand-held setups.
 
 The reference companion uses the JavaScript `qrcode-generator` library
 configured for byte mode and error-correction level M; the Pi side
-uses `PIL.Image` to compose QR codes for the bonnet display and `qrencode`
+uses `PIL.Image` to compose QR codes for the device display and `qrencode`
 for terminal demos. Either approach is fine.
 
 ## 6. End-of-stream signaling

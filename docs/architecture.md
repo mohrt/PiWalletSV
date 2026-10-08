@@ -150,9 +150,9 @@ A real send looks like this:
       up the matching anchor in `headerAnchors[block_height]`, and
       reject any mismatch; then re-derive the signing key, check
       value conservation, and re-derive the change script.
-    - If anything fails, the bonnet shows a one-line reason and
+    - If anything fails, the device shows a one-line reason and
       the signing path exits. No partial state is kept.
-    - If everything passes, the bonnet shows the recipient
+    - If everything passes, the device shows the recipient
       address, amount, fee, and per-input height + anchored-root
       prefix. The user holds A to confirm.
     - `sign_transaction()` derives the per-input signing keys from
@@ -221,9 +221,10 @@ paper (or steel) outside the device is the recovery channel.
 │   │   ├── verify.py             # BEEF + BUMP-root ↔ anchor check + derivation
 │   │   └── sign.py               # change re-derive + sign + Atomic BEEF
 │   ├── backup/                   # USB vault export/import (bundle, mount socket)
-│   ├── bonnet/                   # on-device UI flows (wallet list, USB backup, sign)
+│   ├── bonnet/                   # Zero UI flows: joystick + buttons (wallet list, USB backup, sign)
+│   ├── touch/                    # Pro UI flows: touch screen, same steps as bonnet/
 │   ├── qr/multipart.py           # PW1 framing + assembler
-│   ├── ui/                       # bonnet display + joystick widgets
+│   ├── ui/                       # shared display, QR, and widget drawing
 │   └── cli.py                    # piwallet entry point
 │
 ├── companion/                    # online half (TypeScript + Vite + PWA)
@@ -314,8 +315,9 @@ the blocking modal lives in
 `localStorage` persists the version + timestamp; bumping
 `CURRENT_TERMS_VERSION` re-prompts every user on next load.
 
-A first-boot disclaimer on the Pi side (3-page bonnet flow with
-hold-A confirmation, persisted to vault metadata) is part of Phase 2
+A first-boot disclaimer on the Pi side (three pages with hold-A
+confirmation on the Zero, one screen with **Hold to accept** on the Pro,
+persisted to vault metadata) is part of Phase 2
 and not yet shipped.
 
 ## 8. Versioning and stability
@@ -336,7 +338,7 @@ and not yet shipped.
 
 ## 9. What this architecture does not solve
 
-- **A user who confirms a transaction without reading the bonnet
+- **A user who confirms a transaction without reading the device
   screen.** The Pi displays the recipient, amount, fee, and
   per-input height + anchored-root prefix for exactly this reason
   — they are only useful if the human looks.

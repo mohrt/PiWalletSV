@@ -31,11 +31,6 @@ continue at [First boot](#1-first-boot).
 Use only if you are **not** re-flashing yet. These do **not** prove the
 microSD matches an official image.
 
-**Paperwork:** Compare **Image ID** and firmware version on the kit insert
-to the matching
-[GitHub release](https://github.com/mohrt/PiWalletSV/releases).
-Mismatch → do not use; re-flash (Option A).
-
 **Forensic hash (optional):** Power off, remove the microSD, and hash the
 whole card on your computer (e.g. `dd … | shasum -a 256`). Keep the
 digest as a record of what arrived — it will **not** match the pristine

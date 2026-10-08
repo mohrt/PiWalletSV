@@ -82,7 +82,7 @@ creation, click the **BIP32** tab and enter your path manually in the
 
 Scroll down to the **Derived Addresses** table. The addresses under
 the **Address** column, starting from index 0, are your receive
-addresses in order — the same ones PiWalletSV shows on its bonnet screen
+addresses in order — the same ones PiWalletSV shows on its device screen
 and that the companion derives when building proposals.
 
 Cross-check the first address against any receive address you ever
@@ -149,8 +149,8 @@ derived from your seed.
 
 If you are comfortable with Python and want to derive addresses or
 build a sweep transaction programmatically, the PiWalletSV library
-itself works fine on any machine — it does not require a Pi or the
-bonnet hardware.
+itself works fine on any machine — it does not require a Pi or a
+PiWalletSV screen.
 
 ```bash
 # Install in a clean venv.
@@ -190,7 +190,7 @@ If the address looks unfamiliar:
 1. **Check the word order.** BIP39 word order is significant; even one
    swapped word produces a completely different wallet.
 2. **Check the path.** If you used the Advanced path editor on the
-   PiWalletSV bonnet during wallet creation, the coin type or account
+   PiWalletSV device during wallet creation, the coin type or account
    index may differ from the defaults. The companion app stores the
    exact path — if you have access to it, use the path shown there.
 3. **Check for a testnet vs mainnet mismatch.** If you created the
@@ -208,6 +208,6 @@ Once you have confirmed your balance and swept the funds:
 2. **Shred any plaintext seed copies** you created during recovery
    (files on disk, screenshots, clipboard history).
 3. When your PiWalletSV device is back online, **restore from the same
-   seed** using the bonnet's **Restore wallet** flow or the
+   seed** using the device's **Restore wallet** flow (Zero or Pro) or the
    `piwallet vault add` CLI — the xpub and address set will be
    identical to what you just verified here.

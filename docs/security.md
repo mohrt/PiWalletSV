@@ -96,17 +96,17 @@ The complete disclosure / reporting policy lives in the project's
   internet, don't type the seed into anything online, and don't let
   cameras or screen-recorders see the disclaimer-revealed phrase
   during initial setup or recovery. Verify the device is still quiet
-  with **Settings → Maintenance → Airgap status** on the bonnet; see
+  with **Settings → Maintenance → Airgap status** on the device; see
   [User manual § Airgap status](user-manual.md#airgap-status) for
   what each indicator means.
 
 ## Seed generation { #seed-generation }
 
-Seed phrases are created **only on the Pi** (bonnet UI or
+Seed phrases are created **only on the Pi** (the device's screen UI or
 `piwallet mnemonic new`). The companion app never generates mnemonics.
 
-When you create a wallet on the bonnet you pick one of three entropy
-sources:
+When you create a wallet on the device (Zero or Pro) you pick one of
+three entropy sources:
 
 | Source | What happens |
 |--------|----------------|
@@ -130,7 +130,7 @@ scene or a long, honestly random roll sequence — that adds defense in
 depth and per-user uniqueness on top of the OS random that always
 participates.
 
-The seed is shown once on the bonnet, confirmed via a shuffled word
+The seed is shown once on the device, confirmed via a shuffled word
 picker (which uses `secrets.SystemRandom` only for UI decoys, not for
 phrase generation), encrypted into the vault, and zeroed from memory.
 It is never written to disk in cleartext.
@@ -152,14 +152,15 @@ and web app that shows you a receive address. The conventional mitigation
 is a hardware wallet with a trusted display, which shows the address on a
 screen that the computer cannot influence.
 
-PiWalletSV provides the same protection: **the Pi's bonnet is that
+PiWalletSV provides the same protection: **the Pi's own screen is that
 trusted display.** Before sharing a receive address, you can confirm it
-independently on the bonnet:
+independently on the device:
 
 1. On the Pi, navigate to the wallet and choose **Show deposit address**.
-2. The bonnet starts at **address #0**. Press **RIGHT** (or **A**) once
-   for each index step — e.g. press RIGHT 3 times to reach **address #3**.
-3. Confirm the address shown on the bonnet matches what the companion
+2. The device starts at **address #0**. Step forward once per index —
+   on the Zero press **RIGHT** (or **A**), on the Pro tap **Next** — e.g.
+   three steps to reach **address #3**.
+3. Confirm the address shown on the device matches what the companion
    app is showing you.
 
 If they match, you can be confident the companion has not been tampered
@@ -216,11 +217,9 @@ Before you fund the device:
 
 - **Re-flash a verified image** (recommended) — download, GPG-verify,
   checksum, and flash the card yourself. Easiest real assurance.
-- **Light checks** (optional) — Image ID on the **kit insert** vs the
-  matching [GitHub release](https://github.com/mohrt/PiWalletSV/releases)
-  (paperwork only). Accepting the tested card as shipped
-  relies on the factory and delivery chain; there is no on-device
-  verification of the full card.
+- **Accept the tested card as shipped** (weaker) — this relies on the
+  factory and delivery chain; there is no on-device verification of the
+  full card.
 
 Full steps: [User manual § Verify your SD card on arrival](user-manual.md#verify-sd-card-on-arrival).
 

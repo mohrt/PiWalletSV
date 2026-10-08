@@ -2,8 +2,8 @@
 
 The fastest way to run PiWalletSV is to flash the prebuilt SD-card image
 onto a microSD and boot. The image is a sealed appliance: it boots straight
-into the bonnet UI, has no SSH or Wi-Fi, and runs PiWalletSV as the only
-foreground task on the device.
+into the signer UI on the device's screen, has no SSH or Wi-Fi, and runs
+PiWalletSV as the only foreground task on the device.
 
 **Canonical host:** signed firmware, checksums, and release notes live on
 [GitHub Releases](https://github.com/mohrt/PiWalletSV/releases) — that is
@@ -30,8 +30,10 @@ Each release filename includes a **board slug** for the Raspberry Pi model
 | **pi4** | Pi 4 Model B, Pi 400 *(future)* |
 | **pro-pi3** | PiWalletSV Pro: Pi 3 Model B + Waveshare 3.5 inch LCD (F) |
 
-For round‑1 kits use **`pi0`**. Exact filenames and tags are on the
-GitHub release page for that version.
+For a **Zero** kit use **`pi0`**; for a **Pro** kit use **`pro-pi3`**.
+The two are separate releases with their own tags (Pro tags end in
+`-pro-pi3`). Exact filenames are on the GitHub release page for that
+version.
 
 Machine-readable history (optional):
 [`releases/releases.json`](https://github.com/mohrt/PiWalletSV/blob/main/releases/releases.json)
@@ -65,9 +67,9 @@ release-key fingerprint in [`docs/security.md`](security.md#release-key).
     [Flash and first run § Flash the image](build-image.md#step-2-flash-the-image)
     covers Windows, macOS, and Linux (Raspberry Pi Imager or `dd`).
 
-You need a **USB microSD reader/writer** on your computer. PiWalletSV kits
-include a microSD and SD adapter when a full kit is offered; **they do not
-include a USB reader.**
+You need a **USB microSD reader/writer** on your computer. Full kits include
+a factory-flashed microSD (the Zero kit adds a full-size SD adapter; the Pro
+kit ships with the card installed); **they do not include a USB reader.**
 
 ## Next steps
 
@@ -88,8 +90,8 @@ Once the image is verified and flashed:
 ## Building from source
 
 Need a custom tree or no GitHub asset yet? Flash Raspberry Pi OS Lite
-32-bit, run
+(32-bit for the Zero, 64-bit for the Pro), run
 [`deploy/provision-pi.sh`](https://github.com/mohrt/PiWalletSV/blob/main/deploy/provision-pi.sh),
 and capture your own image — see
 [Build & deploy](build.md) and the operator notes in
-[`docs/includes/image-release-operator.md`](includes/image-release-operator.md).
+[`docs/includes/image-release-operator.md`](https://github.com/mohrt/PiWalletSV/blob/main/docs/includes/image-release-operator.md).
