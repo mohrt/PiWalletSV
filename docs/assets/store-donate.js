@@ -1,5 +1,6 @@
 /**
- * Donation page — allocate next HD receive address from the store API.
+ * Donation page — show the current HD receive address from the store API.
+ * The API reuses m/0/n until that address receives coins.
  */
 (function () {
   const cfgEl = document.getElementById("piwalletsv-store-config");

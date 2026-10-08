@@ -30,7 +30,7 @@ import {
 } from "../lib/wallets.js";
 import { renderHeader } from "./nav.js";
 import { WocClient, effectiveWocBase } from "../lib/woc.js";
-import { scanWalletUtxos } from "../lib/utxo.js";
+import { scanWalletUtxos, walletGapLimit } from "../lib/utxo.js";
 import {
   canPromptInstall,
   detectInstallPlatform,
@@ -332,7 +332,10 @@ export function mountWalletsPage(root: HTMLElement): () => void {
     btn.textContent = "…";
     try {
       const woc = new WocClient({ baseUrl: effectiveWocBase(wallet.network) });
-      const result = await scanWalletUtxos(wallet.xpub, woc, { network: wallet.network });
+      const result = await scanWalletUtxos(wallet.xpub, woc, {
+        network: wallet.network,
+        gapLimit: walletGapLimit(wallet.gapLimit),
+      });
       const snapshot = {
         at: new Date().toISOString(),
         totalSats: result.totalSats,

@@ -43,6 +43,7 @@ import {
   getWallet,
   listWallets,
   setLastScan,
+  setGapLimit,
 } from "../src/lib/wallets.js";
 
 const DEMO = {
@@ -300,6 +301,19 @@ describe("wallet backup", () => {
     const w = (await listWallets())[0];
     expect(w.network ?? "main").toBe("main");
     expect(w.nextReceiveIndex ?? 0).toBe(0);
+  });
+
+  it("round-trips a per-wallet gap limit", async () => {
+    const rec = await addWallet(DEMO);
+    await setGapLimit(rec.id, 100);
+    const raw = serializeWalletBackup(
+      await buildWalletBackupFile({ scope: "wallets-only" }),
+    );
+    await _clearAllWallets();
+    const result = await importWalletBackup(raw);
+    expect(result.imported).toBe(1);
+    expect(result.failed).toEqual([]);
+    expect((await listWallets())[0].gapLimit).toBe(100);
   });
 
   it("formats import results for display", () => {

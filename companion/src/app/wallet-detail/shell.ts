@@ -1,4 +1,5 @@
 import { DOCS_BASE_URL, SHOW_PIWALLET_PASS } from "../../lib/config.js";
+import { MAX_GAP_LIMIT, MIN_GAP_LIMIT, walletGapLimit } from "../../lib/utxo.js";
 import { DEFAULT_FEE_RATE_SATSKB } from "../../lib/fee.js";
 import { renderHeader } from "../nav.js";
 import {
@@ -464,6 +465,27 @@ export function renderWalletDetailShell(
               <p id="passkeyStatus" class="muted-line"></p>
             </div>
           </details>` : ""}
+
+          <details class="backup-fold advanced-fold" id="advancedFoldScan">
+            <summary>Address scanning</summary>
+            <div class="backup-fold-body">
+              <p class="muted-line">
+                Balance and history stop looking after this many unused
+                addresses in a row. Raise it if funds sit on an address past a
+                long run of addresses that were handed out but never paid.
+                Higher values make Refresh slower.
+              </p>
+              <label class="field">
+                <span>Gap limit (default 20)</span>
+                <input id="gapLimitInput" type="number" min="${MIN_GAP_LIMIT}" max="${MAX_GAP_LIMIT}"
+                  step="1" inputmode="numeric" value="${walletGapLimit(wallet.gapLimit)}" />
+              </label>
+              <div class="actions">
+                <button id="gapLimitSaveBtn" type="button" class="primary" disabled>Save gap limit</button>
+              </div>
+              <p id="gapLimitStatus" class="muted-line"></p>
+            </div>
+          </details>
 
           <details class="backup-fold advanced-fold" id="advancedFoldRename">
             <summary>Rename</summary>

@@ -16,6 +16,7 @@ import {
 } from "./companion-settings.js";
 import { applyTheme } from "./theme.js";
 import type { HistorySnapshot } from "./history.js";
+import { MAX_GAP_LIMIT, MIN_GAP_LIMIT } from "./utxo.js";
 import {
   WalletStoreError,
   _clearAllWallets,
@@ -25,6 +26,7 @@ import {
   setDisplayUnit,
   setLastHistory,
   setLastScan,
+  setGapLimit,
   setNextReceiveIndex,
   type WalletRecord,
   type WalletScanSnapshot,
@@ -50,6 +52,7 @@ export interface WalletBackupEntry {
   network?: NetworkT;
   addedAt: string;
   nextReceiveIndex?: number;
+  gapLimit?: number;
   displayUnit?: "sats" | "bsv" | "fiat";
   lastScan?: WalletScanSnapshot;
   lastHistory?: HistorySnapshot;
@@ -101,6 +104,7 @@ function toBackupEntry(
     ...(rec.nextReceiveIndex !== undefined
       ? { nextReceiveIndex: rec.nextReceiveIndex }
       : {}),
+    ...(rec.gapLimit !== undefined ? { gapLimit: rec.gapLimit } : {}),
   };
   if (scope === "wallets-and-settings") {
     if (rec.displayUnit !== undefined) entry.displayUnit = rec.displayUnit;
@@ -375,6 +379,19 @@ function validateEntry(entry: unknown, index: number): WalletBackupEntry {
     }
     nextReceiveIndex = entry.nextReceiveIndex as number;
   }
+  let gapLimit: number | undefined;
+  if (entry.gapLimit !== undefined) {
+    if (
+      !Number.isInteger(entry.gapLimit) ||
+      (entry.gapLimit as number) < MIN_GAP_LIMIT ||
+      (entry.gapLimit as number) > MAX_GAP_LIMIT
+    ) {
+      throw new WalletStoreError(
+        `wallets[${index}].gapLimit must be an integer from ${MIN_GAP_LIMIT} to ${MAX_GAP_LIMIT}`,
+      );
+    }
+    gapLimit = entry.gapLimit as number;
+  }
   let displayUnit: WalletBackupEntry["displayUnit"];
   if (entry.displayUnit !== undefined) {
     if (
@@ -408,6 +425,7 @@ function validateEntry(entry: unknown, index: number): WalletBackupEntry {
     network,
     addedAt,
     ...(nextReceiveIndex !== undefined ? { nextReceiveIndex } : {}),
+    ...(gapLimit !== undefined ? { gapLimit } : {}),
     ...(displayUnit !== undefined ? { displayUnit } : {}),
     ...(lastScan !== undefined ? { lastScan } : {}),
     ...(lastHistory !== undefined ? { lastHistory } : {}),
@@ -446,6 +464,9 @@ async function importOneEntry(entry: WalletBackupEntry): Promise<
   });
   if (entry.nextReceiveIndex !== undefined) {
     await setNextReceiveIndex(rec.id, entry.nextReceiveIndex);
+  }
+  if (entry.gapLimit !== undefined) {
+    await setGapLimit(rec.id, entry.gapLimit);
   }
   if (entry.displayUnit !== undefined) {
     await setDisplayUnit(rec.id, entry.displayUnit);

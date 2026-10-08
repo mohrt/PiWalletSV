@@ -37,8 +37,17 @@ import {
 } from "./woc.js";
 
 export const DEFAULT_GAP_LIMIT = 20;
+export const MIN_GAP_LIMIT = 1;
+export const MAX_GAP_LIMIT = 500;
 /** Default addresses derived per bulk WoC call. Capped at the WoC bulk max. */
 export const DEFAULT_BATCH = WOC_BULK_BATCH_MAX;
+
+/** A wallet's stored gap, or {@link DEFAULT_GAP_LIMIT} when unset or invalid. */
+export function walletGapLimit(value: number | undefined): number {
+  if (value == null || !Number.isInteger(value)) return DEFAULT_GAP_LIMIT;
+  if (value < MIN_GAP_LIMIT || value > MAX_GAP_LIMIT) return DEFAULT_GAP_LIMIT;
+  return value;
+}
 
 export interface WalletUtxo {
   txid: string;

@@ -9,7 +9,15 @@ import {
   startPw1QrPlayback,
   wirePw1QrControls,
 } from "../../lib/pw1-qr-playback.js";
-import { getWallet, removePasskey, removeWallet, renamePasskey, updateLabel } from "../../lib/wallets.js";
+import { MAX_GAP_LIMIT, MIN_GAP_LIMIT, walletGapLimit } from "../../lib/utxo.js";
+import {
+  getWallet,
+  removePasskey,
+  removeWallet,
+  renamePasskey,
+  setGapLimit,
+  updateLabel,
+} from "../../lib/wallets.js";
 import { escapeHtml, passkeyListHtml } from "./shared.js";
 import type { WalletDetailRuntime, WalletDetailTab } from "./types.js";
 
@@ -136,6 +144,41 @@ export function createAdvancedTab(rt: WalletDetailRuntime): AdvancedTab {
     }
   }
 
+  function readGapInput(): number | null {
+    const $input = rt.root.querySelector<HTMLInputElement>("#gapLimitInput");
+    if (!$input) return null;
+    const value = Number($input.value);
+    if (!Number.isInteger(value) || value < MIN_GAP_LIMIT || value > MAX_GAP_LIMIT) return null;
+    return value;
+  }
+
+  function syncGapLimitSaveBtn(): void {
+    if (!rt.wallet) return;
+    const $btn = rt.root.querySelector<HTMLButtonElement>("#gapLimitSaveBtn");
+    if (!$btn) return;
+    const value = readGapInput();
+    $btn.disabled = value === null || value === walletGapLimit(rt.wallet.gapLimit);
+  }
+
+  async function onGapLimitSave(): Promise<void> {
+    if (!rt.wallet) return;
+    const $status = rt.root.querySelector<HTMLElement>("#gapLimitStatus");
+    if (!$status) return;
+    const value = readGapInput();
+    if (value === null) {
+      $status.textContent = `Enter a whole number from ${MIN_GAP_LIMIT} to ${MAX_GAP_LIMIT}.`;
+      return;
+    }
+    try {
+      await setGapLimit(rt.wallet.id, value);
+      rt.wallet = { ...rt.wallet, gapLimit: value };
+      $status.textContent = `Saved. Refresh Balance to scan with a gap of ${value}.`;
+      syncGapLimitSaveBtn();
+    } catch (e) {
+      $status.textContent = `save failed: ${(e as Error).message}`;
+    }
+  }
+
   function onRemoveWalletOpen(): void {
     rt.root.querySelector<HTMLElement>("#removeWalletActions")!.hidden = true;
     rt.root.querySelector<HTMLElement>("#removeWalletConfirm")!.hidden = false;
@@ -203,6 +246,14 @@ export function createAdvancedTab(rt: WalletDetailRuntime): AdvancedTab {
       if ((e as KeyboardEvent).key === "Enter") void onRenameSave();
     });
     syncRenameSaveBtn();
+    rt.root.querySelector<HTMLInputElement>("#gapLimitInput")?.addEventListener("input", syncGapLimitSaveBtn);
+    rt.root.querySelector<HTMLInputElement>("#gapLimitInput")?.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Enter") void onGapLimitSave();
+    });
+    rt.root
+      .querySelector<HTMLButtonElement>("#gapLimitSaveBtn")
+      ?.addEventListener("click", () => void onGapLimitSave());
+    syncGapLimitSaveBtn();
     rt.root
       .querySelector<HTMLButtonElement>("#removeWalletBtn")
       ?.addEventListener("click", onRemoveWalletOpen);

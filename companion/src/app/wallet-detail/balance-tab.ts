@@ -1,7 +1,7 @@
 import { PRICE_CACHE_TTL_MS } from "../../lib/config.js";
 import { splitConfirmedPending } from "../../lib/balance-split.js";
 import { relativeTimeFrom } from "../../lib/relative-time.js";
-import { scanWalletUtxos } from "../../lib/utxo.js";
+import { scanWalletUtxos, walletGapLimit } from "../../lib/utxo.js";
 import { RECEIVE_BRANCH } from "../../lib/derive.js";
 import { WocClient, WocError, effectiveWocBase } from "../../lib/woc.js";
 import { setLastScan, setNextReceiveIndex } from "../../lib/wallets.js";
@@ -178,6 +178,7 @@ export function createBalanceTab(
     try {
       const result = await scanWalletUtxos(rt.wallet.xpub, rt.woc, {
         network: rt.wallet.network,
+        gapLimit: walletGapLimit(rt.wallet.gapLimit),
         onProgress: ({ branch, index, address, found }) => {
           if (rt.cancelled || !$status) return;
           const branchLabel = branch === RECEIVE_BRANCH ? "recv" : "change";

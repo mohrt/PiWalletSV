@@ -11,7 +11,7 @@
  */
 
 import type { NetworkT } from "./envelope.js";
-import type { WalletUtxo } from "./utxo.js";
+import { MAX_GAP_LIMIT, MIN_GAP_LIMIT, type WalletUtxo } from "./utxo.js";
 import type { HistorySnapshot } from "./history.js";
 
 const DB_NAME = "piwallet-companion";
@@ -63,6 +63,11 @@ export interface WalletRecord {
    * Persisted so the toggle survives page reloads.
    */
   displayUnit?: "sats" | "bsv" | "fiat";
+  /**
+   * How many unused addresses in a row the balance scan walks on each
+   * branch before it stops. Omitted means 20 (BIP44 default).
+   */
+  gapLimit?: number;
   /**
    * PiWallet Pass passkeys this wallet answers with, one per app origin
    * (piwalletsv-pay/notes/pass-protocol.md). The keys live in the phone's passkey store;
@@ -395,6 +400,17 @@ export async function setLastHistory(
     if (!cur) throw new WalletStoreError(`no wallet with id ${id}`);
     cur.lastHistory = snapshot;
     await txPromise(store.put(cur), "put");
+  });
+}
+
+export async function setGapLimit(id: string, gap: number): Promise<void> {
+  if (!Number.isInteger(gap) || gap < MIN_GAP_LIMIT || gap > MAX_GAP_LIMIT) {
+    throw new WalletStoreError(
+      `gap limit must be a whole number from ${MIN_GAP_LIMIT} to ${MAX_GAP_LIMIT}`,
+    );
+  }
+  await updateWallet(id, (cur) => {
+    cur.gapLimit = gap;
   });
 }
 

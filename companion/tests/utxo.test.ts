@@ -152,6 +152,25 @@ describe("scanWalletUtxos", () => {
     expect(result.totalSats).toBe(3000);
   });
 
+  it("a wider gapLimit finds funds past a long run of unused addresses", async () => {
+    const funded = deriveAddress(XPUB, 0, 47, "main");
+    const fund = { [funded.address]: [utxo("ab".repeat(32), 0, 832_466_181)] };
+
+    const narrow = await scanWalletUtxos(XPUB, dummyClient(), {
+      gapLimit: 20,
+      fetchUnspentBatch: batchFromMap(fund),
+    });
+    expect(narrow.utxos).toHaveLength(0);
+
+    const wide = await scanWalletUtxos(XPUB, dummyClient(), {
+      gapLimit: 50,
+      fetchUnspentBatch: batchFromMap(fund),
+    });
+    expect(wide.utxos).toHaveLength(1);
+    expect(wide.utxos[0].derivation).toEqual([0, 47]);
+    expect(wide.lastReceiveUsed).toBe(47);
+  });
+
   it("respects startReceive / startChange hints", async () => {
     const probed: { branch: number; index: number }[] = [];
     await scanWalletUtxos(XPUB, dummyClient(), {
