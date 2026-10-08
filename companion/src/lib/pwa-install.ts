@@ -40,6 +40,10 @@ export function detectInstallPlatform(): InstallPlatform {
   return "other";
 }
 
+export function isAndroid(): boolean {
+  return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+}
+
 export function isInstallPromptDismissed(): boolean {
   if (typeof localStorage === "undefined") return false;
   return localStorage.getItem(KEY_INSTALL_DISMISSED) === "1";

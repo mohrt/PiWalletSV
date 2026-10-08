@@ -20,6 +20,7 @@ import { MAX_GAP_LIMIT, MIN_GAP_LIMIT } from "./utxo.js";
 import {
   WalletStoreError,
   _clearAllWallets,
+  addPasskey,
   addWallet,
   findByFingerprintAndPath,
   listWallets,
@@ -28,6 +29,7 @@ import {
   setLastScan,
   setGapLimit,
   setNextReceiveIndex,
+  type WalletPasskey,
   type WalletRecord,
   type WalletScanSnapshot,
 } from "./wallets.js";
@@ -56,6 +58,8 @@ export interface WalletBackupEntry {
   displayUnit?: "sats" | "bsv" | "fiat";
   lastScan?: WalletScanSnapshot;
   lastHistory?: HistorySnapshot;
+  /** PiWallet Pass links; the passkeys themselves live in the phone's keychain. */
+  passkeys?: WalletPasskey[];
 }
 
 export interface WalletBackupFile {
@@ -105,6 +109,7 @@ function toBackupEntry(
       ? { nextReceiveIndex: rec.nextReceiveIndex }
       : {}),
     ...(rec.gapLimit !== undefined ? { gapLimit: rec.gapLimit } : {}),
+    ...(rec.passkeys?.length ? { passkeys: rec.passkeys.map((p) => ({ ...p })) } : {}),
   };
   if (scope === "wallets-and-settings") {
     if (rec.displayUnit !== undefined) entry.displayUnit = rec.displayUnit;
@@ -134,6 +139,44 @@ export async function buildWalletBackupFile(
 
 export function serializeWalletBackup(file: WalletBackupFile): string {
   return JSON.stringify(file, null, 2);
+}
+
+/**
+ * Date-stamped filename (local time) so backups sort chronologically and the
+ * newest is easy to pick in the iOS / Android file picker. No colons: they
+ * are invalid in iOS and Windows filenames.
+ */
+export function backupFileName(date: Date, walletCount: number): string {
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const day = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const time = `${pad(date.getHours())}${pad(date.getMinutes())}`;
+  const wallets = `${walletCount}-wallet${walletCount === 1 ? "" : "s"}`;
+  return `PiWalletSV-backup-${day}-${time}-${wallets}.json`;
+}
+
+export interface WalletBackupSummary {
+  exportedAt: string;
+  walletCount: number;
+  labels: string[];
+  hasSettings: boolean;
+  file: WalletBackupFile;
+}
+
+/** Parse a backup for a pre-restore preview; throws WalletStoreError if it isn't one. */
+export function summarizeWalletBackup(raw: string): WalletBackupSummary {
+  const file = parseBackupFile(raw.trim());
+  // Default settings export as `{}`, which parses to undefined; key presence marks a full backup.
+  const hasSettings = (JSON.parse(raw) as Record<string, unknown>).settings !== undefined;
+  const labels = file.wallets
+    .map((w) => (isRecord(w) && typeof w.label === "string" ? w.label.trim() : ""))
+    .filter((l) => l.length > 0);
+  return {
+    exportedAt: file.exportedAt,
+    walletCount: file.wallets.length,
+    labels,
+    hasSettings,
+    file,
+  };
 }
 
 export function walletBackupToBytes(json: string): Uint8Array {
@@ -332,6 +375,40 @@ function validateHistorySnapshot(raw: unknown, index: number): HistorySnapshot {
   };
 }
 
+function isIsoTimestamp(v: unknown): v is string {
+  return typeof v === "string" && !Number.isNaN(Date.parse(v));
+}
+
+function validatePasskeys(raw: unknown, index: number): WalletPasskey[] {
+  if (!Array.isArray(raw)) {
+    throw new WalletStoreError(`wallets[${index}].passkeys must be an array`);
+  }
+  return raw.map((p, j) => {
+    const where = `wallets[${index}].passkeys[${j}]`;
+    if (!isRecord(p)) throw new WalletStoreError(`${where} must be an object`);
+    for (const field of ["name", "appOrigin", "appName", "credentialId", "userHandle"] as const) {
+      if (typeof p[field] !== "string" || !(p[field] as string)) {
+        throw new WalletStoreError(`${where}.${field} must be a non-empty string`);
+      }
+    }
+    if (!isIsoTimestamp(p.createdAt)) {
+      throw new WalletStoreError(`${where}.createdAt must be an ISO timestamp`);
+    }
+    if (p.lastUsedAt !== undefined && !isIsoTimestamp(p.lastUsedAt)) {
+      throw new WalletStoreError(`${where}.lastUsedAt must be an ISO timestamp`);
+    }
+    return {
+      name: p.name as string,
+      appOrigin: p.appOrigin as string,
+      appName: p.appName as string,
+      credentialId: p.credentialId as string,
+      userHandle: p.userHandle as string,
+      createdAt: p.createdAt,
+      ...(p.lastUsedAt !== undefined ? { lastUsedAt: p.lastUsedAt as string } : {}),
+    };
+  });
+}
+
 function validateEntry(entry: unknown, index: number): WalletBackupEntry {
   if (!isRecord(entry)) {
     throw new WalletStoreError(`wallets[${index}] must be an object`);
@@ -411,6 +488,10 @@ function validateEntry(entry: unknown, index: number): WalletBackupEntry {
   if (entry.lastHistory !== undefined) {
     lastHistory = validateHistorySnapshot(entry.lastHistory, index);
   }
+  let passkeys: WalletPasskey[] | undefined;
+  if (entry.passkeys !== undefined) {
+    passkeys = validatePasskeys(entry.passkeys, index);
+  }
   const trimmedXpub = xpub.trim();
   if (!trimmedXpub.startsWith("xpub") && !trimmedXpub.startsWith("tpub")) {
     throw new WalletStoreError(
@@ -429,6 +510,7 @@ function validateEntry(entry: unknown, index: number): WalletBackupEntry {
     ...(displayUnit !== undefined ? { displayUnit } : {}),
     ...(lastScan !== undefined ? { lastScan } : {}),
     ...(lastHistory !== undefined ? { lastHistory } : {}),
+    ...(passkeys !== undefined ? { passkeys } : {}),
   };
 }
 
@@ -452,6 +534,11 @@ async function importOneEntry(entry: WalletBackupEntry): Promise<
   const network: NetworkT = entry.network ?? "main";
   const existing = await findByFingerprintAndPath(fpHex, entry.path);
   if (existing && (existing.network ?? "main") === network) {
+    // Re-paired wallets still recover their Pass links from the backup.
+    const known = new Set((existing.passkeys ?? []).map((p) => p.credentialId));
+    for (const pk of entry.passkeys ?? []) {
+      if (!known.has(pk.credentialId)) await addPasskey(existing.id, pk);
+    }
     return "skipped";
   }
 
@@ -476,6 +563,9 @@ async function importOneEntry(entry: WalletBackupEntry): Promise<
   }
   if (entry.lastHistory !== undefined) {
     await setLastHistory(rec.id, entry.lastHistory);
+  }
+  for (const pk of entry.passkeys ?? []) {
+    await addPasskey(rec.id, pk);
   }
   return "imported";
 }

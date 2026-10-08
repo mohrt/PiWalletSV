@@ -14,6 +14,7 @@ import { DOCS_BASE_URL, PRICE_CACHE_TTL_MS } from "../lib/config.js";
 import {
   KEY_LIST_SORT,
   KEY_LIST_UNIT,
+  exportCompanionSettings,
   getFiatCurrency,
   getListSort,
   getListUnit,
@@ -35,9 +36,35 @@ import {
   canPromptInstall,
   detectInstallPlatform,
   dismissInstallPrompt,
+  isStandalonePwa,
   promptInstall,
   shouldShowInstallBanner,
 } from "../lib/pwa-install.js";
+import {
+  KEY_OPEN_BACKUP,
+  type BackupSnapshot,
+  backupPlatform,
+  backupSaveCopy,
+  backupSnapshot,
+  backupStatus,
+  isBackupNudgeSnoozed,
+  snoozeBackupNudge,
+} from "../lib/backup-status.js";
+import {
+  type WalletBackupSummary,
+  buildWalletBackupFile,
+  formatImportWalletResult,
+  importWalletBackup,
+  serializeWalletBackup,
+  summarizeWalletBackup,
+} from "../lib/wallet-backup.js";
+import {
+  describeBackup,
+  markRestoredFromFile,
+  notABackupMessage,
+  saveBackup,
+  savedBackupMessage,
+} from "./backup-save.js";
 
 const SATS_PER_BSV = 100_000_000;
 
@@ -68,7 +95,19 @@ export function mountWalletsPage(root: HTMLElement): () => void {
           <button id="installBannerPrimary" type="button" class="primary" hidden>
             Install
           </button>
+          <button id="installBannerCopy" type="button" class="primary" hidden>
+            Copy backup
+          </button>
           <button id="installBannerDismiss" type="button">Not now</button>
+        </div>
+      </section>
+
+      <section id="backupNotice" class="card backup-notice" role="status" hidden>
+        <p id="backupNoticeMsg" class="backup-notice-msg"></p>
+        <p id="backupNoticeHint" class="muted-line backup-notice-hint"></p>
+        <div class="actions">
+          <button id="backupNoticeSave" type="button" class="primary">Back up now</button>
+          <button id="backupNoticeLater" type="button">Later</button>
         </div>
       </section>
 
@@ -106,6 +145,28 @@ export function mountWalletsPage(root: HTMLElement): () => void {
             <a href="${DOCS_BASE_URL}/security/" target="_blank"
                rel="noopener noreferrer">Why is this safe?</a>
           </p>
+          <div class="restore-block">
+            <h3>Restore from backup</h3>
+            <p id="restoreHint" class="muted-line">
+              Already have a PiWalletSV backup? Restore your wallets and settings.
+            </p>
+            <div class="actions">
+              <label class="button-like primary">
+                Choose backup file…
+                <input id="restoreFile" type="file" accept=".json,application/json" hidden />
+              </label>
+              <button id="restorePaste" type="button">Paste backup</button>
+              <a id="restoreScan" href="#/settings">Scan transfer QR</a>
+            </div>
+            <div id="restorePreview" class="restore-preview" hidden>
+              <p id="restorePreviewMsg"></p>
+              <div class="actions">
+                <button id="restoreConfirm" type="button" class="primary">Restore</button>
+                <button id="restoreCancel" type="button">Choose another</button>
+              </div>
+            </div>
+            <p id="restoreStatus" class="muted-line" aria-live="polite"></p>
+          </div>
         </div>
         <ul id="walletsList" class="wallets-list"></ul>
       </section>
@@ -196,6 +257,195 @@ export function mountWalletsPage(root: HTMLElement): () => void {
   });
 
   setupInstallBanner();
+
+  // ── backup nudge ───────────────────────────────────────────────────────────
+  const $installCopy = root.querySelector<HTMLButtonElement>("#installBannerCopy")!;
+  const $backupNotice = root.querySelector<HTMLElement>("#backupNotice")!;
+  const $backupMsg = root.querySelector<HTMLElement>("#backupNoticeMsg")!;
+  const $backupHint = root.querySelector<HTMLElement>("#backupNoticeHint")!;
+  const $backupSave = root.querySelector<HTMLButtonElement>("#backupNoticeSave")!;
+  const $backupLater = root.querySelector<HTMLButtonElement>("#backupNoticeLater")!;
+  const platform = backupPlatform();
+  const saveCopy = backupSaveCopy(platform);
+  let currentSnapshot: BackupSnapshot | null = null;
+
+  function updateBackupNotice(wallets: WalletRecord[]): void {
+    currentSnapshot = backupSnapshot(wallets, exportCompanionSettings());
+    const status = backupStatus(currentSnapshot);
+    const needsBackup =
+      wallets.length > 0 &&
+      status.state !== "current" &&
+      !isBackupNudgeSnoozed(currentSnapshot);
+    $backupNotice.hidden = !needsBackup;
+    if (!needsBackup) return;
+    if (status.state === "none") {
+      $backupMsg.textContent = "Your wallets are only stored on this device.";
+    } else {
+      const last = status.lastAt ? ` (last backup ${relativeTimeFrom(status.lastAt)})` : "";
+      $backupMsg.textContent = `Changes not backed up: ${status.changes.join(", ")}${last}.`;
+    }
+    $backupHint.textContent = saveCopy.hint;
+  }
+
+  $backupSave.addEventListener("click", () => {
+    void (async () => {
+      $backupSave.disabled = true;
+      try {
+        const saved = await saveBackup(platform);
+        if (cancelled || saved.outcome === "cancelled") return;
+        $status.classList.remove("error");
+        $status.textContent = savedBackupMessage(saved);
+        updateBackupNotice(cachedWallets);
+      } catch (e) {
+        if (cancelled) return;
+        $status.classList.add("error");
+        $status.textContent = `backup failed: ${(e as Error).message}`;
+      } finally {
+        $backupSave.disabled = false;
+      }
+    })();
+  });
+
+  $backupLater.addEventListener("click", () => {
+    if (currentSnapshot) snoozeBackupNudge(currentSnapshot);
+    $backupNotice.hidden = true;
+  });
+
+  // iOS keeps the browser tab and the Home Screen app in separate storage,
+  // so offer a clipboard hand-off before the user installs.
+  function updateInstallHandoff(wallets: WalletRecord[]): void {
+    if ($installBanner.hidden || detectInstallPlatform() !== "ios" || wallets.length === 0) {
+      $installCopy.hidden = true;
+      return;
+    }
+    $installBody.textContent =
+      "Tap Share (↑), then Add to Home Screen. Your wallets don't carry over to the " +
+      "Home Screen app — tap Copy backup first, then choose Paste backup there.";
+    $installCopy.hidden = false;
+  }
+
+  $installCopy.addEventListener("click", () => {
+    void (async () => {
+      $installCopy.disabled = true;
+      try {
+        const json = serializeWalletBackup(await buildWalletBackupFile());
+        await navigator.clipboard.writeText(json);
+        $installCopy.textContent = "Copied ✓";
+      } catch (e) {
+        $status.classList.add("error");
+        $status.textContent = `copy failed: ${(e as Error).message}`;
+      } finally {
+        $installCopy.disabled = false;
+      }
+    })();
+  });
+
+  // ── restore (empty state) ──────────────────────────────────────────────────
+  const $restoreHint = root.querySelector<HTMLElement>("#restoreHint")!;
+  const $restoreFile = root.querySelector<HTMLInputElement>("#restoreFile")!;
+  const $restorePaste = root.querySelector<HTMLButtonElement>("#restorePaste")!;
+  const $restoreScan = root.querySelector<HTMLAnchorElement>("#restoreScan")!;
+  const $restorePreview = root.querySelector<HTMLElement>("#restorePreview")!;
+  const $restorePreviewMsg = root.querySelector<HTMLElement>("#restorePreviewMsg")!;
+  const $restoreConfirm = root.querySelector<HTMLButtonElement>("#restoreConfirm")!;
+  const $restoreCancel = root.querySelector<HTMLButtonElement>("#restoreCancel")!;
+  const $restoreStatus = root.querySelector<HTMLElement>("#restoreStatus")!;
+  let pendingRestore: { raw: string; summary: WalletBackupSummary; fromFile: boolean } | null = null;
+
+  if (isStandalonePwa()) {
+    $restoreHint.textContent =
+      "Moved from the browser? Tap Paste backup to restore the backup you copied, " +
+      "or choose a saved backup file.";
+  }
+
+  function setRestoreStatus(msg: string, isError = false): void {
+    $restoreStatus.textContent = msg;
+    $restoreStatus.classList.toggle("error", isError);
+  }
+
+  function clearRestorePreview(): void {
+    pendingRestore = null;
+    $restorePreview.hidden = true;
+    $restorePreviewMsg.textContent = "";
+  }
+
+  function previewRestore(raw: string, fromFile: boolean): void {
+    clearRestorePreview();
+    try {
+      const summary = summarizeWalletBackup(raw);
+      pendingRestore = { raw, summary, fromFile };
+      $restorePreviewMsg.textContent = describeBackup(summary);
+      $restoreCancel.textContent = fromFile ? "Choose another" : "Cancel";
+      $restorePreview.hidden = false;
+      setRestoreStatus("");
+    } catch (e) {
+      setRestoreStatus(notABackupMessage(e), true);
+    }
+  }
+
+  $restoreFile.addEventListener("change", () => {
+    const file = $restoreFile.files?.[0];
+    $restoreFile.value = "";
+    if (!file) return;
+    void file.text().then(
+      (raw) => previewRestore(raw, true),
+      (e: unknown) => setRestoreStatus(`could not read file: ${(e as Error).message}`, true),
+    );
+  });
+
+  $restorePaste.addEventListener("click", () => {
+    void (async () => {
+      try {
+        const raw = await navigator.clipboard.readText();
+        if (!raw.trim()) {
+          setRestoreStatus("Clipboard is empty — copy a backup first.", true);
+          return;
+        }
+        previewRestore(raw, false);
+      } catch (e) {
+        setRestoreStatus(`could not read clipboard: ${(e as Error).message}`, true);
+      }
+    })();
+  });
+
+  $restoreScan.addEventListener("click", () => {
+    sessionStorage.setItem(KEY_OPEN_BACKUP, "import");
+  });
+
+  $restoreCancel.addEventListener("click", () => {
+    const reopen = pendingRestore?.fromFile ?? false;
+    clearRestorePreview();
+    if (reopen) $restoreFile.click();
+  });
+
+  $restoreConfirm.addEventListener("click", () => {
+    const pending = pendingRestore;
+    if (!pending) return;
+    void (async () => {
+      $restoreConfirm.disabled = true;
+      setRestoreStatus("Restoring…");
+      try {
+        const result = await importWalletBackup(pending.raw, { mode: "merge" });
+        if (cancelled) return;
+        clearRestorePreview();
+        const failed = result.failed.length > 0 && result.imported === 0;
+        if (!failed && pending.fromFile) markRestoredFromFile(pending.summary);
+        setRestoreStatus(formatImportWalletResult(result), failed);
+        listUnit = getListUnit();
+        listSort = getListSort();
+        $unit.value = listUnit;
+        $sort.value = listSort;
+        await render();
+        if (cancelled) return;
+        $status.classList.toggle("error", failed);
+        $status.textContent = `Restored: ${formatImportWalletResult(result)}`;
+      } catch (e) {
+        setRestoreStatus(`restore failed: ${(e as Error).message}`, true);
+      } finally {
+        $restoreConfirm.disabled = false;
+      }
+    })();
+  });
 
   function displayWallets(): WalletRecord[] {
     return sortWalletRecords(cachedWallets, listSort);
@@ -315,6 +565,8 @@ export function mountWalletsPage(root: HTMLElement): () => void {
       ? ""
       : `${wallets.length} wallet${wallets.length === 1 ? "" : "s"}`;
     renderList(displayWallets());
+    updateBackupNotice(wallets);
+    updateInstallHandoff(wallets);
   }
 
   // ── per-wallet balance refresh ─────────────────────────────────────────────

@@ -34,6 +34,9 @@ let pageTeardown: (() => void) | null = null;
 const DEFAULT_ROUTE = "#/wallets";
 
 applyTheme();
+// Ask the browser not to evict wallets under storage pressure. Doesn't help
+// with iOS Home Screen isolation; backups cover that.
+void navigator.storage?.persist?.().catch(() => false);
 const stopSystemTheme = watchSystemTheme();
 const stopInstallCapture = captureInstallPrompt();
 window.addEventListener("beforeunload", () => {

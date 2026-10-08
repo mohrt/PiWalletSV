@@ -26,12 +26,14 @@ import {
   BACKUP_FORMAT,
   BACKUP_NEWER_THAN_APP_MSG,
   BACKUP_VERSION,
+  backupFileName,
   buildWalletBackupFile,
   buildWalletBackupPw1Lines,
   formatImportWalletResult,
   importWalletBackup,
   importWalletBackupBytes,
   serializeWalletBackup,
+  summarizeWalletBackup,
   walletBackupJsonToPw1Lines,
   walletBackupToBytes,
 } from "../src/lib/wallet-backup.js";
@@ -39,6 +41,7 @@ import { APP_VERSION } from "../src/lib/version.js";
 import {
   WalletStoreError,
   _clearAllWallets,
+  addPasskey,
   addWallet,
   getWallet,
   listWallets,
@@ -53,6 +56,15 @@ const DEMO = {
     "VykQsKLARZdbqKKp7yTviJdL1N9saYLmJNKD1rwVAwLTmU8r8qKeoyG4R",
   fingerprint: "cf987d8c",
   path: "m/44'/236'/0'",
+};
+
+const PASSKEY = {
+  name: "PiWallet Pay",
+  appOrigin: "https://dev.piwalletpay.com",
+  appName: "PiWallet Pay",
+  credentialId: "Y3JlZC0x",
+  userHandle: "dXNlci0x",
+  createdAt: "2026-10-01T12:00:00.000Z",
 };
 
 describe("wallet backup", () => {
@@ -314,6 +326,67 @@ describe("wallet backup", () => {
     expect(result.imported).toBe(1);
     expect(result.failed).toEqual([]);
     expect((await listWallets())[0].gapLimit).toBe(100);
+  });
+
+  it("round-trips Pass passkey links", async () => {
+    const rec = await addWallet(DEMO);
+    await addPasskey(rec.id, PASSKEY);
+    const raw = serializeWalletBackup(
+      await buildWalletBackupFile({ scope: "wallets-only" }),
+    );
+    await _clearAllWallets();
+    const result = await importWalletBackup(raw);
+    expect(result.failed).toEqual([]);
+    expect((await listWallets())[0].passkeys).toEqual([PASSKEY]);
+  });
+
+  it("merges missing passkeys into an already-paired wallet", async () => {
+    const rec = await addWallet(DEMO);
+    await addPasskey(rec.id, PASSKEY);
+    const raw = serializeWalletBackup(
+      await buildWalletBackupFile({ scope: "wallets-only" }),
+    );
+    await _clearAllWallets();
+    await addWallet(DEMO);
+    const result = await importWalletBackup(raw);
+    expect(result.skippedDuplicates).toBe(1);
+    expect((await listWallets())[0].passkeys).toEqual([PASSKEY]);
+  });
+
+  it("rejects malformed passkey entries", async () => {
+    const json = JSON.stringify({
+      format: BACKUP_FORMAT,
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      wallets: [{
+        ...DEMO,
+        addedAt: new Date().toISOString(),
+        passkeys: [{ ...PASSKEY, credentialId: "" }],
+      }],
+    });
+    const result = await importWalletBackup(json);
+    expect(result.imported).toBe(0);
+    expect(result.failed[0].reason).toMatch(/credentialId/);
+  });
+
+  it("names backup files with a sortable local date and wallet count", () => {
+    const d = new Date(2026, 9, 8, 9, 5);
+    expect(backupFileName(d, 3)).toBe("PiWalletSV-backup-2026-10-08-0905-3-wallets.json");
+    expect(backupFileName(d, 1)).toBe("PiWalletSV-backup-2026-10-08-0905-1-wallet.json");
+  });
+
+  it("summarizes a backup for the restore preview", async () => {
+    await addWallet(DEMO);
+    const file = await buildWalletBackupFile({ scope: "wallets-and-settings" });
+    const summary = summarizeWalletBackup(serializeWalletBackup(file));
+    expect(summary).toMatchObject({
+      exportedAt: file.exportedAt,
+      walletCount: 1,
+      labels: [DEMO.label],
+      hasSettings: true,
+    });
+    expect(() => summarizeWalletBackup('{"hello":"world"}')).toThrow(WalletStoreError);
+    expect(() => summarizeWalletBackup("not json")).toThrow(WalletStoreError);
   });
 
   it("formats import results for display", () => {

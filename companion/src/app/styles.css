@@ -1506,6 +1506,73 @@ label.button-like:hover {
   color: var(--accent-strong);
 }
 
+label.button-like.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+label.button-like.primary:hover {
+  filter: brightness(1.1);
+  color: var(--on-accent);
+}
+
+/* Gentle "changes not backed up" nudge on the wallets page */
+.backup-notice {
+  margin-bottom: 1rem;
+  border-left: 3px solid var(--accent);
+}
+
+.backup-notice-msg {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.backup-notice-hint {
+  margin: 0 0 0.75rem;
+}
+
+.backup-notice .actions {
+  margin: 0;
+}
+
+.restore-block {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.restore-block h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.restore-block .actions {
+  align-items: center;
+}
+
+.restore-preview {
+  margin-top: 0.75rem;
+}
+
+.backup-file-import {
+  margin: 0.75rem 0;
+}
+
+.backup-file-import .muted-line {
+  margin: 0.35rem 0 0;
+}
+
+.backup-save-row {
+  margin: 0.5rem 0 0.75rem;
+}
+
+.backup-save-row .actions {
+  margin: 0 0 0.35rem;
+}
+
 .backup-section {
   border: none;
   padding: 0;

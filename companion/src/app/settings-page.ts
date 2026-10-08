@@ -20,9 +20,25 @@ import {
   importWalletBackupBytes,
   type BackupExportScope,
   type ImportWalletMode,
+  type WalletBackupSummary,
   serializeWalletBackup,
+  summarizeWalletBackup,
   walletBackupBytesToJson,
 } from "../lib/wallet-backup.js";
+import {
+  KEY_OPEN_BACKUP,
+  backupPlatform,
+  backupSaveCopy,
+  backupSnapshot,
+  backupStatus,
+} from "../lib/backup-status.js";
+import {
+  describeBackup,
+  markRestoredFromFile,
+  notABackupMessage,
+  saveBackup,
+  savedBackupMessage,
+} from "./backup-save.js";
 import {
   APP_VERSION,
   BACKUP_FORMAT_VERSION,
@@ -51,6 +67,7 @@ import {
   getDefaultCustomFeeRate as readCustomFeeRate,
   getDefaultFeeTier,
   getDefaultNetwork,
+  exportCompanionSettings,
   getFiatCurrency,
   getThemePreference,
   type ThemePreference,
@@ -187,6 +204,14 @@ export function mountSettingsPage(root: HTMLElement): () => void {
         <details class="backup-section" id="backupSection">
           <summary>Backup &amp; migration</summary>
 
+          <div class="backup-save-row">
+            <p id="backupLastLine" class="muted-line"></p>
+            <div class="actions">
+              <button id="backupSaveFile" class="primary" type="button">${backupSaveCopy(backupPlatform()).label}</button>
+            </div>
+            <p class="muted-line">${backupSaveCopy(backupPlatform()).hint}</p>
+          </div>
+
           <details class="backup-fold" id="backupFold-export">
             <summary>Export</summary>
             <div class="backup-fold-body">
@@ -243,7 +268,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
                   aria-label="Exported wallet backup JSON"></textarea>
                 <div class="backup-json-actions">
                   <button id="exportDownload" type="button" class="icon-btn"
-                    title="Download JSON" aria-label="Download JSON">
+                    title="Save backup file" aria-label="Save backup file">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                       fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                       aria-hidden="true">
@@ -292,6 +317,22 @@ export function mountSettingsPage(root: HTMLElement): () => void {
                 <button id="importReplaceCancel" type="button">Cancel</button>
               </div>
             </div>
+            <div class="backup-file-import">
+              <label class="button-like primary">
+                Choose backup file…
+                <input id="importWalletsFile" type="file"
+                  accept=".json,application/json" hidden />
+              </label>
+              <p class="muted-line">Pick a saved backup from Files, iCloud Drive, Google Drive, or Downloads.</p>
+              <div id="importFilePreview" hidden>
+                <p id="importFilePreviewMsg"></p>
+                <div class="actions">
+                  <button id="importFileConfirm" class="primary" type="button">Restore</button>
+                  <button id="importFileCancel" type="button">Choose another</button>
+                </div>
+              </div>
+            </div>
+            <p class="muted-line">Or move wallets from another device:</p>
             <div class="backup-tabs backup-sub-tabs" role="tablist" aria-label="Import method">
               <button type="button" class="backup-tab active" role="tab" id="importTabBtn-qr"
                 data-import-tab="qr" aria-selected="true" aria-controls="importTab-qr" tabindex="0">
@@ -299,7 +340,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
               </button>
               <button type="button" class="backup-tab" role="tab" id="importTabBtn-json"
                 data-import-tab="json" aria-selected="false" aria-controls="importTab-json" tabindex="-1">
-                JSON file / paste
+                Paste JSON
               </button>
             </div>
             <div id="importTab-qr" class="backup-tab-panel" role="tabpanel"
@@ -315,11 +356,6 @@ export function mountSettingsPage(root: HTMLElement): () => void {
             </div>
             <div id="importTab-json" class="backup-tab-panel" role="tabpanel"
               aria-labelledby="importTabBtn-json" tabindex="-1" hidden>
-              <label class="button-like">
-                Choose JSON file…
-                <input id="importWalletsFile" type="file"
-                  accept=".json,application/json" hidden />
-              </label>
               <textarea id="importPasteJson" class="hex-blob" rows="6"
                 placeholder="Paste backup JSON here"
                 spellcheck="false" autocorrect="off" autocomplete="off"></textarea>
@@ -436,6 +472,13 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const $backupImportFold = root.querySelector<HTMLDetailsElement>("#backupFold-import")!;
   const $backupStatus     = root.querySelector<HTMLElement>("#backupStatus")!;
   const $importTabJson    = root.querySelector<HTMLElement>("#importTab-json")!;
+  const $backupLastLine   = root.querySelector<HTMLElement>("#backupLastLine")!;
+  const $backupSaveFile   = root.querySelector<HTMLButtonElement>("#backupSaveFile")!;
+  const $importFilePreview = root.querySelector<HTMLElement>("#importFilePreview")!;
+  const $importFilePreviewMsg = root.querySelector<HTMLElement>("#importFilePreviewMsg")!;
+  const $importFileConfirm = root.querySelector<HTMLButtonElement>("#importFileConfirm")!;
+  const $importFileCancel = root.querySelector<HTMLButtonElement>("#importFileCancel")!;
+  const platform = backupPlatform();
 
   let exportQrPlayback: Pw1QrPlayback | null = null;
   let exportQrUnwire: (() => void) | null = null;
@@ -446,6 +489,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
   const SAVED_BANNER_DEFAULT = "✓ Settings saved";
   let savedTimer: ReturnType<typeof setTimeout> | null = null;
   function flashSaved(message = SAVED_BANNER_DEFAULT): void {
+    void refreshBackupLine();
     $savedBanner.textContent = message;
     $savedBanner.hidden = false;
     if (savedTimer) clearTimeout(savedTimer);
@@ -684,6 +728,57 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     $backupStatus.classList.toggle("error", isError);
   }
 
+  /** Returns true when there are wallets or settings changes not yet in a saved backup. */
+  async function refreshBackupLine(): Promise<boolean> {
+    let wallets;
+    try {
+      wallets = await listWallets();
+    } catch {
+      return false;
+    }
+    const status = backupStatus(backupSnapshot(wallets, exportCompanionSettings()));
+    if (status.state === "none") {
+      $backupLastLine.textContent = "Never backed up on this device.";
+    } else {
+      const last = `Last backed up ${relativeTimeFrom(status.lastAt!)}`;
+      $backupLastLine.textContent = status.state === "stale"
+        ? `${last}. Not yet backed up: ${status.changes.join(", ")}.`
+        : `${last}. Up to date.`;
+    }
+    return wallets.length > 0 && status.state !== "current";
+  }
+
+  $backupSaveFile.addEventListener("click", () => {
+    void (async () => {
+      $backupSaveFile.disabled = true;
+      setBackupStatus("");
+      try {
+        const saved = await saveBackup(platform);
+        if (saved.outcome === "cancelled") return;
+        setBackupStatus(savedBackupMessage(saved));
+        await refreshBackupLine();
+      } catch (e) {
+        setBackupStatus(`backup failed: ${(e as Error).message}`, true);
+      } finally {
+        $backupSaveFile.disabled = false;
+      }
+    })();
+  });
+
+  void (async () => {
+    const openFold = sessionStorage.getItem(KEY_OPEN_BACKUP);
+    sessionStorage.removeItem(KEY_OPEN_BACKUP);
+    const needsBackup = await refreshBackupLine();
+    if (openFold === "import") {
+      $backupSection.open = true;
+      $backupImportFold.open = true;
+      $backupSection.scrollIntoView({ block: "start" });
+    } else if (openFold === "export" || needsBackup) {
+      $backupSection.open = true;
+      if (openFold === "export") $backupSection.scrollIntoView({ block: "start" });
+    }
+  })();
+
   const IMPORT_PASTE_BTN_LABEL = "Import pasted JSON";
 
   function setImportBusy(busy: boolean): void {
@@ -695,13 +790,19 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     $importTabJson.setAttribute("aria-busy", busy ? "true" : "false");
   }
 
+  /** Set while importing a chosen backup file, so a success marks it as the baseline. */
+  let restoredFromFile: WalletBackupSummary | null = null;
+
   function applyImportResult(result: Awaited<ReturnType<typeof importWalletBackup>>): void {
     const summary = formatImportWalletResult(result);
     const isError = result.failed.length > 0 && result.imported === 0;
+    const fromFile = restoredFromFile;
+    restoredFromFile = null;
     if (isError) {
       setBackupStatus(summary, isError);
       return;
     }
+    if (fromFile) markRestoredFromFile(fromFile);
     $importPaste.value = "";
     hideReplaceStrip();
     window.location.hash = "#/wallets";
@@ -991,29 +1092,10 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     $exportDownload.disabled = true;
     setBackupStatus("");
     try {
-      const json = $exportJsonView.value.trim() || await loadBackupJson();
-      if (json === "Loading…") {
-        setBackupStatus("JSON still loading — try again in a moment", true);
-        return;
-      }
-      $exportJsonView.value = json;
-      const blob = new Blob([json], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const ts = new Date().toISOString().replace(/[:.]/g, "-");
-      a.download = `piwallet-paired-wallets-${ts}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      const count = (JSON.parse(json) as { wallets: unknown[] }).wallets.length;
-      setBackupStatus(
-        count === 0
-          ? "Downloaded empty backup — no paired wallets yet."
-          : `Downloaded JSON for ${count} wallet${count === 1 ? "" : "s"}.`,
-      );
-      flashSaved();
+      const saved = await saveBackup(platform, getExportScope());
+      if (saved.outcome === "cancelled") return;
+      setBackupStatus(savedBackupMessage(saved));
+      await refreshBackupLine();
     } catch (e) {
       setBackupStatus(`export failed: ${(e as Error).message}`, true);
     } finally {
@@ -1086,19 +1168,50 @@ export function mountSettingsPage(root: HTMLElement): () => void {
     }
   });
 
+  let pendingFileImport: { raw: string; summary: WalletBackupSummary } | null = null;
+
+  function clearFilePreview(): void {
+    pendingFileImport = null;
+    $importFilePreview.hidden = true;
+    $importFilePreviewMsg.textContent = "";
+  }
+
   $importFile.addEventListener("change", () => {
     const file = $importFile.files?.[0];
     $importFile.value = "";
     if (!file) return;
+    clearFilePreview();
     void (async () => {
       try {
         const raw = await file.text();
-        $importPaste.value = raw;
-        await runImportRaw(raw);
+        let summary: WalletBackupSummary;
+        try {
+          summary = summarizeWalletBackup(raw);
+        } catch (e) {
+          setBackupStatus(notABackupMessage(e), true);
+          return;
+        }
+        pendingFileImport = { raw, summary };
+        $importFilePreviewMsg.textContent = describeBackup(summary);
+        $importFilePreview.hidden = false;
+        setBackupStatus("");
       } catch (e) {
-        setBackupStatus(`import failed: ${(e as Error).message}`, true);
+        setBackupStatus(`could not read file: ${(e as Error).message}`, true);
       }
     })();
+  });
+
+  $importFileConfirm.addEventListener("click", () => {
+    const pending = pendingFileImport;
+    if (!pending) return;
+    clearFilePreview();
+    restoredFromFile = pending.summary;
+    void runImportRaw(pending.raw);
+  });
+
+  $importFileCancel.addEventListener("click", () => {
+    clearFilePreview();
+    $importFile.click();
   });
 
   $importPasteBtn.addEventListener("click", () => {
@@ -1107,6 +1220,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
       setBackupStatus("paste a JSON backup first", true);
       return;
     }
+    restoredFromFile = null;
     void runImportRaw(raw);
   });
 
@@ -1135,6 +1249,7 @@ export function mountSettingsPage(root: HTMLElement): () => void {
         if (validation.result.workflow === "settings-backup") {
           setBackupStatus("Importing…");
           stopImportQrScan();
+          restoredFromFile = null;
           void runImportBytes(validation.result.bytes);
         }
       },
