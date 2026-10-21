@@ -46,9 +46,14 @@ enclosure/
 *.stp
 *.stl
 *.gcode
+*.3mf
 
 local_*.cbor
 scratch/
+drafts/
+
+# Agent debug-session logs (may hold store order data)
+.cursor/debug-*.log
 
 # Captured SD images (local alpha/beta builds — publish via GitHub Releases)
 images/
