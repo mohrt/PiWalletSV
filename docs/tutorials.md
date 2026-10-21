@@ -4,14 +4,48 @@ Short walkthroughs for first boot, creating a wallet, sending or
 receiving BSV, and assembling or opening the case. Jump to the topic
 you need.
 
-## Initial setup
+## PiWalletSV Pro
+
+### Assembly
+
+How the Pro case, Pi, display, and camera fit together.
+
+<div class="pwsv-video" markdown="0">
+  <iframe
+    src="https://www.youtube.com/embed/Ms70WsILReQ"
+    title="PiWalletSV Pro assembly"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowfullscreen
+    loading="lazy"
+    referrerpolicy="strict-origin-when-cross-origin"
+  ></iframe>
+</div>
+
+### Disassembly
+
+Open the Pro case safely if you need to service or rebuild the kit.
+
+<div class="pwsv-video" markdown="0">
+  <iframe
+    src="https://www.youtube.com/embed/DOmvnEoaBJ4"
+    title="PiWalletSV Pro disassembly"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    allowfullscreen
+    loading="lazy"
+    referrerpolicy="strict-origin-when-cross-origin"
+  ></iframe>
+</div>
+
+## PiWalletSV Zero
+
+### Initial setup
 
 Flash the image, first boot, and get ready to pair.
 
 <div class="pwsv-video" markdown="0">
   <iframe
     src="https://www.youtube.com/embed/irx2_GV0z1U"
-    title="PiWalletSV initial setup"
+    title="PiWalletSV Zero initial setup"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     allowfullscreen
     loading="lazy"
@@ -19,14 +53,14 @@ Flash the image, first boot, and get ready to pair.
   ></iframe>
 </div>
 
-## First wallet setup
+### First wallet setup
 
 Create a wallet on the Pi and pair it with the companion.
 
 <div class="pwsv-video" markdown="0">
   <iframe
     src="https://www.youtube.com/embed/HuiqLFnyr6E"
-    title="PiWalletSV first wallet setup"
+    title="PiWalletSV Zero first wallet setup"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     allowfullscreen
     loading="lazy"
@@ -34,14 +68,14 @@ Create a wallet on the Pi and pair it with the companion.
   ></iframe>
 </div>
 
-## Sending and receiving
+### Sending and receiving
 
 Build a transaction in the companion, sign on the Pi, and receive funds.
 
 <div class="pwsv-video" markdown="0">
   <iframe
     src="https://www.youtube.com/embed/rlyulDp0QE8"
-    title="PiWalletSV sending and receiving"
+    title="PiWalletSV Zero sending and receiving"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     allowfullscreen
     loading="lazy"
@@ -49,14 +83,14 @@ Build a transaction in the companion, sign on the Pi, and receive funds.
   ></iframe>
 </div>
 
-## Assembly
+### Assembly
 
-How the case, Pi, display, and camera fit together.
+How the Zero case, Pi, display, and camera fit together.
 
 <div class="pwsv-video" markdown="0">
   <iframe
     src="https://www.youtube.com/embed/NgliRFx-4RA"
-    title="PiWalletSV assembly"
+    title="PiWalletSV Zero assembly"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     allowfullscreen
     loading="lazy"
@@ -64,14 +98,14 @@ How the case, Pi, display, and camera fit together.
   ></iframe>
 </div>
 
-## Disassembly
+### Disassembly
 
-Open the case safely if you need to service or rebuild the kit.
+Open the Zero case safely if you need to service or rebuild the kit.
 
 <div class="pwsv-video" markdown="0">
   <iframe
     src="https://www.youtube.com/embed/XxWw7gkg0G8"
-    title="PiWalletSV disassembly"
+    title="PiWalletSV Zero disassembly"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
     allowfullscreen
     loading="lazy"
