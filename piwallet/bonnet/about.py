@@ -2,7 +2,7 @@
 
 Reachable from Settings → **Maintenance** → **About**. Shows the
 PiWalletSV logo, a short product blurb, software version, website,
-wallet count, Pi board serial, and hostname.
+image ID, wallet count, Pi board serial, and hostname.
 
 Controls
 --------
@@ -22,6 +22,7 @@ from PIL import Image
 from piwallet import __version__ as PIWALLET_VERSION
 from piwallet.bonnet.splash import load_logo
 from piwallet.platform.pi_serial import read_pi_serial
+from piwallet.platform.release import read_image_id
 from piwallet.ui.display import (
     COLOR_ACCENT,
     COLOR_BG,
@@ -164,6 +165,7 @@ def build_about_screen(*, wallet_count: int) -> AboutScreen:
     """Construct an :class:`AboutScreen` from live device state."""
     serial = read_pi_serial()
     rows: list[tuple[str, str]] = [
+        ("Image", read_image_id() or "—"),
         ("Wallets", str(wallet_count)),
         ("Serial", _truncate(serial or "—", 16)),
         ("Host", _truncate(_hostname(), 16)),

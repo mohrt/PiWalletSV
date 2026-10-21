@@ -181,14 +181,16 @@ def test_about_shows_the_logo(tmp_path) -> None:
     )
 
 
-def test_about_lists_pro_version_and_hardware(tmp_path) -> None:
+def test_about_lists_pro_version_and_hardware(tmp_path, monkeypatch) -> None:
     from piwallet import __version__
     from piwallet.device import get_device, hardware_rows
 
+    monkeypatch.setattr("piwallet.touch.settings.read_image_id", lambda: "480c6679")
     hardware = hardware_rows(get_device("pi3-ws35f"), "Pi 3 Model B Rev 1.2")
     flow = _flow(tmp_path, hardware=hardware)
     rows = dict(flow._about_rows())
     assert rows["Version"] == f"v{__version__} Pro"
+    assert rows["Image"] == "480c6679"
     assert rows["Pi"] == "Pi 3 Model B Rev 1.2"
     assert rows["HAT"] == "Waveshare 3.5in LCD (F)"
     assert rows["Camera"] == "ArduCam OV5647 5MP"

@@ -50,10 +50,12 @@ def test_build_about_screen_rows(
         "piwallet.bonnet.about.read_pi_serial",
         lambda: "10000000a1b2c3d4",
     )
+    monkeypatch.setattr("piwallet.bonnet.about.read_image_id", lambda: "c05daabb")
     s = build_about_screen(wallet_count=3)
     values = dict(s.rows)
     labels = [k for k, _ in s.rows]
-    assert labels == ["Wallets", "Serial", "Host"]
+    assert labels == ["Image", "Wallets", "Serial", "Host"]
+    assert values["Image"] == "c05daabb"
     assert values["Wallets"] == "3"
     assert values["Serial"] == "10000000a1b2c3d4"
     assert s.tagline == ABOUT_TAGLINE

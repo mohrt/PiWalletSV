@@ -17,9 +17,9 @@
         "sha256sums_asc": "https://github.com/mohrt/PiWalletSV/releases/download/v0.1.0-r1-pro-pi3/SHA256SUMS.asc"
       },
       "sha256": "863c6bc46d28582b146222802c5dfe30901515e61e55d8076eb547da6575051a",
-      "image_id": null,
+      "image_id": "480c6679",
       "published_at": null,
-      "notes": "Pro beta \u2014 8 GB-compatible image (PiShrink after capture). Flash-tested on a Pi 3 Model B with HDMI unplugged. Fill image_id from About; set published_at when GitHub Release goes live."
+      "notes": "Pro beta \u2014 8 GB-compatible image (PiShrink after capture). Flash-tested on a Pi 3 Model B with HDMI unplugged. Set published_at when GitHub Release goes live."
     },
     {
       "version": "0.1.0-r3",

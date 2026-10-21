@@ -39,6 +39,7 @@ from piwallet.core.settings import (
 from piwallet.core.vault import Vault, VaultError, VaultWipedError, WrongPinError
 from piwallet.diag.airgap import check_airgap, checks_for_bonnet_display
 from piwallet.platform.pi_serial import read_pi_serial
+from piwallet.platform.release import read_image_id
 from piwallet.touch.create import PinPad
 from piwallet.touch.input import Tap
 from piwallet.touch.ui import Hit
@@ -795,6 +796,7 @@ class SettingsFlow:
             host = "—"
         return (
             ("Version", f"v{PIWALLET_VERSION} Pro"),
+            ("Image", read_image_id() or "—"),
             *self.hardware,
             ("Wallets", str(len(self.vault.list_wallets()))),
             ("Serial", serial[:18]),
