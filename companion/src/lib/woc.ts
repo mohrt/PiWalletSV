@@ -254,14 +254,15 @@ export type FetchFn = (
  * Default minimum interval between WoC requests, in milliseconds.
  *
  * WoC's documented unauthenticated rate limit is ~3 req/s. We pace at
- * 350 ms (~2.85 req/s) — comfortably under the cap so a single client
- * doing a gap-limit scan + proof-fetch + broadcast doesn't trip the
- * limiter even when the LAN router or another tab is also using WoC.
+ * 400 ms (2.5 req/s) to leave headroom: each gap-limit batch calls
+ * confirmed then unconfirmed back-to-back, and a full refresh chains
+ * many batches — bursts at ~3 req/s routinely tripped HTTP 429, whose
+ * error responses often omit CORS and surface as bogus "network" failures.
  *
  * Callers with an `apiKey` can pass a smaller value to use the higher
  * authenticated quota.
  */
-export const WOC_DEFAULT_MIN_INTERVAL_MS = 350;
+export const WOC_DEFAULT_MIN_INTERVAL_MS = 400;
 
 /** Default cap on automatic 429 retries. */
 export const WOC_DEFAULT_MAX_RETRIES = 4;
@@ -588,10 +589,16 @@ export class WocClient {
       return expanded;
     };
 
-    const [confirmedRows, unconfirmedRows] = await Promise.all([
-      fetchOne("/addresses/confirmed/unspent", "confirmed"),
-      fetchOne("/addresses/unconfirmed/unspent", "unconfirmed"),
-    ]);
+    // Sequential, not parallel: concurrent POSTs doubled burst rate and
+    // routinely tripped WoC's ~3 req/s cap during gap-limit scans.
+    const confirmedRows = await fetchOne(
+      "/addresses/confirmed/unspent",
+      "confirmed",
+    );
+    const unconfirmedRows = await fetchOne(
+      "/addresses/unconfirmed/unspent",
+      "unconfirmed",
+    );
 
     // Merge per-address. Map keyed by address, seeded with empty
     // lists so addresses with no UTXOs still get a row in the

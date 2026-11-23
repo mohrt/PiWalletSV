@@ -95,7 +95,7 @@ describe("WocClient", () => {
     // returning *both* confirmed and mempool UTXOs in a single call.
     // WoC's older `POST /addresses/unspent` is mempool-blind, which
     // surfaced as "balance is 0" right after a fresh broadcast. The
-    // fix is to call both split endpoints in parallel and merge.
+    // fix is to call both split endpoints and merge (sequential to respect rate limits).
     const { fetch, calls } = stubFetch((url, init) => {
       expect(init?.method).toBe("POST");
       const body = JSON.parse(String(init?.body));

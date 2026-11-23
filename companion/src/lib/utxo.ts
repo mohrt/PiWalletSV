@@ -20,9 +20,9 @@
  * The scanner uses WoC's bulk endpoint via
  * {@link WocClient.getUnspentBatch} — up to
  * {@link WOC_BULK_BATCH_MAX} addresses per HTTP request. A typical
- * empty-wallet scan therefore costs **2 API calls** (one bulk per
- * branch), not 40 individual GETs, which sails comfortably under
- * WoC's ~3 req/s unauthenticated rate limit.
+ * empty-wallet scan costs **two bulk batches per branch** (confirmed
+ * then unconfirmed per batch), paced by {@link WocClient}'s min interval,
+ * not 40 individual GETs.
  */
 import {
   CHANGE_BRANCH,
