@@ -253,16 +253,17 @@ export type FetchFn = (
 /**
  * Default minimum interval between WoC requests, in milliseconds.
  *
- * WoC's documented unauthenticated rate limit is ~3 req/s. We pace at
- * 400 ms (2.5 req/s) to leave headroom: each gap-limit batch calls
- * confirmed then unconfirmed back-to-back, and a full refresh chains
- * many batches — bursts at ~3 req/s routinely tripped HTTP 429, whose
- * error responses often omit CORS and surface as bogus "network" failures.
+ * WoC's documented unauthenticated rate limit is ~3 req/s (Cloudflare
+ * enforces a hard burst of ~3 POSTs/sec). We pace at 550 ms (~1.8 req/s)
+ * so a minimal empty-wallet scan (4 bulk POSTs: recv + change × confirmed
+ * + unconfirmed) never stacks more than two calls inside one second.
+ * HTTP 429 responses often omit CORS; the browser then throws before
+ * `res.status` is readable, so we also retry opaque "network" failures.
  *
  * Callers with an `apiKey` can pass a smaller value to use the higher
  * authenticated quota.
  */
-export const WOC_DEFAULT_MIN_INTERVAL_MS = 400;
+export const WOC_DEFAULT_MIN_INTERVAL_MS = 550;
 
 /** Default cap on automatic 429 retries. */
 export const WOC_DEFAULT_MAX_RETRIES = 4;
@@ -371,16 +372,21 @@ export class WocClient {
       init = { method, headers };
     }
 
-    // Retry loop for HTTP 429. Other non-2xx statuses are surfaced
-    // immediately (4xx ≠ 429 means the request is malformed, not
-    // rate-limited; 5xx could be retried but WoC's 5xx pattern is
-    // mostly long outages where a quick retry won't help).
+    // Retry loop for HTTP 429 and for fetch() throws (WoC 429 often
+    // arrives without CORS headers, so the browser surfaces status 0).
     let attempt = 0;
+    let netAttempt = 0;
+    const maxNetRetries = Math.min(this._maxRetries, 3);
     while (true) {
       let res: Response;
       try {
         res = await this._paced(() => this._fetch(url, init));
       } catch (e) {
+        if (netAttempt < maxNetRetries) {
+          await this._sleep(Math.min(8000, 1500 * 2 ** netAttempt));
+          netAttempt += 1;
+          continue;
+        }
         throw new WocError(path, 0, `network: ${(e as Error).message}`);
       }
       if (res.status === 429 && attempt < this._maxRetries) {

@@ -599,7 +599,7 @@ describe("WocClient", () => {
 
   it("network errors surface as WocError with status 0", async () => {
     const fetch: FetchFn = () => Promise.reject(new TypeError("offline"));
-    const w = new WocClient({ fetch });
+    const w = new WocClient({ fetch, maxRetries: 0, minIntervalMs: 0 });
     try {
       await w.getChainInfo();
       throw new Error("expected throw");
